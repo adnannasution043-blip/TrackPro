@@ -396,6 +396,166 @@ button { font-family: inherit; cursor: pointer; }
   border-top: 18px solid var(--red);
 }
 
+/* ============================================================ HUT Banner */
+
+#hut-banner {
+  background: #fff5f5;
+  border-bottom: 1px solid #fecaca;
+  padding: 10px 28px;
+}
+
+.hut-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.hut-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.hut-logo-wrap {
+  width: 50px;
+  height: 50px;
+  background: var(--red);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.hut-logo-num {
+  color: white;
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: -2px;
+  line-height: 1;
+}
+
+.hut-eyebrow {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--red);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  margin-bottom: 1px;
+}
+
+.hut-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.3px;
+}
+
+.hut-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.hut-date-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: var(--red);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: default;
+  white-space: nowrap;
+}
+
+/* ============================================================ Horizontal Stat Scroll */
+
+.stat-scroll {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  margin-bottom: 16px;
+  scrollbar-width: none;
+}
+
+.stat-scroll::-webkit-scrollbar { display: none; }
+
+.stat-card-h {
+  flex-shrink: 0;
+  min-width: 155px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  box-shadow: var(--shadow);
+}
+
+.stat-card-h.selected {
+  border-color: var(--red);
+}
+
+.stat-card-h .stat-label {
+  font-size: 10px;
+  margin-bottom: 6px;
+}
+
+.stat-card-h .stat-value {
+  font-size: 19px;
+}
+
+/* ============================================================ Grafik Chart */
+
+.chart-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  box-shadow: var(--shadow);
+  margin-bottom: 16px;
+}
+
+.chart-header {
+  margin-bottom: 12px;
+}
+
+.chart-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.chart-hover-info {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 3px;
+  min-height: 18px;
+}
+
+.chart-legend {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+
+.chart-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.chart-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
 /* ============================================================ Page Content */
 
 #page-content {
