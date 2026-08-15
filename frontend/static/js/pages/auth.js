@@ -1,4 +1,4 @@
-import { apiFetch, setToken } from '../api.js';
+import { apiFetch, setToken, getToken } from '../api.js';
 import { redirect } from '../router.js';
 
 export class AuthPage {
@@ -7,91 +7,104 @@ export class AuthPage {
     this.mode = 'login';
   }
 
-  render() {
+  async render() {
+    if (getToken()) { redirect('/dashboard'); return; }
+
     this.container.innerHTML = `
       <div class="auth-wrap">
         <div class="auth-card">
-          <div class="auth-logo">AdCommTrack</div>
-          <div class="auth-tabs">
-            <button class="tab-btn ${this.mode === 'login' ? 'active' : ''}" data-mode="login">Masuk</button>
-            <button class="tab-btn ${this.mode === 'register' ? 'active' : ''}" data-mode="register">Daftar</button>
+          <div class="auth-logo">
+            <div class="auth-logo-icon">TP</div>
+            <div class="auth-logo-name">TrackPro</div>
+            <div class="auth-logo-sub">Meta Ads × Shopee Affiliate</div>
           </div>
 
-          <div id="alert" class="alert" style="display:none"></div>
+          <div class="auth-tabs">
+            <button class="auth-tab ${this.mode === 'login' ? 'active' : ''}" id="tab-login">Masuk</button>
+            <button class="auth-tab ${this.mode === 'register' ? 'active' : ''}" id="tab-register">Daftar</button>
+          </div>
 
-          ${this.mode === 'login' ? this._loginForm() : this._registerForm()}
+          <div id="auth-error" style="display:none" class="alert alert-error"></div>
+
+          <form id="auth-form">
+            ${this.mode === 'register' ? `
+              <div>
+                <label class="auth-form-label">Nama Lengkap</label>
+                <input class="auth-input" type="text" id="nama" placeholder="Masukkan nama Anda" autocomplete="name" required>
+              </div>
+              <div>
+                <label class="auth-form-label">Username</label>
+                <input class="auth-input" type="text" id="username" placeholder="Minimum 3 karakter" autocomplete="username" required>
+              </div>
+            ` : ''}
+            <div>
+              <label class="auth-form-label">Email</label>
+              <input class="auth-input" type="email" id="email" placeholder="email@contoh.com" autocomplete="email" required>
+            </div>
+            <div>
+              <label class="auth-form-label">Password</label>
+              <input class="auth-input" type="password" id="password" placeholder="${this.mode === 'register' ? 'Minimal 8 karakter' : 'Masukkan password'}" autocomplete="${this.mode === 'login' ? 'current-password' : 'new-password'}" required>
+            </div>
+            <button class="auth-btn" type="submit" id="btn-submit">
+              ${this.mode === 'login' ? 'Masuk' : 'Buat Akun'}
+            </button>
+          </form>
         </div>
       </div>
     `;
-    this._bind();
-  }
 
-  _loginForm() {
-    return `
-      <form id="auth-form">
-        <label>Email
-          <input type="email" name="email" required autocomplete="email">
-        </label>
-        <label>Password
-          <input type="password" name="password" required autocomplete="current-password">
-        </label>
-        <button type="submit" class="btn-primary btn-full">Masuk</button>
-      </form>
-    `;
-  }
-
-  _registerForm() {
-    return `
-      <form id="auth-form">
-        <label>Nama Lengkap
-          <input type="text" name="nama" required>
-        </label>
-        <label>Email
-          <input type="email" name="email" required autocomplete="email">
-        </label>
-        <label>Username
-          <input type="text" name="username" required autocomplete="username">
-        </label>
-        <label>Password
-          <input type="password" name="password" required autocomplete="new-password" minlength="8">
-        </label>
-        <button type="submit" class="btn-primary btn-full">Daftar & Masuk</button>
-      </form>
-    `;
-  }
-
-  _bind() {
-    this.container.querySelectorAll('.tab-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        this.mode = btn.dataset.mode;
-        this.render();
-      });
+    this.container.querySelector('#tab-login').addEventListener('click', () => {
+      this.mode = 'login';
+      this.render();
     });
 
-    this.container.querySelector('#auth-form').addEventListener('submit', async e => {
+    this.container.querySelector('#tab-register').addEventListener('click', () => {
+      this.mode = 'register';
+      this.render();
+    });
+
+    this.container.querySelector('#auth-form').addEventListener('submit', async (e) => {
       e.preventDefault();
-      const btn = e.target.querySelector('button[type=submit]');
-      const alertEl = this.container.querySelector('#alert');
-      alertEl.style.display = 'none';
-      btn.disabled = true;
-      btn.textContent = 'Memproses…';
-
-      const data = Object.fromEntries(new FormData(e.target));
-      const path = this.mode === 'login' ? '/auth/login' : '/auth/register';
-
-      try {
-        const res = await apiFetch(path, { method: 'POST', body: JSON.stringify(data) });
-        if (!res) return;
-        setToken(res.access_token);
-        redirect('/dashboard');
-      } catch (err) {
-        alertEl.textContent = err.message;
-        alertEl.className = 'alert alert-error';
-        alertEl.style.display = 'block';
-        btn.disabled = false;
-        btn.textContent = this.mode === 'login' ? 'Masuk' : 'Daftar & Masuk';
-      }
+      await this._submit();
     });
+  }
+
+  async _submit() {
+    const errEl = this.container.querySelector('#auth-error');
+    const btn = this.container.querySelector('#btn-submit');
+    errEl.style.display = 'none';
+    btn.disabled = true;
+    btn.textContent = 'Memproses…';
+
+    try {
+      const email = this.container.querySelector('#email').value.trim();
+      const password = this.container.querySelector('#password').value;
+      let body;
+
+      if (this.mode === 'register') {
+        const nama = this.container.querySelector('#nama').value.trim();
+        const username = this.container.querySelector('#username').value.trim();
+        body = await apiFetch('/auth/register', {
+          method: 'POST',
+          body: JSON.stringify({ nama, email, username, password }),
+        });
+      } else {
+        body = await apiFetch('/auth/login', {
+          method: 'POST',
+          body: JSON.stringify({ email, password }),
+        });
+      }
+
+      if (body?.access_token) {
+        setToken(body.access_token);
+        redirect('/dashboard');
+      }
+    } catch (err) {
+      errEl.textContent = err.message;
+      errEl.style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = this.mode === 'login' ? 'Masuk' : 'Buat Akun';
+    }
   }
 
   destroy() {}

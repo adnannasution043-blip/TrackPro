@@ -1,128 +1,227 @@
-import { apiFetch, apiUpload } from '../api.js';
+import { apiUpload, apiFetch } from '../api.js';
 
 export class UploadPage {
   constructor(container) {
     this.container = container;
-    this.metaAccounts = [];
-    this.shopeeAccounts = [];
+    this._accounts = [];
   }
 
   async render() {
-    this.container.innerHTML = '<div class="loading">Memuat akun…</div>';
-    try {
-      [this.metaAccounts, this.shopeeAccounts] = await Promise.all([
-        apiFetch('/accounts/meta'),
-        apiFetch('/accounts/shopee'),
-      ]);
-    } catch (e) {
-      this.container.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
-      return;
-    }
     this.container.innerHTML = `
-      <div class="page-header"><h1>Upload Data</h1></div>
-      ${this._section('meta', '1. Meta Ads CSV', this._metaForm())}
-      ${this._section('commission', '2. Shopee Commission CSV', this._shopeeForm('commission'))}
-      ${this._section('click', '3. Shopee Click CSV', this._shopeeForm('click'))}
+      <div class="page-header">
+        <div class="page-header-left">
+          <h1>Upload Data Harian</h1>
+          <p>Upload CSV Meta Ads, Shopee Commission, dan Shopee Click untuk memetakan campaign ke tag link Shopee.</p>
+        </div>
+        <div class="page-header-right">
+          <button class="btn btn-outline-red" id="btn-hapus-lama">Hapus Data Import Lama</button>
+        </div>
+      </div>
+      <div id="content"><div class="loading">Memuat…</div></div>
     `;
-    this._bind();
+
+    try {
+      const data = await apiFetch('/accounts');
+      this._accounts = data || [];
+    } catch (_) {}
+
+    this._renderForm();
+
+    this.container.querySelector('#btn-hapus-lama')?.addEventListener('click', () => {
+      if (confirm('Hapus semua data import lama? Aksi ini tidak bisa dibatalkan.')) {
+        alert('Fitur hapus data belum tersedia.');
+      }
+    });
   }
 
-  _section(id, title, body) {
-    return `
-      <div class="card upload-card">
-        <div class="card-title">${title}</div>
-        ${body}
-        <div id="result-${id}" class="upload-result" style="display:none"></div>
+  _renderForm() {
+    const el = this.container.querySelector('#content');
+    const shopeeOptions = this._accounts
+      .filter(a => a.tipe === 'shopee')
+      .map(a => `<option value="${a.id}">${a.nama}</option>`)
+      .join('');
+
+    el.innerHTML = `
+      <div class="card" style="margin-bottom:16px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+          <div>
+            <div class="form-label">SLOT TAG LINK</div>
+            <select class="form-select" id="sel-slot">
+              <option value="1">Slot 1 (default)</option>
+              <option value="2">Slot 2 / Tag_link2</option>
+              <option value="3">Slot 3 / Tag_link3</option>
+              <option value="4">Slot 4 / Tag_link4</option>
+              <option value="5">Slot 5 / Tag_link5</option>
+            </select>
+            <div class="form-hint">Pilih kolom Sub_id / Tag_link di Shopee CSV yang berisi tag iklan.</div>
+          </div>
+          <div>
+            <div class="form-label">PEMBEDA TAG</div>
+            <select class="form-select" id="sel-pembeda">
+              <option value="campaign">Nama Campaign</option>
+              <option value="adset">Nama Ad Set</option>
+              <option value="ad">Nama Ad</option>
+            </select>
+            <div class="form-hint">Berlaku per-akun & tersimpan ke setelan akun ini.</div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <div class="form-label">AKUN SHOPEE</div>
+          <select class="form-select" id="sel-shopee">
+            <option value="">Pilih Akun Shopee</option>
+            ${shopeeOptions || '<option disabled>Belum ada akun Shopee terdaftar</option>'}
+          </select>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div>
+            <div class="form-label" style="margin-bottom:8px;">Shopee Commission CSV</div>
+            <div class="upload-zone" id="zone-commission">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <p><strong>Pilih file CSV</strong> atau drag & drop</p>
+              <p style="font-size:12px;margin-top:4px;">Laporan komisi affiliate dari Shopee</p>
+            </div>
+            <input type="file" id="file-commission" accept=".csv" style="display:none">
+            <div id="name-commission" style="font-size:12px;color:#6b7280;margin-top:4px;"></div>
+          </div>
+          <div>
+            <div class="form-label" style="margin-bottom:8px;">
+              Shopee Click CSV
+              <span class="badge badge-yellow" style="margin-left:6px;">Opsional</span>
+            </div>
+            <div class="upload-zone" id="zone-click">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <p><strong>Pilih file CSV</strong> atau drag & drop</p>
+              <p style="font-size:12px;margin-top:4px;">Laporan klik affiliate dari Shopee</p>
+            </div>
+            <input type="file" id="file-click" accept=".csv" style="display:none">
+            <div id="name-click" style="font-size:12px;color:#6b7280;margin-top:4px;"></div>
+          </div>
+        </div>
+
+        <div style="margin-top:16px;">
+          <div class="form-label" style="margin-bottom:8px;">Meta Ads CSV (Opsional)</div>
+          <div class="upload-zone" id="zone-meta">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <p><strong>Pilih file CSV</strong> atau drag & drop</p>
+            <p style="font-size:12px;margin-top:4px;">Data performa iklan dari Meta Ads Manager</p>
+          </div>
+          <input type="file" id="file-meta" accept=".csv" style="display:none">
+          <div id="name-meta" style="font-size:12px;color:#6b7280;margin-top:4px;"></div>
+        </div>
+
+        <div id="upload-error" class="alert alert-error" style="display:none;margin-top:12px;"></div>
+        <div id="upload-success" class="alert alert-success" style="display:none;margin-top:12px;"></div>
+
+        <div style="margin-top:16px;display:flex;justify-content:flex-end;">
+          <button class="btn btn-primary" id="btn-upload" style="padding:9px 32px;">
+            Upload & Proses
+          </button>
+        </div>
       </div>
     `;
+
+    this._bindUploadZone('zone-commission', 'file-commission', 'name-commission');
+    this._bindUploadZone('zone-click', 'file-click', 'name-click');
+    this._bindUploadZone('zone-meta', 'file-meta', 'name-meta');
+
+    el.querySelector('#btn-upload').addEventListener('click', () => this._submit());
   }
 
-  _metaForm() {
-    if (!this.metaAccounts.length)
-      return '<p class="muted">Belum ada akun Meta. <a href="#/settings">Tambahkan dulu.</a></p>';
-    return `
-      <form id="form-meta">
-        <label>Akun Meta
-          <select name="meta_account_id" required>
-            <option value="">-- pilih akun --</option>
-            ${this.metaAccounts.map(a => `<option value="${a.id}">${a.nama_tampilan} (${a.ad_account_id})</option>`).join('')}
-          </select>
-        </label>
-        <label>File CSV
-          <input type="file" name="file" accept=".csv" required>
-        </label>
-        <button type="submit" class="btn-primary">Upload</button>
-      </form>
-    `;
+  _bindUploadZone(zoneId, fileId, nameId) {
+    const zone = this.container.querySelector(`#${zoneId}`);
+    const input = this.container.querySelector(`#${fileId}`);
+    const nameEl = this.container.querySelector(`#${nameId}`);
+
+    zone.addEventListener('click', () => input.click());
+
+    input.addEventListener('change', () => {
+      if (input.files[0]) {
+        nameEl.textContent = `✓ ${input.files[0].name}`;
+        zone.style.borderColor = '#dc2626';
+        zone.style.background = '#fef2f2';
+      }
+    });
+
+    zone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      zone.classList.add('active');
+    });
+
+    zone.addEventListener('dragleave', () => zone.classList.remove('active'));
+
+    zone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      zone.classList.remove('active');
+      const file = e.dataTransfer.files[0];
+      if (file) {
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        input.files = dt.files;
+        nameEl.textContent = `✓ ${file.name}`;
+        zone.style.borderColor = '#dc2626';
+        zone.style.background = '#fef2f2';
+      }
+    });
   }
 
-  _shopeeForm(type) {
-    const id = `form-${type}`;
-    if (!this.shopeeAccounts.length)
-      return '<p class="muted">Belum ada akun Shopee. <a href="#/settings">Tambahkan dulu.</a></p>';
-    return `
-      <form id="${id}">
-        <label>Akun Shopee
-          <select name="shopee_account_id" required>
-            <option value="">-- pilih akun --</option>
-            ${this.shopeeAccounts.map(a => `<option value="${a.id}">${a.nama_akun}</option>`).join('')}
-          </select>
-        </label>
-        <label>File CSV
-          <input type="file" name="file" accept=".csv" required>
-        </label>
-        <button type="submit" class="btn-primary">Upload</button>
-      </form>
-    `;
-  }
+  async _submit() {
+    const errEl = this.container.querySelector('#upload-error');
+    const successEl = this.container.querySelector('#upload-success');
+    const btn = this.container.querySelector('#btn-upload');
+    errEl.style.display = 'none';
+    successEl.style.display = 'none';
 
-  _bind() {
-    const handle = (formId, resultId, buildPath) => {
-      const form = this.container.querySelector(`#${formId}`);
-      if (!form) return;
-      form.addEventListener('submit', async e => {
-        e.preventDefault();
-        const btn = form.querySelector('button[type=submit]');
-        const resultEl = this.container.querySelector(`#${resultId}`);
-        btn.disabled = true;
-        btn.textContent = 'Mengupload…';
-        resultEl.style.display = 'none';
+    const shopeeId = this.container.querySelector('#sel-shopee').value;
+    const commFile = this.container.querySelector('#file-commission').files[0];
+    const clickFile = this.container.querySelector('#file-click').files[0];
+    const metaFile = this.container.querySelector('#file-meta').files[0];
 
-        const fd = new FormData(form);
-        const path = buildPath(fd);
-        // FormData untuk apiUpload cukup pakai file saja (account_id di query param)
-        const fileFd = new FormData();
-        fileFd.append('file', fd.get('file'));
+    if (!shopeeId) {
+      errEl.textContent = 'Pilih akun Shopee terlebih dahulu.';
+      errEl.style.display = 'block';
+      return;
+    }
 
-        try {
-          const res = await apiUpload(path, fileFd);
-          if (!res) return;
-          const ok = res.baris_diproses, fail = res.baris_gagal;
-          resultEl.className = `upload-result alert ${fail === 0 ? 'alert-success' : 'alert-warning'}`;
-          resultEl.innerHTML = `
-            <strong>${res.status === 'selesai' ? 'Berhasil' : 'Selesai dengan peringatan'}</strong><br>
-            ${ok} baris diproses${fail > 0 ? `, ${fail} baris gagal` : ''}.
-          `;
-        } catch (err) {
-          resultEl.className = 'upload-result alert alert-error';
-          resultEl.textContent = err.message;
+    if (!commFile && !metaFile) {
+      errEl.textContent = 'Upload minimal satu file CSV (Shopee Commission atau Meta Ads).';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Memproses…';
+
+    try {
+      if (commFile) {
+        const fd = new FormData();
+        fd.append('file', commFile);
+        fd.append('shopee_account_id', shopeeId);
+        fd.append('tipe', 'shopee_commission');
+        await apiUpload('/csv/upload', fd);
+      }
+
+      if (metaFile) {
+        const metaAccounts = this._accounts.filter(a => a.tipe === 'meta');
+        if (metaAccounts.length > 0) {
+          const fd = new FormData();
+          fd.append('file', metaFile);
+          fd.append('meta_account_id', metaAccounts[0].id);
+          fd.append('tipe', 'meta_ads');
+          await apiUpload('/csv/upload', fd);
         }
+      }
 
-        resultEl.style.display = 'block';
-        btn.disabled = false;
-        btn.textContent = 'Upload';
-      });
-    };
-
-    handle('form-meta', 'result-meta', fd =>
-      `/upload/meta-ads?meta_account_id=${fd.get('meta_account_id')}`
-    );
-    handle('form-commission', 'result-commission', fd =>
-      `/upload/shopee-commission?shopee_account_id=${fd.get('shopee_account_id')}`
-    );
-    handle('form-click', 'result-click', fd =>
-      `/upload/shopee-click?shopee_account_id=${fd.get('shopee_account_id')}`
-    );
+      successEl.textContent = 'Upload berhasil! Data sedang diproses.';
+      successEl.style.display = 'block';
+    } catch (err) {
+      errEl.textContent = err.message;
+      errEl.style.display = 'block';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Upload & Proses';
+    }
   }
 
   destroy() {}
