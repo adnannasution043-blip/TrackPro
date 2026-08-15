@@ -13,19 +13,19 @@
   --yellow-light: #fffbeb;
   --blue: #2563eb;
   --blue-light: #eff6ff;
-  --bg: #f3f4f6;
+  --bg: #f8f9fb;
   --surface: #ffffff;
-  --text: #111827;
-  --text-muted: #6b7280;
-  --text-light: #9ca3af;
-  --border: #e5e7eb;
-  --border-light: #f3f4f6;
-  --sidebar-width: 220px;
-  --topbar-height: 52px;
-  --radius: 6px;
+  --text: #0f172a;
+  --text-muted: #64748b;
+  --text-light: #94a3b8;
+  --border: #e2e8f0;
+  --border-light: #f1f5f9;
+  --sidebar-width: 228px;
+  --topbar-height: 56px;
+  --radius: 7px;
   --radius-lg: 10px;
-  --shadow: 0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.05);
-  --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+  --shadow: 0 1px 3px rgba(15,23,42,0.06), 0 1px 2px rgba(15,23,42,0.04);
+  --shadow-md: 0 4px 16px rgba(15,23,42,0.08);
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -263,47 +263,49 @@ button { font-family: inherit; cursor: pointer; }
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
-  padding: 0 20px;
-  gap: 16px;
+  padding: 0 24px;
+  gap: 14px;
+  box-shadow: 0 1px 0 var(--border);
 }
 
 .topbar-logo {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex-shrink: 0;
 }
 
 .topbar-logo-icon {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   background: var(--red);
-  border-radius: 7px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: white;
-  font-weight: 900;
-  font-size: 14px;
-  letter-spacing: -1px;
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: -0.5px;
 }
 
-.topbar-logo-text { display: flex; flex-direction: column; line-height: 1.1; }
-.topbar-logo-name { font-size: 14px; font-weight: 700; color: var(--text); }
-.topbar-logo-sub { font-size: 10px; color: var(--text-muted); }
+.topbar-logo-text { display: flex; flex-direction: column; line-height: 1.15; }
+.topbar-logo-name { font-size: 14px; font-weight: 700; color: var(--text); letter-spacing: -0.2px; }
+.topbar-logo-sub { font-size: 10.5px; color: var(--text-muted); }
 
 .topbar-spacer { flex: 1; }
 
 .topbar-meta-status {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   font-size: 12.5px;
   font-weight: 500;
   color: var(--green);
-  padding: 5px 10px;
+  padding: 5px 11px;
   background: var(--green-light);
   border-radius: 20px;
+  border: 1px solid #bbf7d0;
 }
 
 .topbar-meta-status .dot {
@@ -316,7 +318,7 @@ button { font-family: inherit; cursor: pointer; }
 .topbar-group-btn {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   padding: 6px 14px;
   background: var(--red);
   color: white;
@@ -326,6 +328,7 @@ button { font-family: inherit; cursor: pointer; }
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s;
+  letter-spacing: 0.1px;
 }
 
 .topbar-group-btn:hover { background: var(--red-hover); }
@@ -340,13 +343,16 @@ button { font-family: inherit; cursor: pointer; }
   border-radius: var(--radius);
   font-size: 12.5px;
   cursor: pointer;
-  color: var(--text);
+  color: var(--text-muted);
   background: var(--surface);
+  transition: background 0.12s;
 }
 
+.topbar-locale:hover { background: var(--bg); }
+
 .topbar-icon-btn {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   display: flex;
@@ -359,42 +365,46 @@ button { font-family: inherit; cursor: pointer; }
 }
 
 .topbar-icon-btn:hover { background: var(--bg); }
-.topbar-icon-btn svg { width: 16px; height: 16px; }
+.topbar-icon-btn svg { width: 15px; height: 15px; }
 
 .topbar-user {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  line-height: 1.2;
-  font-size: 12.5px;
+  align-items: center;
+  gap: 9px;
+  padding: 4px 10px 4px 4px;
+  border: 1px solid var(--border);
+  border-radius: 30px;
+  cursor: pointer;
+  transition: background 0.12s;
 }
 
-.topbar-user-name { font-weight: 600; color: var(--text); }
-.topbar-user-email { font-size: 11px; color: var(--text-muted); }
+.topbar-user:hover { background: var(--bg); }
 
-/* ============================================================ Banner */
-
-#banner {
-  height: 18px;
-  background: white;
-  overflow: hidden;
+.topbar-user-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--red);
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
   display: flex;
   align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  letter-spacing: 0.3px;
 }
 
-.banner-flags {
+.topbar-user-info {
   display: flex;
-  gap: 0;
-  width: 100%;
+  flex-direction: column;
+  line-height: 1.2;
 }
 
-.banner-flag {
-  width: 0;
-  height: 0;
-  border-left: 12px solid transparent;
-  border-right: 12px solid transparent;
-  border-top: 18px solid var(--red);
-}
+.topbar-user-name { font-size: 12.5px; font-weight: 600; color: var(--text); }
+.topbar-user-email { font-size: 10.5px; color: var(--text-muted); }
+
+/* ============================================================ Banner (removed) */
 
 /* ============================================================ HUT Banner */
 
