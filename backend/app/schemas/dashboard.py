@@ -1,5 +1,6 @@
 from datetime import date
 from decimal import Decimal
+from uuid import UUID
 
 from pydantic import BaseModel
 
@@ -41,7 +42,7 @@ class DashboardResponse(BaseModel):
 
 
 class CampaignRow(BaseModel):
-    id: str
+    id: UUID
     nama_campaign: str
     status: str
     tahap: str | None
