@@ -15,6 +15,24 @@ const numShort = n => {
   return String(v);
 };
 
+const FMT_IDR = v => Math.abs(v) >= 1_000_000
+  ? (v < 0 ? '-' : '') + 'Rp ' + (Math.abs(v) / 1_000_000).toFixed(1) + ' jt'
+  : 'Rp ' + Math.round(v).toLocaleString('id-ID');
+const FMT_NUM = v => Math.round(v).toLocaleString('id-ID');
+const FMT_PCT = v => v.toFixed(1) + '%';
+
+const METRICS = {
+  biaya:     { get: r => Number(r.spend_idr   || 0), color: '#ef4444', label: 'Biaya',        fmt: rpShort,  fmtY: FMT_IDR, type: 'line' },
+  penjualan: { get: r => Number(r.penjualan   || 0), color: '#8b5cf6', label: 'Penjualan',    fmt: rpShort,  fmtY: FMT_IDR, type: 'line' },
+  komisi:    { get: r => Number(r.komisi      || 0), color: '#10b981', label: 'Komisi',       fmt: rpShort,  fmtY: FMT_IDR, type: 'line' },
+  laba:      { get: r => Number(r.laba        || 0), color: '#1f2937', label: 'Laba',         fmt: rpShort,  fmtY: FMT_IDR, type: 'bar'  },
+  roi:       { get: (r, bi) => bi > 0 ? Number(r.laba || 0) / bi * 100 : 0,
+                                                      color: '#f59e0b', label: 'ROI',          fmt: pct,      fmtY: FMT_PCT, type: 'line' },
+  pesanan:   { get: r => (Number(r.orders_selesai || 0)) + (Number(r.orders_tertunda || 0)),
+                                                      color: '#06b6d4', label: 'Pesanan',      fmt: num,      fmtY: FMT_NUM, type: 'bar'  },
+  clicks:    { get: r => Number(r.clicks_shopee || 0), color: '#3b82f6', label: 'Klik Shopee', fmt: numShort, fmtY: FMT_NUM, type: 'line' },
+};
+
 function fmtDate(d) {
   const months = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
   const dt = new Date(d);
@@ -29,6 +47,7 @@ export class DashboardPage {
     this.dari = new Date(y, m, 1).toISOString().split('T')[0];
     this.sampai = now.toISOString().split('T')[0];
     this._chartData = null;
+    this._selectedMetric = 'biaya';
   }
 
   async render() {
@@ -131,6 +150,7 @@ export class DashboardPage {
       el.innerHTML = this._render(data);
       requestAnimationFrame(() => this._drawChart(data.harian));
       this._initChartHover(data.harian);
+      this._initCardClicks(data.harian);
     } catch (e) {
       el.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
     }
@@ -138,6 +158,7 @@ export class DashboardPage {
 
   _render({ summary: s, harian }) {
     const lc = n => Number(n) >= 0 ? 'positive' : 'negative';
+    const sel = k => this._selectedMetric === k ? ' selected' : '';
 
     // Komisi berdasarkan status computation
     const totalOrders = (s.total_orders_selesai || 0) + (s.total_orders_tertunda || 0);
@@ -157,31 +178,31 @@ export class DashboardPage {
     return `
       <!-- 7 stat cards -->
       <div class="stat-scroll">
-        <div class="stat-card-h selected">
+        <div class="stat-card-h${sel('biaya')}" data-key="biaya">
           <div class="stat-label">BIAYA (TERMASUK PPN/TAX META)</div>
           <div class="stat-value">${rpShort(s.total_biaya)}</div>
         </div>
-        <div class="stat-card-h">
+        <div class="stat-card-h${sel('penjualan')}" data-key="penjualan">
           <div class="stat-label">PENJUALAN</div>
           <div class="stat-value">${rpShort(s.total_penjualan)}</div>
         </div>
-        <div class="stat-card-h">
+        <div class="stat-card-h${sel('komisi')}" data-key="komisi">
           <div class="stat-label">KOMISI (DARI IKLAN META)</div>
           <div class="stat-value">${rpShort(s.total_komisi)}</div>
         </div>
-        <div class="stat-card-h">
+        <div class="stat-card-h${sel('laba')}" data-key="laba">
           <div class="stat-label">LABA</div>
           <div class="stat-value ${lc(s.total_laba)}">${rpShort(s.total_laba)}</div>
         </div>
-        <div class="stat-card-h">
+        <div class="stat-card-h${sel('roi')}" data-key="roi">
           <div class="stat-label">ROI</div>
           <div class="stat-value ${lc(s.total_laba)}">${pct(s.roi_persen)}</div>
         </div>
-        <div class="stat-card-h">
+        <div class="stat-card-h${sel('pesanan')}" data-key="pesanan">
           <div class="stat-label">PESANAN</div>
           <div class="stat-value">${num(s.total_orders)}</div>
         </div>
-        <div class="stat-card-h">
+        <div class="stat-card-h${sel('clicks')}" data-key="clicks">
           <div class="stat-label">KLIK SHOPEE</div>
           <div class="stat-value">${numShort(s.total_clicks_shopee)}</div>
         </div>
@@ -229,11 +250,7 @@ export class DashboardPage {
           <div class="chart-title">Grafik Performa</div>
           <div class="chart-hover-info" id="chart-hover-info">&nbsp;</div>
         </div>
-        <div class="chart-legend">
-          <div class="chart-legend-item"><div class="chart-dot" style="background:#10b981;"></div> Komisi</div>
-          <div class="chart-legend-item"><div class="chart-dot" style="background:#1f2937;"></div> Laba</div>
-          <div class="chart-legend-item"><div class="chart-dot" style="background:#ef4444;"></div> Biaya</div>
-        </div>
+        <div class="chart-legend" id="chart-legend"></div>
         ${harian.length === 0
           ? `<div style="text-align:center;color:var(--text-muted);padding:48px;">Tidak ada data untuk periode ini.</div>`
           : `<div style="position:relative;"><canvas id="perf-chart" style="width:100%;height:280px;display:block;"></canvas></div>`
@@ -279,6 +296,19 @@ export class DashboardPage {
     `;
   }
 
+  _initCardClicks(harian) {
+    const cards = this.container.querySelectorAll('.stat-card-h');
+    cards.forEach(card => {
+      card.style.cursor = 'pointer';
+      card.addEventListener('click', () => {
+        cards.forEach(c => c.classList.remove('selected'));
+        card.classList.add('selected');
+        this._selectedMetric = card.dataset.key;
+        this._drawChart(harian);
+      });
+    });
+  }
+
   _drawChart(harian) {
     if (!harian || !harian.length) return;
     const canvas = document.getElementById('perf-chart');
@@ -300,12 +330,18 @@ export class DashboardPage {
     const cH = H - pad.top - pad.bottom;
     const n = harian.length;
 
-    const biaya = harian.map(r => Number(r.spend_idr));
-    const komisi = harian.map(r => Number(r.komisi));
-    const laba = harian.map(r => Number(r.laba));
+    const metric = this._selectedMetric || 'biaya';
+    const cfg = METRICS[metric] || METRICS.biaya;
+
+    const biayaRaw = harian.map(r => Number(r.spend_idr || 0));
+    const primaryData = metric === 'roi'
+      ? harian.map((r, i) => cfg.get(r, biayaRaw[i]))
+      : harian.map(r => cfg.get(r));
+    const labaData = harian.map(r => Number(r.laba || 0));
     const labels = harian.map(r => r.tanggal.slice(5));
 
-    const allVals = [...biaya, ...komisi, ...laba, 0];
+    const showLabaBg = metric !== 'laba' && metric !== 'pesanan';
+    const allVals = [...primaryData, ...(showLabaBg ? labaData : []), 0];
     const maxV = Math.max(...allVals);
     const minV = Math.min(...allVals);
     const range = maxV - minV || 1;
@@ -313,7 +349,7 @@ export class DashboardPage {
     const toX = i => pad.left + (n === 1 ? cW / 2 : i / (n - 1) * cW);
     const toY = v => pad.top + cH - ((v - minV) / range * cH);
 
-    // Grid lines + y-axis labels
+    // Grid + Y-axis labels
     ctx.font = `10px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
     ctx.textAlign = 'right';
     const steps = 4;
@@ -327,10 +363,7 @@ export class DashboardPage {
       ctx.lineTo(pad.left + cW, y);
       ctx.stroke();
       ctx.fillStyle = '#9ca3af';
-      const lab = Math.abs(v) >= 1_000_000
-        ? (v < 0 ? '-' : '') + 'Rp ' + (Math.abs(v) / 1_000_000).toFixed(1) + ' jt'
-        : 'Rp ' + Math.round(v).toLocaleString('id-ID');
-      ctx.fillText(lab, pad.left - 4, y + 4);
+      ctx.fillText(cfg.fmtY(v), pad.left - 4, y + 4);
     }
 
     // Zero line
@@ -342,55 +375,109 @@ export class DashboardPage {
     ctx.lineTo(pad.left + cW, zeroY);
     ctx.stroke();
 
-    // Laba bars
-    const barW = Math.max(4, cW / n * 0.45);
-    laba.forEach((v, i) => {
-      const x = toX(i) - barW / 2;
-      if (v >= 0) {
-        ctx.fillStyle = 'rgba(16,185,129,0.25)';
-        ctx.fillRect(x, toY(v), barW, zeroY - toY(v) || 1);
-      } else {
-        ctx.fillStyle = 'rgba(239,68,68,0.2)';
-        ctx.fillRect(x, zeroY, barW, toY(v) - zeroY || 1);
-      }
-    });
+    // Faint laba bars as background context
+    if (showLabaBg) {
+      const barW = Math.max(4, cW / n * 0.45);
+      labaData.forEach((v, i) => {
+        const x = toX(i) - barW / 2;
+        if (v >= 0) {
+          ctx.fillStyle = 'rgba(16,185,129,0.10)';
+          ctx.fillRect(x, toY(v), barW, zeroY - toY(v) || 1);
+        } else {
+          ctx.fillStyle = 'rgba(239,68,68,0.08)';
+          ctx.fillRect(x, zeroY, barW, toY(v) - zeroY || 1);
+        }
+      });
+    }
 
-    // Smooth line helper
-    const drawLine = (data, color) => {
-      if (data.length === 0) return;
-      ctx.strokeStyle = color;
-      ctx.fillStyle = color;
-      ctx.lineWidth = 2;
+    if (cfg.type === 'bar') {
+      // Bar chart for laba / pesanan
+      const barW = Math.max(5, cW / n * 0.55);
+      primaryData.forEach((v, i) => {
+        const x = toX(i) - barW / 2;
+        const isPos = v >= 0;
+        const fillPos = metric === 'laba' ? 'rgba(16,185,129,0.35)' : `${cfg.color}55`;
+        const fillNeg = metric === 'laba' ? 'rgba(239,68,68,0.30)' : `${cfg.color}33`;
+        const strokePos = metric === 'laba' ? '#10b981' : cfg.color;
+        const strokeNeg = metric === 'laba' ? '#ef4444' : cfg.color;
+        if (isPos) {
+          ctx.fillStyle = fillPos;
+          ctx.fillRect(x, toY(v), barW, zeroY - toY(v) || 1);
+          ctx.strokeStyle = strokePos;
+          ctx.lineWidth = 1;
+          ctx.strokeRect(x, toY(v), barW, zeroY - toY(v) || 1);
+        } else {
+          ctx.fillStyle = fillNeg;
+          ctx.fillRect(x, zeroY, barW, toY(v) - zeroY || 1);
+          ctx.strokeStyle = strokeNeg;
+          ctx.lineWidth = 1;
+          ctx.strokeRect(x, zeroY, barW, toY(v) - zeroY || 1);
+        }
+      });
+    } else {
+      // Line chart with area fill
+      if (primaryData.length > 1) {
+        ctx.beginPath();
+        ctx.moveTo(toX(0), toY(primaryData[0]));
+        for (let i = 1; i < primaryData.length; i++) {
+          const cpx = (toX(i - 1) + toX(i)) / 2;
+          ctx.bezierCurveTo(cpx, toY(primaryData[i - 1]), cpx, toY(primaryData[i]), toX(i), toY(primaryData[i]));
+        }
+        ctx.lineTo(toX(n - 1), zeroY);
+        ctx.lineTo(toX(0), zeroY);
+        ctx.closePath();
+        const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + cH);
+        grad.addColorStop(0, cfg.color + '28');
+        grad.addColorStop(1, cfg.color + '04');
+        ctx.fillStyle = grad;
+        ctx.fill();
+      }
+
+      // Prominent line + dots
+      ctx.strokeStyle = cfg.color;
+      ctx.fillStyle = cfg.color;
+      ctx.lineWidth = 2.5;
       ctx.lineJoin = 'round';
       ctx.beginPath();
-      if (data.length === 1) {
-        ctx.arc(toX(0), toY(data[0]), 4, 0, Math.PI * 2);
+      if (primaryData.length === 1) {
+        ctx.arc(toX(0), toY(primaryData[0]), 4, 0, Math.PI * 2);
         ctx.fill();
-        return;
+      } else {
+        ctx.moveTo(toX(0), toY(primaryData[0]));
+        for (let i = 1; i < primaryData.length; i++) {
+          const cpx = (toX(i - 1) + toX(i)) / 2;
+          ctx.bezierCurveTo(cpx, toY(primaryData[i - 1]), cpx, toY(primaryData[i]), toX(i), toY(primaryData[i]));
+        }
+        ctx.stroke();
+        primaryData.forEach((v, i) => {
+          ctx.beginPath();
+          ctx.arc(toX(i), toY(v), 3.5, 0, Math.PI * 2);
+          ctx.fill();
+        });
       }
-      ctx.moveTo(toX(0), toY(data[0]));
-      for (let i = 1; i < data.length; i++) {
-        const cpx = (toX(i - 1) + toX(i)) / 2;
-        ctx.bezierCurveTo(cpx, toY(data[i - 1]), cpx, toY(data[i]), toX(i), toY(data[i]));
-      }
-      ctx.stroke();
-      data.forEach((v, i) => {
-        ctx.beginPath();
-        ctx.arc(toX(i), toY(v), 3.5, 0, Math.PI * 2);
-        ctx.fill();
-      });
-    };
-
-    drawLine(biaya, '#ef4444');
-    drawLine(komisi, '#10b981');
+    }
 
     // X-axis labels
     ctx.fillStyle = '#9ca3af';
     ctx.textAlign = 'center';
+    ctx.font = `10px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
     labels.forEach((lab, i) => ctx.fillText(lab, toX(i), H - 8));
 
-    // Store coords for hover
-    this._chartCoords = { toX, toY, biaya, komisi, laba, harian, pad, cW };
+    // Store for hover
+    this._chartCoords = { toX, toY, primaryData, labaData, pad, cW, cfg };
+
+    // Update legend
+    this._updateChartLegend(cfg, showLabaBg);
+  }
+
+  _updateChartLegend(cfg, showLabaBg) {
+    const legend = this.container.querySelector('#chart-legend');
+    if (!legend) return;
+    let html = `<div class="chart-legend-item"><div class="chart-dot" style="background:${cfg.color};"></div> ${cfg.label}</div>`;
+    if (showLabaBg) {
+      html += `<div class="chart-legend-item"><div class="chart-dot" style="background:#10b981;opacity:0.35;"></div> Laba (latar)</div>`;
+    }
+    legend.innerHTML = html;
   }
 
   _initChartHover(harian) {
@@ -401,7 +488,7 @@ export class DashboardPage {
 
     canvas.addEventListener('mousemove', (e) => {
       if (!this._chartCoords) return;
-      const { toX, biaya, komisi, laba, pad, cW } = this._chartCoords;
+      const { toX, primaryData, labaData, pad, cW, cfg } = this._chartCoords;
       const rect = canvas.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
       const n = harian.length;
@@ -410,10 +497,12 @@ export class DashboardPage {
       let idx = Math.round((mouseX - pad.left) / step);
       idx = Math.max(0, Math.min(n - 1, idx));
       const r = harian[idx];
+      const primaryVal = primaryData[idx];
+      const showLaba = this._selectedMetric !== 'laba' && this._selectedMetric !== 'pesanan';
       info.innerHTML = `<span style="color:var(--text-muted)">${r.tanggal}</span>&nbsp;&nbsp;
-        <span style="color:#ef4444">Biaya: ${rp(biaya[idx])}</span>&nbsp;&nbsp;
-        <span style="color:#10b981">Komisi: ${rp(komisi[idx])}</span>&nbsp;&nbsp;
-        <span style="color:#1f2937">Laba: ${rp(laba[idx])}</span>`;
+        <span style="color:${cfg.color}">${cfg.label}: ${cfg.fmt(primaryVal)}</span>${showLaba
+          ? `&nbsp;&nbsp;<span style="color:#1f2937">Laba: ${rpShort(labaData[idx])}</span>`
+          : ''}`;
     });
 
     canvas.addEventListener('mouseleave', () => {
