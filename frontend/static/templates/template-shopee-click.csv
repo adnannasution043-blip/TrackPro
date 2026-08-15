@@ -1,0 +1,7 @@
+Sub ID,Date,Clicks,Source
+pks180626,2026-08-01,320,Facebook
+pks180626,2026-08-01,85,Instagram
+pks180626,2026-08-02,410,Facebook
+pks180626,2026-08-02,60,Instagram
+abc123xyz,2026-08-01,150,Facebook
+abc123xyz,2026-08-02,200,Facebook
