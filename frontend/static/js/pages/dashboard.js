@@ -23,15 +23,15 @@ const FMT_NUM = v => Math.round(v).toLocaleString('id-ID');
 const FMT_PCT = v => v.toFixed(1) + '%';
 
 const METRICS = {
-  biaya:     { get: r => Number(r.spend_idr   || 0), color: '#ef4444', label: 'Biaya',        fmt: rpShort,  fmtY: FMT_IDR, type: 'line' },
-  penjualan: { get: r => Number(r.penjualan   || 0), color: '#8b5cf6', label: 'Penjualan',    fmt: rpShort,  fmtY: FMT_IDR, type: 'line' },
-  komisi:    { get: r => Number(r.komisi      || 0), color: '#10b981', label: 'Komisi',       fmt: rpShort,  fmtY: FMT_IDR, type: 'line' },
-  laba:      { get: r => Number(r.laba        || 0), color: '#1f2937', label: 'Laba',         fmt: rpShort,  fmtY: FMT_IDR, type: 'bar'  },
+  biaya:     { get: r => Number(r.spend_idr   || 0), color: '#ef4444', label: 'Biaya',        fmt: rpShort,  fmtY: FMT_IDR, type: 'multi' },
+  penjualan: { get: r => Number(r.penjualan   || 0), color: '#8b5cf6', label: 'Penjualan',    fmt: rpShort,  fmtY: FMT_IDR, type: 'line'  },
+  komisi:    { get: r => Number(r.komisi      || 0), color: '#10b981', label: 'Komisi',       fmt: rpShort,  fmtY: FMT_IDR, type: 'multi' },
+  laba:      { get: r => Number(r.laba        || 0), color: '#374151', label: 'Laba',         fmt: rpShort,  fmtY: FMT_IDR, type: 'multi' },
   roi:       { get: (r, bi) => bi > 0 ? Number(r.laba || 0) / bi * 100 : 0,
-                                                      color: '#f59e0b', label: 'ROI',          fmt: pct,      fmtY: FMT_PCT, type: 'line' },
+                                                      color: '#3b82f6', label: 'ROI',          fmt: pct,      fmtY: FMT_PCT, type: 'line'  },
   pesanan:   { get: r => (Number(r.orders_selesai || 0)) + (Number(r.orders_tertunda || 0)),
-                                                      color: '#06b6d4', label: 'Pesanan',      fmt: num,      fmtY: FMT_NUM, type: 'bar'  },
-  clicks:    { get: r => Number(r.clicks_shopee || 0), color: '#3b82f6', label: 'Klik Shopee', fmt: numShort, fmtY: FMT_NUM, type: 'line' },
+                                                      color: '#f59e0b', label: 'Pesanan',      fmt: num,      fmtY: FMT_NUM, type: 'line'  },
+  clicks:    { get: r => Number(r.clicks_shopee || 0), color: '#06b6d4', label: 'Klik Shopee', fmt: numShort, fmtY: FMT_NUM, type: 'line'  },
 };
 
 function fmtDate(d) {
@@ -333,16 +333,20 @@ export class DashboardPage {
 
     const metric = this._selectedMetric || 'biaya';
     const cfg = METRICS[metric] || METRICS.biaya;
+    const isMulti = cfg.type === 'multi';
 
-    const biayaRaw = harian.map(r => Number(r.spend_idr || 0));
+    const biayaData  = harian.map(r => Number(r.spend_idr || 0));
+    const komisiData = harian.map(r => Number(r.komisi    || 0));
+    const labaData   = harian.map(r => Number(r.laba      || 0));
     const primaryData = metric === 'roi'
-      ? harian.map((r, i) => cfg.get(r, biayaRaw[i]))
+      ? harian.map((r, i) => cfg.get(r, biayaData[i]))
       : harian.map(r => cfg.get(r));
-    const labaData = harian.map(r => Number(r.laba || 0));
     const labels = harian.map(r => r.tanggal.slice(5));
 
-    const showLabaBg = metric !== 'laba' && metric !== 'pesanan';
-    const allVals = [...primaryData, ...(showLabaBg ? labaData : []), 0];
+    // Y-axis range: multi uses all 3 series, single uses primary + 0
+    const allVals = isMulti
+      ? [...biayaData, ...komisiData, ...labaData, 0]
+      : [...primaryData, 0];
     const maxV = Math.max(...allVals);
     const minV = Math.min(...allVals);
     const range = maxV - minV || 1;
@@ -359,25 +363,18 @@ export class DashboardPage {
       const y = pad.top + i * cH / steps;
       ctx.strokeStyle = '#f3f4f6';
       ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(pad.left, y);
-      ctx.lineTo(pad.left + cW, y);
-      ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + cW, y); ctx.stroke();
       ctx.fillStyle = '#9ca3af';
       ctx.fillText(cfg.fmtY(v), pad.left - 4, y + 4);
     }
 
     // Zero line
     const zeroY = toY(0);
-    ctx.strokeStyle = '#d1d5db';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(pad.left, zeroY);
-    ctx.lineTo(pad.left + cW, zeroY);
-    ctx.stroke();
+    ctx.strokeStyle = '#d1d5db'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(pad.left, zeroY); ctx.lineTo(pad.left + cW, zeroY); ctx.stroke();
 
-    // Faint laba bars as background context
-    if (showLabaBg) {
+    // Faint Laba bars (background) — shown on multi-line charts
+    if (isMulti) {
       const barW = Math.max(4, cW / n * 0.45);
       labaData.forEach((v, i) => {
         const x = toX(i) - barW / 2;
@@ -391,94 +388,74 @@ export class DashboardPage {
       });
     }
 
-    if (cfg.type === 'bar') {
-      // Bar chart for laba / pesanan
-      const barW = Math.max(5, cW / n * 0.55);
-      primaryData.forEach((v, i) => {
-        const x = toX(i) - barW / 2;
-        const isPos = v >= 0;
-        const fillPos = metric === 'laba' ? 'rgba(16,185,129,0.35)' : `${cfg.color}55`;
-        const fillNeg = metric === 'laba' ? 'rgba(239,68,68,0.30)' : `${cfg.color}33`;
-        const strokePos = metric === 'laba' ? '#10b981' : cfg.color;
-        const strokeNeg = metric === 'laba' ? '#ef4444' : cfg.color;
-        if (isPos) {
-          ctx.fillStyle = fillPos;
-          ctx.fillRect(x, toY(v), barW, zeroY - toY(v) || 1);
-          ctx.strokeStyle = strokePos;
-          ctx.lineWidth = 1;
-          ctx.strokeRect(x, toY(v), barW, zeroY - toY(v) || 1);
-        } else {
-          ctx.fillStyle = fillNeg;
-          ctx.fillRect(x, zeroY, barW, toY(v) - zeroY || 1);
-          ctx.strokeStyle = strokeNeg;
-          ctx.lineWidth = 1;
-          ctx.strokeRect(x, zeroY, barW, toY(v) - zeroY || 1);
-        }
+    const drawSmoothLine = (data, color, lw) => {
+      ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(toX(0), toY(data[0]));
+      for (let i = 1; i < data.length; i++) {
+        const cpx = (toX(i - 1) + toX(i)) / 2;
+        ctx.bezierCurveTo(cpx, toY(data[i - 1]), cpx, toY(data[i]), toX(i), toY(data[i]));
+      }
+      ctx.stroke();
+    };
+
+    const drawDots = (data, color, r) => {
+      ctx.fillStyle = color;
+      data.forEach((v, i) => {
+        ctx.beginPath(); ctx.arc(toX(i), toY(v), r, 0, Math.PI * 2); ctx.fill();
       });
+    };
+
+    if (isMulti) {
+      // 3 smooth lines: Komisi (green) → Laba (dark) → Biaya (red)
+      const series = [
+        { data: komisiData, color: '#10b981', lw: 2.0, dotR: 3 },
+        { data: labaData,   color: '#374151', lw: 1.8, dotR: 2.5 },
+        { data: biayaData,  color: '#ef4444', lw: 2.0, dotR: 3 },
+      ];
+      for (const s of series) {
+        if (n > 1) drawSmoothLine(s.data, s.color, s.lw);
+        drawDots(s.data, s.color, s.dotR);
+      }
     } else {
-      // Line chart with area fill
-      if (primaryData.length > 1) {
+      // Single line with gradient area fill
+      if (n > 1) {
         ctx.beginPath();
         ctx.moveTo(toX(0), toY(primaryData[0]));
-        for (let i = 1; i < primaryData.length; i++) {
+        for (let i = 1; i < n; i++) {
           const cpx = (toX(i - 1) + toX(i)) / 2;
           ctx.bezierCurveTo(cpx, toY(primaryData[i - 1]), cpx, toY(primaryData[i]), toX(i), toY(primaryData[i]));
         }
-        ctx.lineTo(toX(n - 1), zeroY);
-        ctx.lineTo(toX(0), zeroY);
-        ctx.closePath();
+        ctx.lineTo(toX(n - 1), zeroY); ctx.lineTo(toX(0), zeroY); ctx.closePath();
         const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + cH);
-        grad.addColorStop(0, cfg.color + '28');
-        grad.addColorStop(1, cfg.color + '04');
-        ctx.fillStyle = grad;
-        ctx.fill();
-      }
+        grad.addColorStop(0, cfg.color + '28'); grad.addColorStop(1, cfg.color + '04');
+        ctx.fillStyle = grad; ctx.fill();
 
-      // Prominent line + dots
-      ctx.strokeStyle = cfg.color;
-      ctx.fillStyle = cfg.color;
-      ctx.lineWidth = 2.5;
-      ctx.lineJoin = 'round';
-      ctx.beginPath();
-      if (primaryData.length === 1) {
-        ctx.arc(toX(0), toY(primaryData[0]), 4, 0, Math.PI * 2);
-        ctx.fill();
+        drawSmoothLine(primaryData, cfg.color, 2.5);
+        drawDots(primaryData, cfg.color, 3.5);
       } else {
-        ctx.moveTo(toX(0), toY(primaryData[0]));
-        for (let i = 1; i < primaryData.length; i++) {
-          const cpx = (toX(i - 1) + toX(i)) / 2;
-          ctx.bezierCurveTo(cpx, toY(primaryData[i - 1]), cpx, toY(primaryData[i]), toX(i), toY(primaryData[i]));
-        }
-        ctx.stroke();
-        primaryData.forEach((v, i) => {
-          ctx.beginPath();
-          ctx.arc(toX(i), toY(v), 3.5, 0, Math.PI * 2);
-          ctx.fill();
-        });
+        ctx.fillStyle = cfg.color;
+        ctx.beginPath(); ctx.arc(toX(0), toY(primaryData[0]), 4, 0, Math.PI * 2); ctx.fill();
       }
     }
 
     // X-axis labels
-    ctx.fillStyle = '#9ca3af';
-    ctx.textAlign = 'center';
+    ctx.fillStyle = '#9ca3af'; ctx.textAlign = 'center';
     ctx.font = `10px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
     labels.forEach((lab, i) => ctx.fillText(lab, toX(i), H - 8));
 
-    // Store for hover
-    this._chartCoords = { toX, toY, primaryData, labaData, pad, cW, cfg };
-
-    // Update legend
-    this._updateChartLegend(cfg, showLabaBg);
+    this._chartCoords = { toX, toY, primaryData, biayaData, komisiData, labaData, pad, cW, cfg, isMulti };
+    this._updateChartLegend(cfg, isMulti);
   }
 
-  _updateChartLegend(cfg, showLabaBg) {
+  _updateChartLegend(cfg, isMulti) {
     const legend = this.container.querySelector('#chart-legend');
     if (!legend) return;
-    let html = `<div class="chart-legend-item"><div class="chart-dot" style="background:${cfg.color};"></div> ${cfg.label}</div>`;
-    if (showLabaBg) {
-      html += `<div class="chart-legend-item"><div class="chart-dot" style="background:#10b981;opacity:0.35;"></div> Laba (latar)</div>`;
-    }
-    legend.innerHTML = html;
+    legend.innerHTML = isMulti
+      ? `<div class="chart-legend-item"><div class="chart-dot" style="background:#10b981;"></div> Komisi</div>
+         <div class="chart-legend-item"><div class="chart-dot" style="background:#374151;"></div> Laba</div>
+         <div class="chart-legend-item"><div class="chart-dot" style="background:#ef4444;"></div> Biaya</div>`
+      : `<div class="chart-legend-item"><div class="chart-dot" style="background:${cfg.color};"></div> ${cfg.label}</div>`;
   }
 
   _initChartHover(harian) {
@@ -489,7 +466,7 @@ export class DashboardPage {
 
     canvas.addEventListener('mousemove', (e) => {
       if (!this._chartCoords) return;
-      const { toX, primaryData, labaData, pad, cW, cfg } = this._chartCoords;
+      const { toX, primaryData, biayaData, komisiData, labaData, pad, cW, cfg, isMulti } = this._chartCoords;
       const rect = canvas.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
       const n = harian.length;
@@ -498,17 +475,18 @@ export class DashboardPage {
       let idx = Math.round((mouseX - pad.left) / step);
       idx = Math.max(0, Math.min(n - 1, idx));
       const r = harian[idx];
-      const primaryVal = primaryData[idx];
-      const showLaba = this._selectedMetric !== 'laba' && this._selectedMetric !== 'pesanan';
-      info.innerHTML = `<span style="color:var(--text-muted)">${r.tanggal}</span>&nbsp;&nbsp;
-        <span style="color:${cfg.color}">${cfg.label}: ${cfg.fmt(primaryVal)}</span>${showLaba
-          ? `&nbsp;&nbsp;<span style="color:#1f2937">Laba: ${rpShort(labaData[idx])}</span>`
-          : ''}`;
+      if (isMulti) {
+        info.innerHTML = `<span style="color:var(--text-muted)">${r.tanggal}</span>&nbsp;&nbsp;
+          <span style="color:#10b981">Komisi: ${rpShort(komisiData[idx])}</span>&nbsp;&nbsp;
+          <span style="color:#374151">Laba: ${rpShort(labaData[idx])}</span>&nbsp;&nbsp;
+          <span style="color:#ef4444">Biaya: ${rpShort(biayaData[idx])}</span>`;
+      } else {
+        info.innerHTML = `<span style="color:var(--text-muted)">${r.tanggal}</span>&nbsp;&nbsp;
+          <span style="color:${cfg.color}">${cfg.label}: ${cfg.fmt(primaryData[idx])}</span>`;
+      }
     });
 
-    canvas.addEventListener('mouseleave', () => {
-      if (info) info.innerHTML = '&nbsp;';
-    });
+    canvas.addEventListener('mouseleave', () => { if (info) info.innerHTML = '&nbsp;'; });
   }
 
   destroy() {}
