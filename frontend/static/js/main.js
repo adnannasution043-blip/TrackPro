@@ -25,9 +25,10 @@ const NAV_ITEMS = [
   { path: '/daily', label: 'Laporan Harian', icon: 'calendar' },
   { path: '/campaigns', label: 'Kampanye Meta', icon: 'megaphone' },
   { path: '/analysis', label: 'Analisis Iklan', icon: 'chart' },
-  { path: '/commission', label: 'Laporan Komisi', icon: 'coin' },
-  { path: '/orders', label: 'Laporan Pesanan', icon: 'box' },
-  { path: '/clicks', label: 'Laporan Klik', icon: 'cursor' },
+  { groupLink: 'Laporan Komisi', icon: 'coin', path: '/commission', children: [
+    { path: '/orders', label: 'Laporan Pesanan', icon: 'box' },
+    { path: '/clicks', label: 'Laporan Klik', icon: 'cursor' },
+  ]},
   { section: 'DATA' },
   { path: '/upload', label: 'Upload Data Harian', icon: 'upload' },
   { path: '/taglink', label: 'Hubungkan Taglink', icon: 'link' },
@@ -116,6 +117,28 @@ function renderSidebar(currentPath, user) {
           ${item.label}
         </a>
       `;
+    } else if (item.groupLink) {
+      const isExpanded = expandedGroups.has(item.groupLink);
+      const hasActiveChild = item.children?.some(c => c.path === currentPath);
+      const isMain = currentPath === item.path;
+      const isOpen = isExpanded || hasActiveChild || isMain;
+      html += `
+        <div style="display:flex;align-items:center;gap:0;">
+          <a href="#${item.path}" class="sidebar-item${isMain ? ' active' : ''}" style="flex:1;min-width:0;">
+            ${icon(item.icon)}
+            ${item.groupLink}
+          </a>
+          <button class="sidebar-item" data-group="${item.groupLink}" style="padding:7px 6px;width:auto;flex-shrink:0;">
+            <span style="width:14px;height:14px;display:flex;align-items:center;justify-content:center;transition:transform 0.2s;${isOpen ? 'transform:rotate(180deg)' : ''}">${icon('chevron')}</span>
+          </button>
+        </div>
+        <div class="sidebar-submenu" style="display:${isOpen ? 'block' : 'none'}" data-group-content="${item.groupLink}">
+      `;
+      for (const child of item.children || []) {
+        const isActive = currentPath === child.path ? ' active' : '';
+        html += `<a href="#${child.path}" class="sidebar-item${isActive}">${icon(child.icon)}${child.label}</a>`;
+      }
+      html += `</div>`;
     } else if (item.group) {
       const isExpanded = expandedGroups.has(item.group);
       const hasActiveChild = item.children?.some(c => c.path === currentPath);
@@ -147,11 +170,11 @@ function renderSidebar(currentPath, user) {
 
   html += `
     <div class="sidebar-bottom">
-      <div class="sidebar-subscription">
+      <div class="sidebar-subscription" id="sidebar-sub-info">
         ${icon('timer')}
         <div>
-          <div style="font-weight:600;color:#111;">Langganan - Trial</div>
-          <div style="font-size:11px;">Aktifkan untuk akses penuh</div>
+          <div style="font-weight:600;color:#dc2626;" id="sub-days-label">Langganan</div>
+          <div style="font-size:11px;color:#6b7280;" id="sub-expire-label">–</div>
         </div>
       </div>
       <button class="sidebar-logout" id="btn-logout">
@@ -196,6 +219,19 @@ function renderShell(path, user) {
           </div>
         </header>
         <div id="banner">${renderBanner()}</div>
+        <div id="hut-banner">
+          <div class="hut-inner">
+            <div class="hut-left">
+              <div class="hut-logo-wrap"><div class="hut-logo-num">81</div></div>
+              <div>
+                <div class="hut-eyebrow">Dirgahayu Republik Indonesia</div>
+                <div class="hut-title">HUT RI ke-81</div>
+                <div class="hut-sub">Sekali Merdeka, Tetap Merdeka.</div>
+              </div>
+            </div>
+            <button class="hut-date-btn">📅 17 Agustus</button>
+          </div>
+        </div>
         <main id="page-content"></main>
       </div>
     </div>
@@ -222,6 +258,8 @@ function renderShell(path, user) {
       }
     });
   });
+
+  updateSidebarLive();
 }
 
 function guard(Page) {
@@ -244,6 +282,24 @@ async function loadUser() {
     const data = await apiFetch('/auth/me');
     if (data) currentUser = data;
   } catch (_) {}
+}
+
+function updateSidebarLive() {
+  // Update subscription display once user data is available
+  const daysEl = document.getElementById('sub-days-label');
+  const expEl = document.getElementById('sub-expire-label');
+  if (!daysEl || !expEl) return;
+  // Fetch subscription data
+  apiFetch('/billing').then(d => {
+    if (!d) return;
+    const days = d.sisa_hari != null ? d.sisa_hari : '–';
+    const exp = d.berakhir ? d.berakhir.slice(0, 10) : '–';
+    daysEl.textContent = `Langganan - ${days} hari lagi`;
+    expEl.textContent = `s/d ${exp}`;
+  }).catch(() => {
+    if (daysEl) daysEl.textContent = 'Langganan';
+    if (expEl) expEl.textContent = '–';
+  });
 }
 
 const routes = {
@@ -296,6 +352,7 @@ function getContainer(path) {
           }
         });
       });
+      updateSidebarLive();
     }
   }
   return document.getElementById('page-content');
