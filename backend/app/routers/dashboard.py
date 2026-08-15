@@ -202,7 +202,7 @@ async def get_campaigns(
         laba = komisi - spend
         roi = (laba / spend * 100).quantize(Decimal("0.01")) if spend else None
         campaigns.append(CampaignRow(
-            id=str(r.id),
+            id=r.id,
             nama_campaign=r.nama_campaign,
             status=r.status or "ACTIVE",
             tahap=r.tahap,
