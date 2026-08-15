@@ -1,3 +1,4 @@
+from collections import defaultdict
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, status
@@ -8,6 +9,7 @@ from app.models.account import AccountLink, MetaAccount, ShopeeAccount
 from app.schemas.account import (
     AccountItem,
     AccountLinkRequest,
+    AccountsTree,
     MetaAccountCreate,
     MetaAccountResponse,
     MetaAccountUpdate,
@@ -53,6 +55,62 @@ async def list_all_accounts(current_user: CurrentUser, db: DB):
             status_koneksi=None,
         ))
     return items
+
+
+# ===========================================================================
+# Tree: Meta + linked Shopee (untuk sidebar filter & halaman manajemen akun)
+# ===========================================================================
+
+@router.get("/tree", response_model=AccountsTree)
+async def get_accounts_tree(current_user: CurrentUser, db: DB):
+    meta_res = await db.execute(
+        select(MetaAccount)
+        .where(MetaAccount.user_id == current_user.id)
+        .order_by(MetaAccount.created_at)
+    )
+    meta_list = meta_res.scalars().all()
+
+    shopee_res = await db.execute(
+        select(ShopeeAccount)
+        .where(ShopeeAccount.user_id == current_user.id)
+        .order_by(ShopeeAccount.created_at)
+    )
+    all_shopee = shopee_res.scalars().all()
+    shopee_by_id = {s.id: s for s in all_shopee}
+
+    linked_ids: set = set()
+    links_by_meta: dict = defaultdict(list)
+
+    if meta_list:
+        meta_ids = [m.id for m in meta_list]
+        links_res = await db.execute(
+            select(AccountLink).where(AccountLink.meta_account_id.in_(meta_ids))
+        )
+        for link in links_res.scalars().all():
+            links_by_meta[link.meta_account_id].append(link.shopee_account_id)
+            linked_ids.add(link.shopee_account_id)
+
+    meta_with_shopee = []
+    for m in meta_list:
+        shopee_list = []
+        for sid in links_by_meta.get(m.id, []):
+            if sid in shopee_by_id:
+                s = shopee_by_id[sid]
+                shopee_list.append({"id": s.id, "nama": s.nama_akun})
+        meta_with_shopee.append({
+            "id": m.id,
+            "nama": m.nama_tampilan,
+            "account_id": m.ad_account_id,
+            "shopee_accounts": shopee_list,
+        })
+
+    unlinked = [
+        {"id": s.id, "nama": s.nama_akun}
+        for s in all_shopee
+        if s.id not in linked_ids
+    ]
+
+    return {"meta_accounts": meta_with_shopee, "shopee_unlinked": unlinked}
 
 
 # ===========================================================================

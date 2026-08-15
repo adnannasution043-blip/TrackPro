@@ -72,3 +72,24 @@ class AccountItem(BaseModel):
     nama: str          # nama_tampilan (meta) atau nama_akun (shopee)
     account_id: str | None   # ad_account_id (meta) atau None (shopee)
     status_koneksi: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Accounts tree (hierarki Meta → Shopee, dipakai sidebar filter)
+# ---------------------------------------------------------------------------
+
+class ShopeeLinked(BaseModel):
+    id: UUID
+    nama: str
+
+
+class MetaWithShopee(BaseModel):
+    id: UUID
+    nama: str
+    account_id: str
+    shopee_accounts: list[ShopeeLinked]
+
+
+class AccountsTree(BaseModel):
+    meta_accounts: list[MetaWithShopee]
+    shopee_unlinked: list[ShopeeLinked]
