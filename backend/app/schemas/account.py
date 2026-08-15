@@ -60,3 +60,15 @@ class ShopeeAccountResponse(BaseModel):
 
 class AccountLinkRequest(BaseModel):
     shopee_account_id: UUID
+
+
+# ---------------------------------------------------------------------------
+# Combined account list (dipakai frontend GET /accounts)
+# ---------------------------------------------------------------------------
+
+class AccountItem(BaseModel):
+    id: UUID
+    tipe: str          # "meta" | "shopee"
+    nama: str          # nama_tampilan (meta) atau nama_akun (shopee)
+    account_id: str | None   # ad_account_id (meta) atau None (shopee)
+    status_koneksi: str | None = None
