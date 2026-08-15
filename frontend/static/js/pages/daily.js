@@ -404,66 +404,153 @@ export class DailyPage {
     });
   }
 
-  _showModal(r) {
+  async _showModal(r) {
+    const FULL_MONTHS = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+    const FULL_DAYS   = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+    const dt = new Date(r.tanggal);
+    const judulTgl = `${dt.getDate()} ${FULL_MONTHS[dt.getMonth()]} ${dt.getFullYear()}`;
+    const judulHari = FULL_DAYS[dt.getDay()];
+
+    const laba = Number(r.laba || 0);
+    const roi  = Number(r.spend_idr) > 0 ? laba / Number(r.spend_idr) * 100 : 0;
+    const totalOrders = Number(r.orders_selesai||0) + Number(r.orders_tertunda||0) + Number(r.orders_batal||0);
+
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
     overlay.innerHTML = `
-      <div class="modal" style="max-width:520px;">
-        <div class="modal-header">
+      <div class="modal" style="max-width:720px;width:95vw;max-height:90vh;display:flex;flex-direction:column;">
+        <div class="modal-header" style="flex-shrink:0;">
           <div>
-            <h2>${r.tanggal}</h2>
-            <p>Detail performa hari ini</p>
+            <h2 style="font-size:17px;">${judulTgl} · ${judulHari}</h2>
           </div>
           <button class="modal-close" id="modal-close">×</button>
         </div>
-        <div class="modal-body">
-          <div class="modal-stat-grid">
-            <div class="modal-stat completed">
-              <div class="modal-stat-label">COMPLETED</div>
-              <div class="modal-stat-value">${r.orders_selesai}</div>
-            </div>
-            <div class="modal-stat pending">
-              <div class="modal-stat-label">PENDING</div>
-              <div class="modal-stat-value">${r.orders_tertunda}</div>
-            </div>
-            <div class="modal-stat">
-              <div class="modal-stat-label">UNPAID</div>
-              <div class="modal-stat-value">0</div>
-            </div>
-            <div class="modal-stat cancelled">
-              <div class="modal-stat-label">CANCELLED</div>
-              <div class="modal-stat-value">${r.orders_batal || 0}</div>
-            </div>
-          </div>
-          <div class="modal-komisi-row">
-            <div>
-              <div class="modal-komisi-label">KOMISI</div>
-              <div class="modal-komisi-value">${rp(r.komisi)}</div>
-            </div>
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;">
-            <div style="padding:12px;border:1px solid var(--border);border-radius:6px;">
-              <div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px;">Biaya Iklan</div>
+        <div class="modal-body" style="flex:1;overflow-y:auto;padding-top:12px;">
+
+          <!-- Stat cards -->
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:14px;">
+            <div style="padding:12px;border:1px solid #e5e7eb;border-radius:8px;">
+              <div style="font-size:10.5px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px;">SPEND</div>
               <div style="font-size:16px;font-weight:700;">${rp(r.spend_idr)}</div>
             </div>
-            <div style="padding:12px;border:1px solid var(--border);border-radius:6px;">
-              <div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px;">Laba</div>
-              <div style="font-size:16px;font-weight:700;color:${Number(r.laba)>=0?'#16a34a':'#dc2626'}">${rp(r.laba)}</div>
+            <div style="padding:12px;border:1px solid #e5e7eb;border-radius:8px;">
+              <div style="font-size:10.5px;font-weight:700;color:#10b981;text-transform:uppercase;margin-bottom:4px;">KOMISI</div>
+              <div style="font-size:16px;font-weight:700;color:#10b981;">${rp(r.komisi)}</div>
             </div>
-            <div style="padding:12px;border:1px solid var(--border);border-radius:6px;">
-              <div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px;">Klik Meta</div>
-              <div style="font-size:16px;font-weight:700;">${num(r.clicks_meta)}</div>
+            <div style="padding:12px;border:1px solid #e5e7eb;border-radius:8px;">
+              <div style="font-size:10.5px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px;">NET PROFIT</div>
+              <div style="font-size:16px;font-weight:700;color:${laba>=0?'#16a34a':'#dc2626'};">${rpSigned(Math.round(laba))}</div>
             </div>
-            <div style="padding:12px;border:1px solid var(--border);border-radius:6px;">
-              <div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px;">Klik Shopee</div>
-              <div style="font-size:16px;font-weight:700;">${num(r.clicks_shopee)}</div>
+            <div style="padding:12px;border:1px solid #e5e7eb;border-radius:8px;">
+              <div style="font-size:10.5px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px;">ROI</div>
+              <div style="font-size:16px;font-weight:700;color:${roi>=0?'#16a34a':'#dc2626'};">${roi>=0?'+':''}${roi.toFixed(2).replace('.',',')}%</div>
             </div>
           </div>
+
+          <!-- Orders summary bar -->
+          <div id="modal-order-bar" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#f9fafb;border-radius:8px;margin-bottom:14px;font-size:12.5px;flex-wrap:wrap;">
+            <span style="font-weight:600;">${totalOrders} orders →</span>
+            <span style="color:#16a34a;">Selesai <span id="m-selesai" style="font-weight:700;">${r.orders_selesai}</span></span>
+            <span style="color:#f59e0b;">Diproses <span id="m-diproses" style="font-weight:700;">…</span></span>
+            <span style="color:#9ca3af;">Belum Dibayar <span id="m-unpaid" style="font-weight:700;">…</span></span>
+            <span style="color:#ef4444;">Dibatalkan <span id="m-batal" style="font-weight:700;">${r.orders_batal||0}</span></span>
+          </div>
+
+          <!-- Tabs -->
+          <div style="display:flex;gap:0;border-bottom:2px solid #e5e7eb;margin-bottom:0;">
+            ${['Top Komisi','Top Penjualan','Top Produk'].map((t,i)=>
+              `<button class="modal-tab${i===0?' modal-tab-active':''}" data-tab="${i}" style="padding:8px 16px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:600;color:${i===0?'#dc2626':'#6b7280'};border-bottom:${i===0?'2px solid #dc2626':'2px solid transparent'};margin-bottom:-2px;">${t}</button>`
+            ).join('')}
+            <span style="margin-left:auto;padding:8px 14px;font-size:11px;font-weight:700;color:#9ca3af;letter-spacing:0.05em;">TOP 30</span>
+          </div>
+
+          <!-- Tab panels -->
+          <div id="modal-tab-content" style="min-height:200px;">
+            <div class="loading" style="padding:32px;text-align:center;">Memuat data produk…</div>
+          </div>
+
         </div>
       </div>`;
+
     document.body.appendChild(overlay);
     overlay.querySelector('#modal-close').addEventListener('click', () => overlay.remove());
     overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+    // Tab switching
+    let activeTab = 0;
+    let topData = null;
+
+    const renderTabContent = (data, tab) => {
+      const lists = [data.top_komisi, data.top_penjualan, data.top_produk];
+      const rows = lists[tab] || [];
+      const noData = rows.length === 0 || (rows.length === 1 && rows[0].nama_produk === '—');
+      const content = overlay.querySelector('#modal-tab-content');
+
+      if (noData) {
+        content.innerHTML = `<div class="empty" style="padding:40px;text-align:center;color:#9ca3af;">
+          Tidak ada data produk.<br>
+          <span style="font-size:12px;">Upload ulang Shopee CSV yang menyertakan kolom Product Name.</span>
+        </div>`;
+        return;
+      }
+
+      content.innerHTML = `<div class="table-wrap">
+        <table class="data-table" style="font-size:12px;">
+          <thead><tr>
+            <th style="width:28px;">#</th>
+            <th>PRODUK</th>
+            <th>TOKO</th>
+            <th style="text-align:right;">QTY</th>
+            <th style="text-align:right;">PENJUALAN</th>
+            <th style="text-align:right;color:#10b981;">KOMISI</th>
+          </tr></thead>
+          <tbody>
+            ${rows.map((p, i) => `<tr>
+              <td style="color:#9ca3af;font-weight:700;">${i+1}</td>
+              <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${p.nama_produk}">${p.nama_produk}</td>
+              <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#6b7280;" title="${p.nama_toko||''}">${p.nama_toko||'—'}</td>
+              <td style="text-align:right;">${num(p.qty)}</td>
+              <td style="text-align:right;">${rp(p.penjualan)}</td>
+              <td style="text-align:right;color:#10b981;font-weight:600;">${rp(p.komisi)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`;
+    };
+
+    // Load top products
+    try {
+      const qs = typeof filterQS === 'function' ? filterQS() : '';
+      topData = await apiFetch(`/dashboard/top-products?tanggal=${r.tanggal}${qs}`);
+
+      // Update order bar with actual per-status counts
+      if (topData) {
+        const mDip = overlay.querySelector('#m-diproses');
+        const mUnp = overlay.querySelector('#m-unpaid');
+        const mBat = overlay.querySelector('#m-batal');
+        const mSel = overlay.querySelector('#m-selesai');
+        if (mDip) mDip.textContent = num(topData.orders_diproses);
+        if (mUnp) mUnp.textContent = num(topData.orders_tertunda);
+        if (mBat) mBat.textContent = num(topData.orders_batal);
+        if (mSel) mSel.textContent = num(topData.orders_selesai);
+        renderTabContent(topData, activeTab);
+      }
+    } catch {
+      overlay.querySelector('#modal-tab-content').innerHTML =
+        `<div class="empty" style="padding:40px;text-align:center;color:#9ca3af;">Tidak ada data produk untuk hari ini.</div>`;
+    }
+
+    overlay.querySelectorAll('.modal-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        activeTab = Number(btn.dataset.tab);
+        overlay.querySelectorAll('.modal-tab').forEach((b, i) => {
+          const active = i === activeTab;
+          b.style.color = active ? '#dc2626' : '#6b7280';
+          b.style.borderBottom = active ? '2px solid #dc2626' : '2px solid transparent';
+        });
+        if (topData) renderTabContent(topData, activeTab);
+      });
+    });
   }
 
   destroy() {}

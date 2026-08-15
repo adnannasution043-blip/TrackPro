@@ -21,8 +21,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import DB, CurrentUser
 from app.models.account import MetaAccount, ShopeeAccount
 from app.models.campaign import Campaign, CampaignTagMap, TagLink
-from app.models.metrics import DailyMetric
-from app.schemas.dashboard import CampaignRow, CampaignsResponse, DashboardResponse, DashboardSummary, HarianRow
+from app.models.metrics import DailyMetric, OrderSnapshot
+from app.schemas.dashboard import CampaignRow, CampaignsResponse, DashboardResponse, DashboardSummary, HarianRow, TopProdukResponse, TopProdukRow
 
 router = APIRouter()
 
@@ -122,6 +122,71 @@ async def get_dashboard(
     )
 
     return DashboardResponse(summary=summary, harian=harian)
+
+
+@router.get("/top-products", response_model=TopProdukResponse)
+async def get_top_products(
+    current_user: CurrentUser,
+    db: DB,
+    tanggal: date = Query(...),
+    shopee_account_id: UUID | None = Query(None),
+    limit: int = Query(30, ge=1, le=100),
+):
+    q = (
+        sa.select(OrderSnapshot)
+        .join(ShopeeAccount, OrderSnapshot.shopee_account_id == ShopeeAccount.id)
+        .where(
+            ShopeeAccount.user_id == current_user.id,
+            OrderSnapshot.tanggal_snapshot == tanggal,
+        )
+    )
+    if shopee_account_id:
+        q = q.where(OrderSnapshot.shopee_account_id == shopee_account_id)
+
+    rows = (await db.execute(q)).scalars().all()
+
+    # Agregasi per (nama_produk, nama_toko)
+    produk_map: dict[tuple, dict] = {}
+    selesai = tertunda = batal = diproses = 0
+    for r in rows:
+        key = (r.nama_produk or "—", r.nama_toko)
+        if key not in produk_map:
+            produk_map[key] = {"qty": 0, "penjualan": _ZERO, "komisi": _ZERO}
+        produk_map[key]["qty"] += r.qty or 1
+        produk_map[key]["penjualan"] += r.sales_idr or _ZERO
+        produk_map[key]["komisi"] += r.commission_to_idr or _ZERO
+
+        if r.status == "completed":
+            selesai += 1
+        elif r.status in ("pending", "unpaid"):
+            tertunda += 1
+        elif r.status == "cancelled":
+            batal += 1
+        else:
+            diproses += 1
+
+    def to_rows(key_fn) -> list[TopProdukRow]:
+        items = sorted(produk_map.items(), key=key_fn, reverse=True)
+        return [
+            TopProdukRow(
+                nama_produk=k[0],
+                nama_toko=k[1],
+                qty=v["qty"],
+                penjualan=v["penjualan"],
+                komisi=v["komisi"],
+            )
+            for k, v in items[:limit]
+        ]
+
+    return TopProdukResponse(
+        top_komisi=to_rows(lambda kv: kv[1]["komisi"]),
+        top_penjualan=to_rows(lambda kv: kv[1]["penjualan"]),
+        top_produk=to_rows(lambda kv: kv[1]["qty"]),
+        orders_selesai=selesai,
+        orders_tertunda=tertunda,
+        orders_batal=batal,
+        orders_diproses=diproses,
+    )
 
 
 @router.get("/campaigns", response_model=CampaignsResponse)
