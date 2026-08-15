@@ -214,11 +214,13 @@ function renderShell(path, user) {
           <div class="topbar-locale">🇮🇩 Indonesia ▾</div>
           <button class="topbar-icon-btn">${icon('moon')}</button>
           <div class="topbar-user">
-            <div class="topbar-user-name">${user?.nama || 'User'}</div>
-            <div class="topbar-user-email">${user?.email || ''}</div>
+            <div class="topbar-user-avatar">${(user?.nama || 'U').slice(0, 2).toUpperCase()}</div>
+            <div class="topbar-user-info">
+              <div class="topbar-user-name">${user?.nama || 'User'}</div>
+              <div class="topbar-user-email">${user?.email || ''}</div>
+            </div>
           </div>
         </header>
-        <div id="banner">${renderBanner()}</div>
         <main id="page-content"></main>
       </div>
     </div>
