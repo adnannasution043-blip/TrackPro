@@ -1,0 +1,180 @@
+from uuid import UUID
+
+from fastapi import APIRouter, HTTPException, status
+from sqlalchemy import delete, select
+
+from app.core.deps import DB, CurrentUser
+from app.models.account import AccountLink, MetaAccount, ShopeeAccount
+from app.schemas.account import (
+    AccountLinkRequest,
+    MetaAccountCreate,
+    MetaAccountResponse,
+    MetaAccountUpdate,
+    ShopeeAccountCreate,
+    ShopeeAccountResponse,
+    ShopeeAccountUpdate,
+)
+
+router = APIRouter()
+
+
+# ===========================================================================
+# Meta Accounts
+# ===========================================================================
+
+@router.get("/meta", response_model=list[MetaAccountResponse])
+async def list_meta_accounts(current_user: CurrentUser, db: DB):
+    result = await db.execute(
+        select(MetaAccount)
+        .where(MetaAccount.user_id == current_user.id)
+        .order_by(MetaAccount.created_at)
+    )
+    return result.scalars().all()
+
+
+@router.post("/meta", response_model=MetaAccountResponse, status_code=status.HTTP_201_CREATED)
+async def create_meta_account(body: MetaAccountCreate, current_user: CurrentUser, db: DB):
+    existing = await db.execute(
+        select(MetaAccount).where(
+            MetaAccount.user_id == current_user.id,
+            MetaAccount.ad_account_id == body.ad_account_id,
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="Ad account ID sudah terdaftar.")
+
+    account = MetaAccount(user_id=current_user.id, **body.model_dump())
+    db.add(account)
+    await db.commit()
+    await db.refresh(account)
+    return account
+
+
+@router.patch("/meta/{account_id}", response_model=MetaAccountResponse)
+async def update_meta_account(account_id: UUID, body: MetaAccountUpdate, current_user: CurrentUser, db: DB):
+    account = await _get_meta_account(account_id, current_user.id, db)
+    for field, value in body.model_dump(exclude_none=True).items():
+        setattr(account, field, value)
+    await db.commit()
+    await db.refresh(account)
+    return account
+
+
+@router.delete("/meta/{account_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_meta_account(account_id: UUID, current_user: CurrentUser, db: DB):
+    account = await _get_meta_account(account_id, current_user.id, db)
+    await db.delete(account)
+    await db.commit()
+
+
+# Relasi: tambah / hapus link ke Shopee account
+
+@router.post("/meta/{account_id}/links", status_code=status.HTTP_204_NO_CONTENT)
+async def add_account_link(account_id: UUID, body: AccountLinkRequest, current_user: CurrentUser, db: DB):
+    await _get_meta_account(account_id, current_user.id, db)
+    await _assert_shopee_owned(body.shopee_account_id, current_user.id, db)
+
+    existing = await db.execute(
+        select(AccountLink).where(
+            AccountLink.meta_account_id == account_id,
+            AccountLink.shopee_account_id == body.shopee_account_id,
+        )
+    )
+    if existing.scalar_one_or_none():
+        return  # sudah terhubung, idempoten
+
+    db.add(AccountLink(meta_account_id=account_id, shopee_account_id=body.shopee_account_id))
+    await db.commit()
+
+
+@router.delete("/meta/{account_id}/links/{shopee_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_account_link(account_id: UUID, shopee_id: UUID, current_user: CurrentUser, db: DB):
+    await _get_meta_account(account_id, current_user.id, db)
+    await db.execute(
+        delete(AccountLink).where(
+            AccountLink.meta_account_id == account_id,
+            AccountLink.shopee_account_id == shopee_id,
+        )
+    )
+    await db.commit()
+
+
+# ===========================================================================
+# Shopee Accounts
+# ===========================================================================
+
+@router.get("/shopee", response_model=list[ShopeeAccountResponse])
+async def list_shopee_accounts(current_user: CurrentUser, db: DB):
+    result = await db.execute(
+        select(ShopeeAccount)
+        .where(ShopeeAccount.user_id == current_user.id)
+        .order_by(ShopeeAccount.created_at)
+    )
+    return result.scalars().all()
+
+
+@router.post("/shopee", response_model=ShopeeAccountResponse, status_code=status.HTTP_201_CREATED)
+async def create_shopee_account(body: ShopeeAccountCreate, current_user: CurrentUser, db: DB):
+    existing = await db.execute(
+        select(ShopeeAccount).where(
+            ShopeeAccount.user_id == current_user.id,
+            ShopeeAccount.nama_akun == body.nama_akun,
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="Nama akun Shopee sudah ada.")
+
+    account = ShopeeAccount(user_id=current_user.id, **body.model_dump())
+    db.add(account)
+    await db.commit()
+    await db.refresh(account)
+    return account
+
+
+@router.patch("/shopee/{account_id}", response_model=ShopeeAccountResponse)
+async def update_shopee_account(account_id: UUID, body: ShopeeAccountUpdate, current_user: CurrentUser, db: DB):
+    account = await _get_shopee_account(account_id, current_user.id, db)
+    for field, value in body.model_dump(exclude_none=True).items():
+        setattr(account, field, value)
+    await db.commit()
+    await db.refresh(account)
+    return account
+
+
+@router.delete("/shopee/{account_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_shopee_account(account_id: UUID, current_user: CurrentUser, db: DB):
+    account = await _get_shopee_account(account_id, current_user.id, db)
+    await db.delete(account)
+    await db.commit()
+
+
+# ===========================================================================
+# Helper privat
+# ===========================================================================
+
+async def _get_meta_account(account_id: UUID, user_id, db: DB) -> MetaAccount:
+    result = await db.execute(
+        select(MetaAccount).where(MetaAccount.id == account_id, MetaAccount.user_id == user_id)
+    )
+    account = result.scalar_one_or_none()
+    if not account:
+        raise HTTPException(status_code=404, detail="Akun Meta tidak ditemukan.")
+    return account
+
+
+async def _get_shopee_account(account_id: UUID, user_id, db: DB) -> ShopeeAccount:
+    result = await db.execute(
+        select(ShopeeAccount).where(ShopeeAccount.id == account_id, ShopeeAccount.user_id == user_id)
+    )
+    account = result.scalar_one_or_none()
+    if not account:
+        raise HTTPException(status_code=404, detail="Akun Shopee tidak ditemukan.")
+    return account
+
+
+async def _assert_shopee_owned(shopee_id: UUID, user_id, db: DB) -> None:
+    result = await db.execute(
+        select(ShopeeAccount).where(ShopeeAccount.id == shopee_id, ShopeeAccount.user_id == user_id)
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Akun Shopee tidak ditemukan.")

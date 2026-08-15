@@ -1,0 +1,211 @@
+"""
+Router "Hubungkan Taglink" — mapping manual Campaign Meta ↔ Tag Link Shopee.
+
+Endpoint:
+  GET  /campaigns            list campaign milik user (+ status dipetakan)
+  GET  /tags                 list tag_link milik user
+  GET  /map                  list semua mapping dengan detail
+  POST /map                  buat mapping baru
+  DELETE /map/{map_id}       hapus mapping
+
+Filter opsional via query param:
+  - campaigns: ?meta_account_id=<uuid>&dipetakan=true|false
+  - tags: ?shopee_account_id=<uuid>
+  - map: ?campaign_id=<uuid>&tag_link_id=<uuid>
+"""
+
+from uuid import UUID
+
+import sqlalchemy as sa
+from fastapi import APIRouter, HTTPException, Query, status
+
+from app.core.deps import DB, CurrentUser
+from app.models.account import MetaAccount, ShopeeAccount
+from app.models.campaign import Campaign, CampaignTagMap, TagLink
+from app.schemas.taglink import CampaignResponse, MapCreate, MapResponse, TagLinkResponse
+
+router = APIRouter()
+
+
+# ---------------------------------------------------------------------------
+# Campaigns — list dengan status dipetakan
+# ---------------------------------------------------------------------------
+
+@router.get("/campaigns", response_model=list[CampaignResponse])
+async def list_campaigns(
+    current_user: CurrentUser,
+    db: DB,
+    meta_account_id: UUID | None = Query(None),
+    dipetakan: bool | None = Query(None),
+):
+    # Subquery: campaign_id yang sudah punya minimal 1 pemetaan
+    mapped_ids_sq = sa.select(CampaignTagMap.campaign_id).distinct().subquery()
+
+    q = (
+        sa.select(
+            Campaign,
+            sa.case((Campaign.id.in_(sa.select(mapped_ids_sq.c.campaign_id)), True), else_=False).label("dipetakan"),
+        )
+        .join(MetaAccount, Campaign.meta_account_id == MetaAccount.id)
+        .where(MetaAccount.user_id == current_user.id)
+        .order_by(Campaign.nama_campaign)
+    )
+
+    if meta_account_id:
+        q = q.where(Campaign.meta_account_id == meta_account_id)
+    if dipetakan is True:
+        q = q.where(Campaign.id.in_(sa.select(mapped_ids_sq.c.campaign_id)))
+    elif dipetakan is False:
+        q = q.where(Campaign.id.not_in(sa.select(mapped_ids_sq.c.campaign_id)))
+
+    rows = (await db.execute(q)).all()
+    return [
+        CampaignResponse(**{c.key: getattr(campaign, c.key) for c in Campaign.__table__.columns}, dipetakan=is_mapped)
+        for campaign, is_mapped in rows
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Tag Links — list
+# ---------------------------------------------------------------------------
+
+@router.get("/tags", response_model=list[TagLinkResponse])
+async def list_tag_links(
+    current_user: CurrentUser,
+    db: DB,
+    shopee_account_id: UUID | None = Query(None),
+):
+    q = (
+        sa.select(TagLink)
+        .join(ShopeeAccount, TagLink.shopee_account_id == ShopeeAccount.id)
+        .where(ShopeeAccount.user_id == current_user.id)
+        .order_by(TagLink.tag)
+    )
+    if shopee_account_id:
+        q = q.where(TagLink.shopee_account_id == shopee_account_id)
+
+    result = await db.execute(q)
+    return result.scalars().all()
+
+
+# ---------------------------------------------------------------------------
+# Mapping — CRUD
+# ---------------------------------------------------------------------------
+
+@router.get("/map", response_model=list[MapResponse])
+async def list_map(
+    current_user: CurrentUser,
+    db: DB,
+    campaign_id: UUID | None = Query(None),
+    tag_link_id: UUID | None = Query(None),
+):
+    q = (
+        sa.select(
+            CampaignTagMap.id,
+            CampaignTagMap.campaign_id,
+            Campaign.nama_campaign,
+            Campaign.meta_campaign_id,
+            CampaignTagMap.tag_link_id,
+            TagLink.tag,
+            TagLink.shopee_account_id,
+            CampaignTagMap.sumber,
+            CampaignTagMap.created_at,
+        )
+        .join(Campaign, CampaignTagMap.campaign_id == Campaign.id)
+        .join(TagLink, CampaignTagMap.tag_link_id == TagLink.id)
+        .join(MetaAccount, Campaign.meta_account_id == MetaAccount.id)
+        .where(MetaAccount.user_id == current_user.id)
+        .order_by(Campaign.nama_campaign, TagLink.tag)
+    )
+    if campaign_id:
+        q = q.where(CampaignTagMap.campaign_id == campaign_id)
+    if tag_link_id:
+        q = q.where(CampaignTagMap.tag_link_id == tag_link_id)
+
+    rows = (await db.execute(q)).mappings().all()
+    return [MapResponse(**dict(r)) for r in rows]
+
+
+@router.post("/map", response_model=MapResponse, status_code=status.HTTP_201_CREATED)
+async def create_map(body: MapCreate, current_user: CurrentUser, db: DB):
+    await _assert_campaign_owned(body.campaign_id, current_user.id, db)
+    await _assert_tag_link_owned(body.tag_link_id, current_user.id, db)
+
+    existing = await db.execute(
+        sa.select(CampaignTagMap).where(
+            CampaignTagMap.campaign_id == body.campaign_id,
+            CampaignTagMap.tag_link_id == body.tag_link_id,
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="Pemetaan ini sudah ada.")
+
+    mapping = CampaignTagMap(
+        campaign_id=body.campaign_id,
+        tag_link_id=body.tag_link_id,
+        sumber="manual",
+    )
+    db.add(mapping)
+    await db.flush()
+
+    # Kembalikan respons dengan detail join
+    result = await db.execute(
+        sa.select(
+            CampaignTagMap.id,
+            CampaignTagMap.campaign_id,
+            Campaign.nama_campaign,
+            Campaign.meta_campaign_id,
+            CampaignTagMap.tag_link_id,
+            TagLink.tag,
+            TagLink.shopee_account_id,
+            CampaignTagMap.sumber,
+            CampaignTagMap.created_at,
+        )
+        .join(Campaign, CampaignTagMap.campaign_id == Campaign.id)
+        .join(TagLink, CampaignTagMap.tag_link_id == TagLink.id)
+        .where(CampaignTagMap.id == mapping.id)
+    )
+    row = result.mappings().one()
+    await db.commit()
+    return MapResponse(**dict(row))
+
+
+@router.delete("/map/{map_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_map(map_id: UUID, current_user: CurrentUser, db: DB):
+    # Verifikasi kepemilikan lewat campaign → meta_account → user
+    result = await db.execute(
+        sa.select(CampaignTagMap)
+        .join(Campaign, CampaignTagMap.campaign_id == Campaign.id)
+        .join(MetaAccount, Campaign.meta_account_id == MetaAccount.id)
+        .where(CampaignTagMap.id == map_id, MetaAccount.user_id == current_user.id)
+    )
+    mapping = result.scalar_one_or_none()
+    if not mapping:
+        raise HTTPException(status_code=404, detail="Pemetaan tidak ditemukan.")
+
+    await db.delete(mapping)
+    await db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Guards kepemilikan
+# ---------------------------------------------------------------------------
+
+async def _assert_campaign_owned(campaign_id: UUID, user_id, db: DB) -> None:
+    result = await db.execute(
+        sa.select(Campaign)
+        .join(MetaAccount, Campaign.meta_account_id == MetaAccount.id)
+        .where(Campaign.id == campaign_id, MetaAccount.user_id == user_id)
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Campaign tidak ditemukan.")
+
+
+async def _assert_tag_link_owned(tag_link_id: UUID, user_id, db: DB) -> None:
+    result = await db.execute(
+        sa.select(TagLink)
+        .join(ShopeeAccount, TagLink.shopee_account_id == ShopeeAccount.id)
+        .where(TagLink.id == tag_link_id, ShopeeAccount.user_id == user_id)
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Tag link tidak ditemukan.")

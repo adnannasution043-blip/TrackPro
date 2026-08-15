@@ -1,0 +1,30 @@
+# Environment
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+dist/
+build/
+*.egg
+
+# Alembic (jangan commit migration output sementara)
+# versions/ tetap di-commit
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Upload temp (kalau nanti ada)
+uploads/
