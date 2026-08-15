@@ -126,8 +126,12 @@ async def upload_shopee_commission(
                 order_id=row.order_id,
                 tanggal_snapshot=row.tanggal_order,
                 status=row.status,
-                commission_from_idr=None,   # baseline diisi fitur "Perbarui Data Lama" (Fase 2)
+                commission_from_idr=None,
                 commission_to_idr=row.commission_idr,
+                nama_produk=row.nama_produk,
+                nama_toko=row.nama_toko,
+                qty=row.qty,
+                sales_idr=row.sales_idr,
             )
             db.add(snapshot)
         except Exception:

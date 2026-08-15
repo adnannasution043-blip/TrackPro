@@ -57,3 +57,21 @@ class CampaignRow(BaseModel):
 
 class CampaignsResponse(BaseModel):
     campaigns: list[CampaignRow]
+
+
+class TopProdukRow(BaseModel):
+    nama_produk: str
+    nama_toko: str | None
+    qty: int
+    penjualan: Decimal
+    komisi: Decimal
+
+
+class TopProdukResponse(BaseModel):
+    top_komisi: list[TopProdukRow]
+    top_penjualan: list[TopProdukRow]
+    top_produk: list[TopProdukRow]
+    orders_selesai: int
+    orders_tertunda: int
+    orders_batal: int
+    orders_diproses: int
