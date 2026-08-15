@@ -4,7 +4,7 @@ from sqlalchemy import select
 from app.core.deps import DB, CurrentUser
 from app.core.security import create_access_token, hash_password, verify_password
 from app.models.user import User
-from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserResponse
+from app.schemas.auth import ChangePasswordRequest, LoginRequest, RegisterRequest, TokenResponse, UserResponse
 
 router = APIRouter()
 
@@ -47,3 +47,13 @@ async def login(body: LoginRequest, db: DB):
 @router.get("/me", response_model=UserResponse)
 async def me(current_user: CurrentUser):
     return current_user
+
+
+@router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
+async def change_password(body: ChangePasswordRequest, current_user: CurrentUser, db: DB):
+    if not verify_password(body.current_password, current_user.password_hash):
+        raise HTTPException(status_code=400, detail="Password saat ini salah.")
+    if len(body.new_password) < 8:
+        raise HTTPException(status_code=422, detail="Password minimal 8 karakter.")
+    current_user.password_hash = hash_password(body.new_password)
+    await db.commit()

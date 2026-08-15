@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, EmailStr, field_validator
 
 
@@ -42,5 +44,11 @@ class UserResponse(BaseModel):
     username: str
     role: str
     status_akun: str
+    created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str

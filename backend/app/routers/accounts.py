@@ -6,6 +6,7 @@ from sqlalchemy import delete, select
 from app.core.deps import DB, CurrentUser
 from app.models.account import AccountLink, MetaAccount, ShopeeAccount
 from app.schemas.account import (
+    AccountItem,
     AccountLinkRequest,
     MetaAccountCreate,
     MetaAccountResponse,
@@ -16,6 +17,42 @@ from app.schemas.account import (
 )
 
 router = APIRouter()
+
+
+# ===========================================================================
+# Combined list — dipakai frontend
+# ===========================================================================
+
+@router.get("", response_model=list[AccountItem])
+async def list_all_accounts(current_user: CurrentUser, db: DB):
+    meta_res = await db.execute(
+        select(MetaAccount)
+        .where(MetaAccount.user_id == current_user.id)
+        .order_by(MetaAccount.created_at)
+    )
+    shopee_res = await db.execute(
+        select(ShopeeAccount)
+        .where(ShopeeAccount.user_id == current_user.id)
+        .order_by(ShopeeAccount.created_at)
+    )
+    items: list[AccountItem] = []
+    for m in meta_res.scalars().all():
+        items.append(AccountItem(
+            id=m.id,
+            tipe="meta",
+            nama=m.nama_tampilan,
+            account_id=m.ad_account_id,
+            status_koneksi=m.status_koneksi,
+        ))
+    for s in shopee_res.scalars().all():
+        items.append(AccountItem(
+            id=s.id,
+            tipe="shopee",
+            nama=s.nama_akun,
+            account_id=None,
+            status_koneksi=None,
+        ))
+    return items
 
 
 # ===========================================================================
