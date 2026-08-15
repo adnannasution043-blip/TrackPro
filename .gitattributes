@@ -1,0 +1,13 @@
+# Force LF untuk shell scripts — CRLF akan bikin bash error di Linux
+*.sh text eol=lf
+
+# File teks biasa: biarkan Git normalisasi sesuai OS
+*.py text
+*.toml text
+*.md text
+*.txt text
+*.json text
+*.html text
+*.js text
+*.css text
+*.sql text
