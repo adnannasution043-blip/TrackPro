@@ -199,14 +199,13 @@ export class UploadPage {
     const shopeeId = this.container.querySelector('#sel-shopee').value;
     const commFile = this.container.querySelector('#file-commission').files[0];
     const clickFile = this.container.querySelector('#file-click').files[0];
-    const metaFile = this.container.querySelector('#file-meta').files[0];
+    const metaFile  = this.container.querySelector('#file-meta').files[0];
 
     if (!shopeeId) {
       errEl.textContent = 'Pilih akun Shopee terlebih dahulu.';
       errEl.style.display = 'block';
       return;
     }
-
     if (!commFile && !metaFile) {
       errEl.textContent = 'Upload minimal satu file CSV (Shopee Commission atau Meta Ads).';
       errEl.style.display = 'block';
@@ -216,28 +215,41 @@ export class UploadPage {
     btn.disabled = true;
     btn.textContent = 'Memproses…';
 
+    const results = [];
+
     try {
       if (commFile) {
         const fd = new FormData();
         fd.append('file', commFile);
-        fd.append('shopee_account_id', shopeeId);
-        fd.append('tipe', 'shopee_commission');
-        await apiUpload('/csv/upload', fd);
+        const res = await apiUpload(`/upload/shopee-commission?shopee_account_id=${shopeeId}`, fd);
+        results.push(`Komisi: ${res?.baris_diproses ?? 0} baris berhasil`);
+      }
+
+      if (clickFile) {
+        const fd = new FormData();
+        fd.append('file', clickFile);
+        const res = await apiUpload(`/upload/shopee-click?shopee_account_id=${shopeeId}`, fd);
+        results.push(`Klik: ${res?.baris_diproses ?? 0} baris berhasil`);
       }
 
       if (metaFile) {
         const metaAccounts = this._accounts.filter(a => a.tipe === 'meta');
-        if (metaAccounts.length > 0) {
+        if (metaAccounts.length === 0) {
+          errEl.textContent = 'Tambah akun Meta Ads dulu di Pengaturan → Akun Meta.';
+          errEl.style.display = 'block';
+        } else {
+          const metaId = metaAccounts[0].id;
           const fd = new FormData();
           fd.append('file', metaFile);
-          fd.append('meta_account_id', metaAccounts[0].id);
-          fd.append('tipe', 'meta_ads');
-          await apiUpload('/csv/upload', fd);
+          const res = await apiUpload(`/upload/meta-ads?meta_account_id=${metaId}`, fd);
+          results.push(`Meta Ads: ${res?.baris_diproses ?? 0} baris berhasil`);
         }
       }
 
-      successEl.textContent = 'Upload berhasil! Data sedang diproses.';
-      successEl.style.display = 'block';
+      if (results.length > 0) {
+        successEl.textContent = 'Upload berhasil! ' + results.join(' · ');
+        successEl.style.display = 'block';
+      }
     } catch (err) {
       errEl.textContent = err.message;
       errEl.style.display = 'block';
