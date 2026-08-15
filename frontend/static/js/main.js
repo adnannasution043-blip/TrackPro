@@ -110,7 +110,7 @@ function renderSidebar(currentPath, user) {
   for (const item of NAV_ITEMS) {
     if (item.section) {
       html += `<div class="sidebar-section"><div class="sidebar-section-label">${item.section}</div></div><div class="sidebar-nav">`;
-    } else if (item.path) {
+    } else if (item.path && !item.groupLink) {
       const isActive = currentPath === item.path ? ' active' : '';
       html += `
         <a href="#${item.path}" class="sidebar-item${isActive}">
