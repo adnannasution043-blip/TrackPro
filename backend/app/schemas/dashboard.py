@@ -103,3 +103,7 @@ class TopProdukResponse(BaseModel):
     orders_tertunda: int
     orders_batal: int
     orders_diproses: int
+
+
+class TahapUpdate(BaseModel):
+    tahap: str  # pra_filter | filter | fix_scale_up | off

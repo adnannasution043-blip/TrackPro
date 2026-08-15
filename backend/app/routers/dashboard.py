@@ -24,7 +24,7 @@ from app.models.campaign import Campaign, CampaignTagMap, TagLink
 from app.models.metrics import DailyMetric, OrderSnapshot
 from app.schemas.dashboard import (
     CampaignHarianResponse, CampaignHarianRow, CampaignRow, CampaignsResponse,
-    DashboardResponse, DashboardSummary, HarianRow, TopProdukResponse, TopProdukRow,
+    DashboardResponse, DashboardSummary, HarianRow, TahapUpdate, TopProdukResponse, TopProdukRow,
 )
 
 router = APIRouter()
@@ -386,6 +386,32 @@ async def get_campaign_harian(
         roi_persen=roi_total,
         harian=harian,
     )
+
+
+_VALID_TAHAP = {"pra_filter", "filter", "fix_scale_up", "off"}
+
+
+@router.patch("/campaigns/{campaign_id}/tahap", status_code=204)
+async def update_campaign_tahap(
+    campaign_id: UUID,
+    body: TahapUpdate,
+    current_user: CurrentUser,
+    db: DB,
+):
+    from fastapi import HTTPException
+    if body.tahap not in _VALID_TAHAP:
+        raise HTTPException(422, f"Tahap tidak valid: {body.tahap}")
+
+    camp = (await db.execute(
+        sa.select(Campaign)
+        .join(MetaAccount, Campaign.meta_account_id == MetaAccount.id)
+        .where(Campaign.id == campaign_id, MetaAccount.user_id == current_user.id)
+    )).scalar_one_or_none()
+    if not camp:
+        raise HTTPException(404, "Campaign tidak ditemukan.")
+
+    camp.tahap = body.tahap
+    await db.commit()
 
 
 # ---------------------------------------------------------------------------
