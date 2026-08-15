@@ -42,3 +42,7 @@ class OrderSnapshot(Base):
         Computed("commission_to_idr - COALESCE(commission_from_idr, 0)", persisted=True),
     )
     tercatat_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    nama_produk: Mapped[str | None] = mapped_column(String(500))
+    nama_toko: Mapped[str | None] = mapped_column(String(200))
+    qty: Mapped[int | None] = mapped_column(Integer)
+    sales_idr: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))

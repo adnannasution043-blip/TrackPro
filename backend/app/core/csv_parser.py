@@ -133,6 +133,18 @@ REQUIRED_SHOPEE_COMMISSION_COLUMNS = {
     "Order ID", "Order Status", "Commission", "Sales Amount", "Sub ID", "Order Time",
 }
 
+# Kolom opsional — nama bervariasi tergantung setting bahasa Shopee Affiliate
+_PRODUK_COLS = ("Product Name", "Nama Produk", "Product")
+_TOKO_COLS   = ("Shop Name", "Seller Name", "Nama Toko", "Toko")
+_QTY_COLS    = ("Quantity", "Qty", "Jumlah")
+
+
+def _find_col(row: dict, candidates: tuple) -> str | None:
+    for c in candidates:
+        if c in row and row[c]:
+            return row[c]
+    return None
+
 
 @dataclass
 class ShopeeCommissionRow:
@@ -142,6 +154,9 @@ class ShopeeCommissionRow:
     sales_idr: Decimal
     tag: str              # dari kolom "Sub ID" -> ini yang jadi tag_link
     tanggal_order: date
+    nama_produk: str | None = None
+    nama_toko: str | None = None
+    qty: int = 1
 
 
 _STATUS_MAP = {
@@ -176,14 +191,18 @@ def parse_shopee_commission_csv(file_bytes: bytes) -> list[ShopeeCommissionRow]:
     parsed: list[ShopeeCommissionRow] = []
     for i, row in enumerate(rows, start=2):
         try:
+            qty_raw = _find_col(row, _QTY_COLS)
             parsed.append(
                 ShopeeCommissionRow(
                     order_id=row["Order ID"],
                     status=_normalize_status(row["Order Status"]),
                     commission_idr=_to_decimal(row["Commission"]),
                     sales_idr=_to_decimal(row["Sales Amount"]),
-                    tag=row["Sub ID"] or "non-meta",  # kosong -> masuk kategori "belum dipetakan"
+                    tag=row["Sub ID"] or "non-meta",
                     tanggal_order=_to_date(row["Order Time"]),
+                    nama_produk=_find_col(row, _PRODUK_COLS),
+                    nama_toko=_find_col(row, _TOKO_COLS),
+                    qty=int(qty_raw) if qty_raw and qty_raw.isdigit() else 1,
                 )
             )
         except CsvParseError as exc:

@@ -46,14 +46,60 @@ class CampaignRow(BaseModel):
     nama_campaign: str
     status: str
     tahap: str | None
-    tag_link: str | None       # tag pertama yang di-map (ringkasan)
+    tag_link: str | None
+    tag_link_id: UUID | None
     spend_idr: Decimal
     clicks_meta: int
+    clicks_shopee: int
+    orders: int
+    penjualan: Decimal
     komisi: Decimal
     laba: Decimal
     roi_persen: Decimal | None
-    ads: list = []             # placeholder — ad-level tidak tersedia dari CSV
+    cpc: Decimal | None
+    hari: int
 
 
 class CampaignsResponse(BaseModel):
     campaigns: list[CampaignRow]
+
+
+class CampaignHarianRow(BaseModel):
+    tanggal: date
+    spend_idr: Decimal
+    cpc: Decimal | None
+    clicks_meta: int
+    clicks_shopee: int | None
+    orders: int | None
+    penjualan: Decimal | None
+    komisi: Decimal | None
+    laba: Decimal | None
+    roi_persen: Decimal | None
+
+
+class CampaignHarianResponse(BaseModel):
+    nama_campaign: str
+    tag_link: str | None
+    total_biaya: Decimal
+    total_komisi: Decimal
+    total_laba: Decimal
+    roi_persen: Decimal | None
+    harian: list[CampaignHarianRow]
+
+
+class TopProdukRow(BaseModel):
+    nama_produk: str
+    nama_toko: str | None
+    qty: int
+    penjualan: Decimal
+    komisi: Decimal
+
+
+class TopProdukResponse(BaseModel):
+    top_komisi: list[TopProdukRow]
+    top_penjualan: list[TopProdukRow]
+    top_produk: list[TopProdukRow]
+    orders_selesai: int
+    orders_tertunda: int
+    orders_batal: int
+    orders_diproses: int

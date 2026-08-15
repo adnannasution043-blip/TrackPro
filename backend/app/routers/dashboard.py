@@ -21,8 +21,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import DB, CurrentUser
 from app.models.account import MetaAccount, ShopeeAccount
 from app.models.campaign import Campaign, CampaignTagMap, TagLink
-from app.models.metrics import DailyMetric
-from app.schemas.dashboard import CampaignRow, CampaignsResponse, DashboardResponse, DashboardSummary, HarianRow
+from app.models.metrics import DailyMetric, OrderSnapshot
+from app.schemas.dashboard import (
+    CampaignHarianResponse, CampaignHarianRow, CampaignRow, CampaignsResponse,
+    DashboardResponse, DashboardSummary, HarianRow, TopProdukResponse, TopProdukRow,
+)
 
 router = APIRouter()
 
@@ -124,6 +127,71 @@ async def get_dashboard(
     return DashboardResponse(summary=summary, harian=harian)
 
 
+@router.get("/top-products", response_model=TopProdukResponse)
+async def get_top_products(
+    current_user: CurrentUser,
+    db: DB,
+    tanggal: date = Query(...),
+    shopee_account_id: UUID | None = Query(None),
+    limit: int = Query(30, ge=1, le=100),
+):
+    q = (
+        sa.select(OrderSnapshot)
+        .join(ShopeeAccount, OrderSnapshot.shopee_account_id == ShopeeAccount.id)
+        .where(
+            ShopeeAccount.user_id == current_user.id,
+            OrderSnapshot.tanggal_snapshot == tanggal,
+        )
+    )
+    if shopee_account_id:
+        q = q.where(OrderSnapshot.shopee_account_id == shopee_account_id)
+
+    rows = (await db.execute(q)).scalars().all()
+
+    # Agregasi per (nama_produk, nama_toko)
+    produk_map: dict[tuple, dict] = {}
+    selesai = tertunda = batal = diproses = 0
+    for r in rows:
+        key = (r.nama_produk or "—", r.nama_toko)
+        if key not in produk_map:
+            produk_map[key] = {"qty": 0, "penjualan": _ZERO, "komisi": _ZERO}
+        produk_map[key]["qty"] += r.qty or 1
+        produk_map[key]["penjualan"] += r.sales_idr or _ZERO
+        produk_map[key]["komisi"] += r.commission_to_idr or _ZERO
+
+        if r.status == "completed":
+            selesai += 1
+        elif r.status in ("pending", "unpaid"):
+            tertunda += 1
+        elif r.status == "cancelled":
+            batal += 1
+        else:
+            diproses += 1
+
+    def to_rows(key_fn) -> list[TopProdukRow]:
+        items = sorted(produk_map.items(), key=key_fn, reverse=True)
+        return [
+            TopProdukRow(
+                nama_produk=k[0],
+                nama_toko=k[1],
+                qty=v["qty"],
+                penjualan=v["penjualan"],
+                komisi=v["komisi"],
+            )
+            for k, v in items[:limit]
+        ]
+
+    return TopProdukResponse(
+        top_komisi=to_rows(lambda kv: kv[1]["komisi"]),
+        top_penjualan=to_rows(lambda kv: kv[1]["penjualan"]),
+        top_produk=to_rows(lambda kv: kv[1]["qty"]),
+        orders_selesai=selesai,
+        orders_tertunda=tertunda,
+        orders_batal=batal,
+        orders_diproses=diproses,
+    )
+
+
 @router.get("/campaigns", response_model=CampaignsResponse)
 async def get_campaigns(
     current_user: CurrentUser,
@@ -135,7 +203,6 @@ async def get_campaigns(
     dari = tanggal_dari or date.today().replace(day=1)
     sampai = tanggal_sampai or date.today()
 
-    # Spend + clicks per campaign
     meta_q = (
         sa.select(
             Campaign.id,
@@ -144,14 +211,12 @@ async def get_campaigns(
             Campaign.tahap,
             sa.func.coalesce(sa.func.sum(DailyMetric.spend_idr), _ZERO).label("spend_idr"),
             sa.func.coalesce(sa.func.sum(DailyMetric.clicks_meta), 0).label("clicks_meta"),
+            sa.func.count(sa.distinct(DailyMetric.tanggal)).label("hari"),
         )
         .join(MetaAccount, Campaign.meta_account_id == MetaAccount.id)
         .outerjoin(
             DailyMetric,
-            sa.and_(
-                DailyMetric.campaign_id == Campaign.id,
-                DailyMetric.tanggal.between(dari, sampai),
-            ),
+            sa.and_(DailyMetric.campaign_id == Campaign.id, DailyMetric.tanggal.between(dari, sampai)),
         )
         .where(MetaAccount.user_id == current_user.id)
         .group_by(Campaign.id, Campaign.nama_campaign, Campaign.status, Campaign.tahap)
@@ -161,60 +226,166 @@ async def get_campaigns(
         meta_q = meta_q.where(Campaign.meta_account_id == meta_account_id)
 
     camp_rows = (await db.execute(meta_q)).all()
-
     if not camp_rows:
         return CampaignsResponse(campaigns=[])
 
     camp_ids = [r.id for r in camp_rows]
 
-    # Komisi per campaign via tag map
-    komisi_q = (
+    # Shopee metrics + komisi per campaign via tag map
+    shopee_q = (
         sa.select(
             CampaignTagMap.campaign_id,
             sa.func.coalesce(sa.func.sum(DailyMetric.commission_idr), _ZERO).label("komisi"),
+            sa.func.coalesce(sa.func.sum(DailyMetric.sales_idr), _ZERO).label("penjualan"),
+            sa.func.coalesce(sa.func.sum(DailyMetric.clicks_shopee), 0).label("clicks_shopee"),
+            sa.func.coalesce(sa.func.sum(DailyMetric.orders_selesai + DailyMetric.orders_tertunda), 0).label("orders"),
         )
         .join(DailyMetric, DailyMetric.tag_link_id == CampaignTagMap.tag_link_id)
-        .where(
-            CampaignTagMap.campaign_id.in_(camp_ids),
-            DailyMetric.tanggal.between(dari, sampai),
-        )
+        .where(CampaignTagMap.campaign_id.in_(camp_ids), DailyMetric.tanggal.between(dari, sampai))
         .group_by(CampaignTagMap.campaign_id)
     )
-    komisi_map: dict[UUID, Decimal] = {
-        r.campaign_id: r.komisi for r in (await db.execute(komisi_q)).all()
-    }
+    shopee_map = {r.campaign_id: r for r in (await db.execute(shopee_q)).all()}
 
-    # Ambil satu tag link per campaign (ringkasan — ambil pertama per campaign)
+    # Tag link (first per campaign)
     tag_q = (
-        sa.select(CampaignTagMap.campaign_id, TagLink.tag)
+        sa.select(CampaignTagMap.campaign_id, CampaignTagMap.tag_link_id, TagLink.tag)
         .join(TagLink, CampaignTagMap.tag_link_id == TagLink.id)
         .where(CampaignTagMap.campaign_id.in_(camp_ids))
     )
-    tag_map: dict[UUID, str] = {}
+    tag_map: dict[UUID, tuple] = {}
     for r in (await db.execute(tag_q)).all():
         if r.campaign_id not in tag_map:
-            tag_map[r.campaign_id] = r.tag
+            tag_map[r.campaign_id] = (r.tag_link_id, r.tag)
 
     campaigns = []
     for r in camp_rows:
         spend = r.spend_idr or _ZERO
-        komisi = komisi_map.get(r.id, _ZERO)
+        s = shopee_map.get(r.id)
+        komisi = s.komisi if s else _ZERO
+        penjualan = s.penjualan if s else _ZERO
+        clicks_shopee = s.clicks_shopee if s else 0
+        orders = s.orders if s else 0
         laba = komisi - spend
         roi = (laba / spend * 100).quantize(Decimal("0.01")) if spend else None
+        cpc = (spend / r.clicks_meta).quantize(Decimal("0.01")) if r.clicks_meta else None
+        tag_info = tag_map.get(r.id)
         campaigns.append(CampaignRow(
             id=r.id,
             nama_campaign=r.nama_campaign,
             status=r.status or "ACTIVE",
             tahap=r.tahap,
-            tag_link=tag_map.get(r.id),
+            tag_link=tag_info[1] if tag_info else None,
+            tag_link_id=tag_info[0] if tag_info else None,
             spend_idr=spend,
             clicks_meta=r.clicks_meta or 0,
+            clicks_shopee=clicks_shopee,
+            orders=orders,
+            penjualan=penjualan,
+            komisi=komisi,
+            laba=laba,
+            roi_persen=roi,
+            cpc=cpc,
+            hari=r.hari or 0,
+        ))
+
+    return CampaignsResponse(campaigns=campaigns)
+
+
+@router.get("/campaigns/{campaign_id}/harian", response_model=CampaignHarianResponse)
+async def get_campaign_harian(
+    campaign_id: UUID,
+    current_user: CurrentUser,
+    db: DB,
+):
+    # Verify ownership
+    camp = (await db.execute(
+        sa.select(Campaign)
+        .join(MetaAccount, Campaign.meta_account_id == MetaAccount.id)
+        .where(Campaign.id == campaign_id, MetaAccount.user_id == current_user.id)
+    )).scalar_one_or_none()
+    if not camp:
+        from fastapi import HTTPException
+        raise HTTPException(404, "Campaign tidak ditemukan.")
+
+    # Meta daily data
+    meta_rows = (await db.execute(
+        sa.select(DailyMetric)
+        .where(DailyMetric.campaign_id == campaign_id)
+        .order_by(DailyMetric.tanggal.desc())
+    )).scalars().all()
+
+    # Tag link IDs for this campaign
+    tag_ids = [r[0] for r in (await db.execute(
+        sa.select(CampaignTagMap.tag_link_id).where(CampaignTagMap.campaign_id == campaign_id)
+    )).all()]
+
+    # Shopee daily data grouped by date
+    shopee_by_date: dict[date, dict] = {}
+    if tag_ids:
+        shopee_rows = (await db.execute(
+            sa.select(
+                DailyMetric.tanggal,
+                sa.func.sum(DailyMetric.clicks_shopee).label("clicks_shopee"),
+                sa.func.sum(DailyMetric.orders_selesai).label("orders_selesai"),
+                sa.func.sum(DailyMetric.orders_tertunda).label("orders_tertunda"),
+                sa.func.sum(DailyMetric.commission_idr).label("komisi"),
+                sa.func.sum(DailyMetric.sales_idr).label("penjualan"),
+            )
+            .where(DailyMetric.tag_link_id.in_(tag_ids))
+            .group_by(DailyMetric.tanggal)
+        )).all()
+        for r in shopee_rows:
+            shopee_by_date[r.tanggal] = {
+                "clicks_shopee": r.clicks_shopee or 0,
+                "orders": (r.orders_selesai or 0) + (r.orders_tertunda or 0),
+                "komisi": r.komisi or _ZERO,
+                "penjualan": r.penjualan or _ZERO,
+            }
+
+    tag_name = None
+    if tag_ids:
+        tl = (await db.execute(sa.select(TagLink.tag).where(TagLink.id == tag_ids[0]))).scalar_one_or_none()
+        tag_name = tl
+
+    harian = []
+    total_biaya = _ZERO
+    total_komisi = _ZERO
+
+    for m in meta_rows:
+        spend = m.spend_idr or _ZERO
+        s = shopee_by_date.get(m.tanggal)
+        komisi = s["komisi"] if s else None
+        laba = (komisi - spend) if komisi is not None else None
+        roi = ((laba / spend * 100).quantize(Decimal("0.01")) if laba is not None and spend > 0 else None)
+        cpc = ((spend / m.clicks_meta).quantize(Decimal("0.01")) if m.clicks_meta else None)
+        total_biaya += spend
+        if komisi:
+            total_komisi += komisi
+        harian.append(CampaignHarianRow(
+            tanggal=m.tanggal,
+            spend_idr=spend,
+            cpc=cpc,
+            clicks_meta=m.clicks_meta or 0,
+            clicks_shopee=s["clicks_shopee"] if s else None,
+            orders=s["orders"] if s else None,
+            penjualan=s["penjualan"] if s else None,
             komisi=komisi,
             laba=laba,
             roi_persen=roi,
         ))
 
-    return CampaignsResponse(campaigns=campaigns)
+    total_laba = total_komisi - total_biaya
+    roi_total = (total_laba / total_biaya * 100).quantize(Decimal("0.01")) if total_biaya else None
+
+    return CampaignHarianResponse(
+        nama_campaign=camp.nama_campaign,
+        tag_link=tag_name,
+        total_biaya=total_biaya,
+        total_komisi=total_komisi,
+        total_laba=total_laba,
+        roi_persen=roi_total,
+        harian=harian,
+    )
 
 
 # ---------------------------------------------------------------------------
