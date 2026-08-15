@@ -38,3 +38,21 @@ class HarianRow(BaseModel):
 class DashboardResponse(BaseModel):
     summary: DashboardSummary
     harian: list[HarianRow]
+
+
+class CampaignRow(BaseModel):
+    id: str
+    nama_campaign: str
+    status: str
+    tahap: str | None
+    tag_link: str | None       # tag pertama yang di-map (ringkasan)
+    spend_idr: Decimal
+    clicks_meta: int
+    komisi: Decimal
+    laba: Decimal
+    roi_persen: Decimal | None
+    ads: list = []             # placeholder — ad-level tidak tersedia dari CSV
+
+
+class CampaignsResponse(BaseModel):
+    campaigns: list[CampaignRow]
