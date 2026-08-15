@@ -1,15 +1,10 @@
 import { apiFetch } from '../api.js';
 
-const rp = n => 'Rp ' + Number(n || 0).toLocaleString('id-ID');
-
 export class TaglinkPage {
   constructor(container) {
     this.container = container;
-    const now = new Date();
-    const y = now.getFullYear(), m = now.getMonth();
-    this.dari = new Date(y, m - 1 >= 0 ? m - 1 : 11, 1).toISOString().split('T')[0];
-    this.sampai = now.toISOString().split('T')[0];
     this._rows = [];
+    this._tags = [];
     this._filter = 'all';
     this._search = '';
   }
@@ -21,22 +16,9 @@ export class TaglinkPage {
           <h1>Hubungkan Taglink</h1>
           <p>Petakan campaign Meta ke tag link Shopee agar biaya, klik, pesanan, komisi, dan ROI terbaca benar.</p>
         </div>
-        <div class="page-header-right">
-          <input type="date" id="inp-dari" value="${this.dari}" style="padding:7px 10px;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;">
-          <span style="color:#6b7280;">—</span>
-          <input type="date" id="inp-sampai" value="${this.sampai}" style="padding:7px 10px;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;">
-          <button class="btn btn-primary" id="btn-apply">Tampilkan</button>
-        </div>
       </div>
       <div id="content"><div class="loading">Memuat data…</div></div>
     `;
-
-    this.container.querySelector('#btn-apply').addEventListener('click', () => {
-      this.dari = this.container.querySelector('#inp-dari').value;
-      this.sampai = this.container.querySelector('#inp-sampai').value;
-      this._load();
-    });
-
     await this._load();
   }
 
@@ -44,18 +26,36 @@ export class TaglinkPage {
     const el = this.container.querySelector('#content');
     el.innerHTML = '<div class="loading">Memuat data…</div>';
     try {
-      const data = await apiFetch(`/taglinks?tanggal_dari=${this.dari}&tanggal_sampai=${this.sampai}`);
-      this._rows = data || [];
+      const [campaigns, maps, tags] = await Promise.all([
+        apiFetch('/taglinks/campaigns'),
+        apiFetch('/taglinks/map'),
+        apiFetch('/taglinks/tags'),
+      ]);
+
+      const mapsByCampaign = {};
+      for (const m of (maps || [])) {
+        if (!mapsByCampaign[m.campaign_id]) mapsByCampaign[m.campaign_id] = [];
+        mapsByCampaign[m.campaign_id].push(m);
+      }
+
+      this._rows = (campaigns || []).map(c => ({
+        id: c.id,
+        nama_campaign: c.nama_campaign,
+        created_at: c.created_at,
+        dipetakan: c.dipetakan,
+        maps: mapsByCampaign[c.id] || [],
+      }));
+
+      this._tags = tags || [];
       this._renderContent(el);
-    } catch (_) {
-      this._rows = [];
-      this._renderContent(el);
+    } catch (e) {
+      el.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
     }
   }
 
   _renderContent(el) {
     const total = this._rows.length;
-    const mapped = this._rows.filter(r => r.tag_link).length;
+    const mapped = this._rows.filter(r => r.dipetakan).length;
     const unmapped = total - mapped;
 
     el.innerHTML = `
@@ -74,7 +74,7 @@ export class TaglinkPage {
         </div>
         <div class="stat-card">
           <div class="stat-label">Tag Link Shopee</div>
-          <div class="stat-value">-</div>
+          <div class="stat-value">${this._tags.length}</div>
         </div>
       </div>
 
@@ -101,7 +101,6 @@ export class TaglinkPage {
       this._search = e.target.value;
       this._renderTable(el.querySelector('#tl-table'));
     });
-
     el.querySelectorAll('[data-f]').forEach(btn => {
       btn.addEventListener('click', () => {
         this._filter = btn.dataset.f;
@@ -113,63 +112,105 @@ export class TaglinkPage {
 
   _renderTable(el) {
     const filtered = this._rows.filter(r => {
-      const matchSearch = !this._search ||
-        (r.campaign_name || '').toLowerCase().includes(this._search.toLowerCase()) ||
-        (r.tag_link || '').toLowerCase().includes(this._search.toLowerCase());
+      const search = this._search.toLowerCase();
+      const matchSearch = !search ||
+        r.nama_campaign.toLowerCase().includes(search) ||
+        r.maps.some(m => m.tag.toLowerCase().includes(search));
       const matchFilter = this._filter === 'all' ||
-        (this._filter === 'mapped' && r.tag_link) ||
-        (this._filter === 'unmapped' && !r.tag_link);
+        (this._filter === 'mapped' && r.dipetakan) ||
+        (this._filter === 'unmapped' && !r.dipetakan);
       return matchSearch && matchFilter;
     });
+
+    const tagOptions = this._tags.map(t =>
+      `<option value="${t.id}">${t.tag}</option>`
+    ).join('');
 
     el.innerHTML = `
       <table class="data-table">
         <thead>
           <tr>
-            <th class="sortable">Nama Campaign ↑</th>
-            <th class="sortable">Tag Link (Shopee) ↕</th>
-            <th class="sortable">Akun Shopee ↕</th>
-            <th>Sum… ↕</th>
-            <th>Catatan</th>
-            <th class="sortable">Dibuat ↕</th>
+            <th>Nama Campaign</th>
+            <th>Tag Link (Shopee)</th>
+            <th>Status</th>
             <th>Aksi</th>
           </tr>
         </thead>
         <tbody>
           ${filtered.length === 0
-            ? `<tr><td colspan="7" class="empty">Tidak ada data kampanye.<br><span style="font-size:12px;">Upload data Meta Ads terlebih dahulu untuk melihat kampanye yang bisa dipetakan.</span></td></tr>`
+            ? `<tr><td colspan="4" class="empty">Tidak ada data kampanye.<br><span style="font-size:12px;">Upload data Meta Ads terlebih dahulu untuk melihat kampanye yang bisa dipetakan.</span></td></tr>`
             : filtered.map(r => `
               <tr>
-                <td style="font-weight:500;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.campaign_name || r.nama_campaign || '-'}</td>
+                <td style="font-weight:500;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${r.nama_campaign}">${r.nama_campaign}</td>
                 <td>
-                  ${r.tag_link
-                    ? `<span class="tag-link">${r.tag_link}</span>`
-                    : `<input type="text" class="form-input" style="width:140px;padding:4px 8px;font-size:12px;" placeholder="Tag link…" value="">`
+                  ${r.maps.length > 0
+                    ? r.maps.map(m => `<span class="badge badge-green" style="margin-right:4px;">${m.tag}</span>`).join('')
+                    : (tagOptions
+                        ? `<select class="form-select sel-tag" data-campaign="${r.id}" style="font-size:12px;padding:4px 8px;min-width:160px;">
+                             <option value="">Pilih tag link…</option>
+                             ${tagOptions}
+                           </select>`
+                        : `<span style="font-size:12px;color:#6b7280;">Upload Shopee terlebih dahulu</span>`)
                   }
                 </td>
-                <td style="font-size:12.5px;">${r.shopee_account || '-'}</td>
                 <td>
-                  ${r.tag_link
-                    ? `<span class="badge badge-red" style="font-size:10px;">manual</span>`
-                    : '-'
-                  }
+                  ${r.dipetakan
+                    ? `<span class="badge badge-green">Dipetakan</span>`
+                    : `<span class="badge badge-red">Belum</span>`}
                 </td>
-                <td style="font-size:12.5px;color:#6b7280;">-</td>
-                <td style="font-size:12px;color:#6b7280;">${r.dibuat || r.created_at?.split('T')[0] || '-'}</td>
                 <td>
-                  <div style="display:flex;gap:4px;">
-                    <button class="btn btn-sm btn-icon" title="Edit">✏️</button>
-                    <button class="btn btn-sm btn-icon" title="Hapus">🗑️</button>
+                  <div style="display:flex;gap:4px;flex-wrap:wrap;">
+                    ${r.maps.length > 0
+                      ? r.maps.map(m => `<button class="btn btn-sm" style="font-size:11px;color:#dc2626;border-color:#dc2626;" data-lepas="${m.id}">Lepas</button>`).join('')
+                      : (tagOptions
+                          ? `<button class="btn btn-sm btn-primary" data-hubungkan="${r.id}">Hubungkan</button>`
+                          : '')
+                    }
                   </div>
                 </td>
               </tr>`).join('')
           }
         </tbody>
       </table>
-      <div class="pagination" style="margin-top:10px;">
-        <div style="font-size:12.5px;color:#6b7280;">Menampilkan ${filtered.length} dari ${this._rows.length} campaign</div>
+      <div style="margin-top:10px;font-size:12.5px;color:#6b7280;">
+        Menampilkan ${filtered.length} dari ${this._rows.length} campaign
       </div>
     `;
+
+    el.querySelectorAll('[data-hubungkan]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const campaignId = btn.dataset.hubungkan;
+        const row = btn.closest('tr');
+        const sel = row?.querySelector('.sel-tag');
+        const tagLinkId = sel?.value;
+        if (!tagLinkId) { alert('Pilih tag link terlebih dahulu.'); return; }
+        btn.disabled = true; btn.textContent = '…';
+        try {
+          await apiFetch('/taglinks/map', {
+            method: 'POST',
+            body: JSON.stringify({ campaign_id: campaignId, tag_link_id: tagLinkId }),
+          });
+          await this._load();
+        } catch (e) {
+          alert(e.message);
+          btn.disabled = false; btn.textContent = 'Hubungkan';
+        }
+      });
+    });
+
+    el.querySelectorAll('[data-lepas]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const mapId = btn.dataset.lepas;
+        btn.disabled = true; btn.textContent = '…';
+        try {
+          await apiFetch(`/taglinks/map/${mapId}`, { method: 'DELETE' });
+          await this._load();
+        } catch (e) {
+          alert(e.message);
+          btn.disabled = false; btn.textContent = 'Lepas';
+        }
+      });
+    });
   }
 
   destroy() {}
