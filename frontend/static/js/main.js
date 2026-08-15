@@ -219,19 +219,6 @@ function renderShell(path, user) {
           </div>
         </header>
         <div id="banner">${renderBanner()}</div>
-        <div id="hut-banner">
-          <div class="hut-inner">
-            <div class="hut-left">
-              <div class="hut-logo-wrap"><div class="hut-logo-num">81</div></div>
-              <div>
-                <div class="hut-eyebrow">Dirgahayu Republik Indonesia</div>
-                <div class="hut-title">HUT RI ke-81</div>
-                <div class="hut-sub">Sekali Merdeka, Tetap Merdeka.</div>
-              </div>
-            </div>
-            <button class="hut-date-btn">📅 17 Agustus</button>
-          </div>
-        </div>
         <main id="page-content"></main>
       </div>
     </div>
