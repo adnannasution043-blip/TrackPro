@@ -98,10 +98,11 @@ function renderSidebar(currentPath, user) {
     </div>
 
     <div class="sidebar-filter">
-      <div class="sidebar-filter-label">Filter Akun</div>
-      <select id="filter-akun">
-        <option value="">Semua Akun</option>
-      </select>
+      <div class="sidebar-filter-label">FILTER AKUN</div>
+      <button id="filter-akun-btn" style="width:100%;display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface);cursor:pointer;font-size:13px;font-weight:500;color:var(--text);gap:6px;text-align:left;">
+        <span id="filter-akun-label" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Semua Akun</span>
+        <span class="fp-chevron" style="flex-shrink:0;width:14px;height:14px;display:flex;align-items:center;justify-content:center;transition:transform 0.2s;">${icon('chevron')}</span>
+      </button>
     </div>
 
     <div id="sidebar-nav">
@@ -294,45 +295,110 @@ function updateSidebarLive() {
 }
 
 async function _initSidebarFilter() {
-  const sel = document.getElementById('filter-akun');
-  if (!sel || sel.dataset.loaded) return;
-  sel.dataset.loaded = '1';
+  const btn = document.getElementById('filter-akun-btn');
+  if (!btn || btn.dataset.loaded) return;
+  btn.dataset.loaded = '1';
+
+  if (!document.getElementById('fp-styles')) {
+    const s = document.createElement('style');
+    s.id = 'fp-styles';
+    s.textContent = `.fp-opt{display:flex;align-items:center;gap:10px;padding:10px 16px;cursor:pointer;}.fp-opt:hover{background:#f9fafb;}.fp-opt.fp-sel{background:#fff1f2;}`;
+    document.head.appendChild(s);
+  }
+
+  document.getElementById('filter-akun-panel')?.remove();
+  const panel = document.createElement('div');
+  panel.id = 'filter-akun-panel';
+  panel.style.cssText = 'position:fixed;background:var(--surface,#fff);border:1px solid var(--border,#e5e7eb);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.13);width:288px;max-height:440px;overflow-y:auto;z-index:9999;display:none;';
+  document.body.appendChild(panel);
+
+  const chevron = btn.querySelector('.fp-chevron');
+  const closePanel = () => { panel.style.display = 'none'; if (chevron) chevron.style.transform = ''; };
+  const openPanel = () => {
+    const r = btn.getBoundingClientRect();
+    panel.style.left = (r.right + 8) + 'px';
+    panel.style.top = r.top + 'px';
+    panel.style.display = 'block';
+    if (chevron) chevron.style.transform = 'rotate(180deg)';
+  };
+
+  btn.addEventListener('click', (e) => { e.stopPropagation(); panel.style.display === 'none' ? openPanel() : closePanel(); });
+  document.addEventListener('click', (e) => { if (!panel.contains(e.target) && e.target !== btn) closePanel(); });
 
   try {
     const tree = await apiFetch('/accounts/tree');
     if (!tree) return;
 
-    let html = '<option value="">Semua Akun</option>';
-    for (const meta of (tree.meta_accounts || [])) {
-      html += `<optgroup label="📊 ${meta.nama}">`;
-      html += `<option value="meta:${meta.id}">Semua (${meta.nama})</option>`;
-      for (const s of (meta.shopee_accounts || [])) {
-        html += `<option value="shopee:${s.id}">&nbsp;&nbsp;└ ${s.nama}</option>`;
-      }
-      html += `</optgroup>`;
-    }
-    if (tree.shopee_unlinked?.length) {
-      html += `<optgroup label="Shopee belum terhubung">`;
-      for (const s of tree.shopee_unlinked) {
-        html += `<option value="shopee:${s.id}">${s.nama}</option>`;
-      }
-      html += `</optgroup>`;
-    }
-    sel.innerHTML = html;
+    const shopeeMetaCount = {};
+    for (const m of (tree.meta_accounts || []))
+      for (const s of (m.shopee_accounts || []))
+        shopeeMetaCount[s.id] = (shopeeMetaCount[s.id] || 0) + 1;
 
-    // Restore saved selection
+    const linkedShopees = [];
+    const seen = new Set();
+    for (const m of (tree.meta_accounts || []))
+      for (const s of (m.shopee_accounts || []))
+        if (!seen.has(s.id)) { seen.add(s.id); linkedShopees.push({ ...s, metaCount: shopeeMetaCount[s.id] || 0 }); }
+
     const f = getFilter();
-    if (f.type === 'meta' && f.id)   sel.value = `meta:${f.id}`;
-    if (f.type === 'shopee' && f.id) sel.value = `shopee:${f.id}`;
+    const cur = f.type === 'meta' ? `meta:${f.id}` : f.type === 'shopee' ? `shopee:${f.id}` : '';
+    const metaCount = tree.meta_accounts?.length || 0;
 
-    sel.addEventListener('change', () => {
-      const val = sel.value;
-      if (!val) {
-        setFilter({ type: 'all' });
-      } else {
-        const i = val.indexOf(':');
-        setFilter({ type: val.slice(0, i), id: val.slice(i + 1) });
-      }
+    const allShopees = [
+      ...linkedShopees,
+      ...(tree.shopee_unlinked || []).map(s => ({ ...s, metaCount: 0, unlinked: true })),
+    ];
+
+    const icoMeta = `<svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" width="16" height="16"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`;
+    const icoShopee = `<svg viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2" width="16" height="16"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>`;
+    const icoGroup = `<svg viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2" width="16" height="16"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`;
+    const chk = `<svg viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.5" width="16" height="16" style="flex-shrink:0;"><polyline points="20 6 9 17 4 12"/></svg>`;
+    const bdg = (t, bg, c) => `<span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;background:${bg};color:${c};flex-shrink:0;">${t}</span>`;
+    const opt = (val, icoBg, ico, name, sub, badge, sel) =>
+      `<div class="fp-opt ${sel ? 'fp-sel' : ''}" data-val="${val}">
+        <div style="width:32px;height:32px;background:${icoBg};border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${ico}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;font-weight:${sel?'600':'500'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${name}</div>
+          <div style="font-size:11px;color:#9ca3af;">${sub}</div>
+        </div>
+        ${badge}${sel ? chk : ''}
+      </div>`;
+
+    let html = `<div style="padding:16px 16px 8px;font-size:14px;font-weight:700;color:var(--text);">Pilih Akun</div>`;
+    html += opt('', '#fee2e2', icoGroup, 'Semua Akun', `${metaCount} akun Meta aktif`, '', !cur);
+
+    if (metaCount > 0) {
+      html += `<div style="padding:8px 16px 4px;font-size:10.5px;font-weight:700;letter-spacing:0.7px;color:#9ca3af;text-transform:uppercase;">Meta Ads</div>`;
+      for (const m of tree.meta_accounts)
+        html += opt(`meta:${m.id}`, '#eff6ff', icoMeta, m.nama, m.account_id, bdg('Meta', '#eff6ff', '#3b82f6'), cur === `meta:${m.id}`);
+    }
+    if (allShopees.length > 0) {
+      html += `<div style="padding:8px 16px 4px;font-size:10.5px;font-weight:700;letter-spacing:0.7px;color:#9ca3af;text-transform:uppercase;">Shopee Affiliate</div>`;
+      for (const s of allShopees)
+        html += opt(`shopee:${s.id}`, '#fff7ed', icoShopee, s.nama, s.unlinked ? 'Belum terhubung' : `${s.metaCount} Meta terkait`, bdg('Shopee', '#fff7ed', '#f97316'), cur === `shopee:${s.id}`);
+    }
+    panel.innerHTML = html;
+
+    const updateLabel = (val) => {
+      const el = document.getElementById('filter-akun-label');
+      if (!el) return;
+      if (!val) { el.textContent = 'Semua Akun'; return; }
+      const [type, id] = val.split(':');
+      el.textContent = type === 'meta'
+        ? (tree.meta_accounts.find(m => m.id === id)?.nama || 'Semua Akun')
+        : (allShopees.find(s => s.id === id)?.nama || 'Semua Akun');
+    };
+    updateLabel(cur);
+
+    panel.querySelectorAll('.fp-opt').forEach(o => {
+      o.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const val = o.dataset.val;
+        updateLabel(val);
+        closePanel();
+        if (!val) setFilter({ type: 'all' });
+        else { const i = val.indexOf(':'); setFilter({ type: val.slice(0, i), id: val.slice(i + 1) }); }
+      });
     });
   } catch (_) {}
 }
