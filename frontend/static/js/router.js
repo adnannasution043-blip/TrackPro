@@ -17,6 +17,7 @@ export function startRouter(routes, getContainer) {
   }
 
   window.addEventListener('hashchange', navigate);
+  window.addEventListener('trackpro:filter-changed', navigate);
   navigate();
 }
 

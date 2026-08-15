@@ -1,4 +1,5 @@
 import { getToken, clearToken, apiFetch } from './api.js';
+import { getFilter, setFilter } from './filter-state.js';
 import { startRouter, redirect } from './router.js';
 import { AuthPage } from './pages/auth.js';
 import { DashboardPage } from './pages/dashboard.js';
@@ -98,8 +99,8 @@ function renderSidebar(currentPath, user) {
 
     <div class="sidebar-filter">
       <div class="sidebar-filter-label">Filter Akun</div>
-      <select>
-        <option>Semua Akun</option>
+      <select id="filter-akun">
+        <option value="">Semua Akun</option>
       </select>
     </div>
 
@@ -274,21 +275,66 @@ async function loadUser() {
 }
 
 function updateSidebarLive() {
-  // Update subscription display once user data is available
+  // Update subscription display
   const daysEl = document.getElementById('sub-days-label');
   const expEl = document.getElementById('sub-expire-label');
-  if (!daysEl || !expEl) return;
-  // Fetch subscription data
-  apiFetch('/billing').then(d => {
-    if (!d) return;
-    const days = d.sisa_hari != null ? d.sisa_hari : '–';
-    const exp = d.berakhir ? d.berakhir.slice(0, 10) : '–';
-    daysEl.textContent = `Langganan - ${days} hari lagi`;
-    expEl.textContent = `s/d ${exp}`;
-  }).catch(() => {
-    if (daysEl) daysEl.textContent = 'Langganan';
-    if (expEl) expEl.textContent = '–';
-  });
+  if (daysEl && expEl) {
+    apiFetch('/billing').then(d => {
+      if (!d) return;
+      daysEl.textContent = `Langganan - ${d.sisa_hari ?? '–'} hari lagi`;
+      expEl.textContent = `s/d ${d.berakhir ? d.berakhir.slice(0, 10) : '–'}`;
+    }).catch(() => {
+      if (daysEl) daysEl.textContent = 'Langganan';
+      if (expEl) expEl.textContent = '–';
+    });
+  }
+
+  // Populate filter akun dropdown dari tree
+  _initSidebarFilter();
+}
+
+async function _initSidebarFilter() {
+  const sel = document.getElementById('filter-akun');
+  if (!sel || sel.dataset.loaded) return;
+  sel.dataset.loaded = '1';
+
+  try {
+    const tree = await apiFetch('/accounts/tree');
+    if (!tree) return;
+
+    let html = '<option value="">Semua Akun</option>';
+    for (const meta of (tree.meta_accounts || [])) {
+      html += `<optgroup label="📊 ${meta.nama}">`;
+      html += `<option value="meta:${meta.id}">Semua (${meta.nama})</option>`;
+      for (const s of (meta.shopee_accounts || [])) {
+        html += `<option value="shopee:${s.id}">&nbsp;&nbsp;└ ${s.nama}</option>`;
+      }
+      html += `</optgroup>`;
+    }
+    if (tree.shopee_unlinked?.length) {
+      html += `<optgroup label="Shopee belum terhubung">`;
+      for (const s of tree.shopee_unlinked) {
+        html += `<option value="shopee:${s.id}">${s.nama}</option>`;
+      }
+      html += `</optgroup>`;
+    }
+    sel.innerHTML = html;
+
+    // Restore saved selection
+    const f = getFilter();
+    if (f.type === 'meta' && f.id)   sel.value = `meta:${f.id}`;
+    if (f.type === 'shopee' && f.id) sel.value = `shopee:${f.id}`;
+
+    sel.addEventListener('change', () => {
+      const val = sel.value;
+      if (!val) {
+        setFilter({ type: 'all' });
+      } else {
+        const i = val.indexOf(':');
+        setFilter({ type: val.slice(0, i), id: val.slice(i + 1) });
+      }
+    });
+  } catch (_) {}
 }
 
 const routes = {

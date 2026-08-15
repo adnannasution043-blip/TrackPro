@@ -1,4 +1,5 @@
 import { apiFetch } from '../api.js';
+import { filterQS } from '../filter-state.js';
 
 const rp = n => 'Rp ' + Number(n || 0).toLocaleString('id-ID');
 const rpShort = n => {
@@ -125,7 +126,7 @@ export class DashboardPage {
     const el = this.container.querySelector('#content');
     el.innerHTML = '<div class="loading">Memuat data…</div>';
     try {
-      const data = await apiFetch(`/dashboard?tanggal_dari=${this.dari}&tanggal_sampai=${this.sampai}`);
+      const data = await apiFetch(`/dashboard?tanggal_dari=${this.dari}&tanggal_sampai=${this.sampai}${filterQS()}`);
       if (!data) return;
       this._chartData = data.harian;
       el.innerHTML = this._render(data);
