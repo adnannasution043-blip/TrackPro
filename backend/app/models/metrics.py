@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import BigInteger, Computed, Date, DateTime, ForeignKey, Integer, Numeric, String, func
+from sqlalchemy import BigInteger, Computed, Date, DateTime, ForeignKey, Integer, Numeric, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -46,3 +46,16 @@ class OrderSnapshot(Base):
     nama_toko: Mapped[str | None] = mapped_column(String(200))
     qty: Mapped[int | None] = mapped_column(Integer)
     sales_idr: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+
+
+class ClickBySource(Base):
+    """Klik per (tag_link, tanggal, sumber) — diisi dari Shopee Click CSV kolom Source."""
+    __tablename__ = "click_by_source"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    tag_link_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tag_links.id", ondelete="CASCADE"), nullable=False)
+    tanggal: Mapped[date] = mapped_column(Date, nullable=False)
+    sumber: Mapped[str] = mapped_column(String(100), nullable=False)
+    clicks: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+
+    __table_args__ = (UniqueConstraint("tag_link_id", "tanggal", "sumber", name="uq_click_by_source"),)

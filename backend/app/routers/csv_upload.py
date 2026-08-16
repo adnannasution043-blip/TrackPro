@@ -36,7 +36,7 @@ from app.core.deps import DB, CurrentUser
 from app.models.account import MetaAccount, ShopeeAccount
 from app.models.campaign import Campaign, TagLink
 from app.models.import_log import CsvImport
-from app.models.metrics import DailyMetric, OrderSnapshot
+from app.models.metrics import ClickBySource, DailyMetric, OrderSnapshot
 from app.schemas.upload import UploadResponse
 
 router = APIRouter()
@@ -161,10 +161,13 @@ async def upload_shopee_click(
 
     ok, fail = 0, 0
 
-    # Agregasi per (tag, tanggal) karena satu tag bisa punya beberapa baris sumber traffic
+    # Agregasi per (tag, tanggal) untuk DailyMetric
     grouped: dict[tuple[str, date], int] = defaultdict(int)
+    # Agregasi per (tag, tanggal, sumber) untuk click_by_source
+    grouped_src: dict[tuple[str, date, str], int] = defaultdict(int)
     for row in rows:
         grouped[(row.tag, row.tanggal)] += row.clicks
+        grouped_src[(row.tag, row.tanggal, row.sumber)] += row.clicks
 
     for (tag, tanggal), total_clicks in grouped.items():
         try:
@@ -173,6 +176,13 @@ async def upload_shopee_click(
             ok += 1
         except Exception:
             fail += 1
+
+    for (tag, tanggal, sumber), clicks in grouped_src.items():
+        try:
+            tag_link = await _get_or_create_tag_link(tag, shopee_account_id, db)
+            await _upsert_click_by_source(tag_link.id, tanggal, sumber, clicks, db)
+        except Exception:
+            pass
 
     return await _finish_import(import_log, ok, fail, db)
 
@@ -238,6 +248,22 @@ async def _upsert_click_metric(
         index_elements=["tag_link_id", "tanggal"],
         index_where=sa.text("tag_link_id IS NOT NULL"),
         set_={"clicks_shopee": stmt.excluded.clicks_shopee},
+    )
+    await db.execute(stmt)
+
+
+async def _upsert_click_by_source(
+    tag_link_id: UUID, tanggal: date, sumber: str, clicks: int, db: AsyncSession
+) -> None:
+    stmt = pg_insert(ClickBySource).values(
+        tag_link_id=tag_link_id,
+        tanggal=tanggal,
+        sumber=sumber,
+        clicks=clicks,
+    )
+    stmt = stmt.on_conflict_do_update(
+        constraint="uq_click_by_source",
+        set_={"clicks": stmt.excluded.clicks},
     )
     await db.execute(stmt)
 
