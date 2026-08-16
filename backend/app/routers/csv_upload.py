@@ -37,6 +37,7 @@ from app.core.csv_parser import (
 )
 from app.core.deps import DB, CurrentUser
 from app.models.account import MetaAccount, ShopeeAccount
+from app.models.balance import AccountBalance
 from app.models.campaign import Campaign, TagLink
 from app.models.import_log import CsvImport
 from app.models.metrics import ClickBySource, DailyMetric, MetaBreakdown, OrderSnapshot
@@ -66,6 +67,10 @@ async def upload_meta_ads(
     except CsvParseError as exc:
         return await _fail_import(import_log, db, str(exc))
 
+    # Catat spend lama untuk tanggal yang akan diupload (sebelum upsert)
+    dates = {r.tanggal for r in rows}
+    spend_lama = await _get_meta_spend_for_dates(meta_account_id, dates, db)
+
     ok, fail = 0, 0
     for row in rows:
         try:
@@ -74,6 +79,11 @@ async def upload_meta_ads(
             ok += 1
         except Exception:
             fail += 1
+
+    # Kurangi saldo: delta = spend baru (dari CSV) - spend lama (yang diganti)
+    if ok > 0:
+        spend_baru = sum(r.spend_idr for r in rows)
+        await _adjust_balance_for_meta(meta_account_id, spend_baru - spend_lama, db)
 
     return await _finish_import(import_log, ok, fail, db)
 
@@ -428,3 +438,39 @@ async def _assert_shopee_account_owned(account_id: UUID, user_id, db: AsyncSessi
     )
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Akun Shopee tidak ditemukan.")
+
+
+# ===========================================================================
+# Saldo helpers
+# ===========================================================================
+
+async def _get_meta_spend_for_dates(
+    meta_account_id: UUID, dates: set, db: AsyncSession
+) -> "Decimal":
+    from decimal import Decimal
+    if not dates:
+        return Decimal("0")
+    result = await db.execute(
+        sa.select(sa.func.coalesce(sa.func.sum(DailyMetric.spend_idr), 0))
+        .join(Campaign, DailyMetric.campaign_id == Campaign.id)
+        .where(
+            Campaign.meta_account_id == meta_account_id,
+            DailyMetric.campaign_id.isnot(None),
+            DailyMetric.tanggal.in_(dates),
+        )
+    )
+    return result.scalar() or Decimal("0")
+
+
+async def _adjust_balance_for_meta(
+    meta_account_id: UUID, delta: "Decimal", db: AsyncSession
+) -> None:
+    """Kurangi sisa_saldo sebesar delta (spend baru - spend lama). Tidak pernah di bawah 0."""
+    from decimal import Decimal
+    if not delta or delta <= 0:
+        return
+    bal = (await db.execute(
+        sa.select(AccountBalance).where(AccountBalance.meta_account_id == meta_account_id)
+    )).scalar_one_or_none()
+    if bal:
+        bal.sisa_saldo = max(Decimal("0"), bal.sisa_saldo - delta)
