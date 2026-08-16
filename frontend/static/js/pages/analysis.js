@@ -44,6 +44,10 @@ export class AnalysisPage {
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               Export LAP HARIAN
             </button>
+            <button id="btn-export-fix" class="btn btn-sm" style="display:flex;align-items:center;gap:5px;font-size:12px;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Export FIX Meta
+            </button>
             <button id="btn-export-off" class="btn btn-sm" style="display:flex;align-items:center;gap:5px;font-size:12px;">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               Export OFF Filter Meta
@@ -64,6 +68,7 @@ export class AnalysisPage {
     document.addEventListener('click', this._closeDropPanels.bind(this));
 
     this.container.querySelector('#btn-export-harian')?.addEventListener('click', () => this._exportHarian());
+    this.container.querySelector('#btn-export-fix')?.addEventListener('click', () => this._exportFix());
     this.container.querySelector('#btn-export-off')?.addEventListener('click', () => this._exportOff());
 
     await this._load();
@@ -333,6 +338,37 @@ export class AnalysisPage {
       const cd = res.headers.get('Content-Disposition') || '';
       const match = cd.match(/filename="?([^"]+)"?/);
       a.download = match ? match[1] : 'LAP HARIAN.xlsx';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch(e) {
+      alert('Export gagal: ' + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = orig;
+    }
+  }
+
+  async _exportFix() {
+    const btn = this.container.querySelector('#btn-export-fix');
+    const orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.textContent = 'Memproses…';
+    try {
+      const qs = filterQS ? filterQS() : '';
+      const token = getToken();
+      const url = `/api/export/laporan-fix?tanggal_dari=${this.dari}&tanggal_sampai=${this.sampai}${qs}`;
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert('Export gagal: ' + (err.detail || res.statusText));
+        return;
+      }
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      const cd = res.headers.get('Content-Disposition') || '';
+      const match = cd.match(/filename="?([^"]+)"?/);
+      a.download = match ? match[1] : 'FIX META.xlsx';
       a.click();
       URL.revokeObjectURL(a.href);
     } catch(e) {
