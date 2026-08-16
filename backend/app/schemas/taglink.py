@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -12,7 +13,7 @@ class CampaignResponse(BaseModel):
     status: str
     tahap: str
     catatan: str | None
-    dipetakan: bool           # True jika sudah punya minimal 1 tag link
+    dipetakan: bool
 
     model_config = {"from_attributes": True}
 
@@ -32,6 +33,11 @@ class MapCreate(BaseModel):
     tag_link_id: UUID
 
 
+class MapPatch(BaseModel):
+    tag_link_id: UUID
+    catatan: str | None = None
+
+
 class MapResponse(BaseModel):
     id: UUID
     campaign_id: UUID
@@ -40,5 +46,12 @@ class MapResponse(BaseModel):
     tag_link_id: UUID
     tag: str
     shopee_account_id: UUID
+    akun_shopee: str
     sumber: str
+    catatan: str | None
     created_at: datetime
+
+
+class TagStatsResponse(BaseModel):
+    orders: int
+    komisi: Decimal

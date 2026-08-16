@@ -45,4 +45,5 @@ class CampaignTagMap(Base):
     campaign_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("campaigns.id", ondelete="CASCADE"), nullable=False)
     tag_link_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tag_links.id", ondelete="CASCADE"), nullable=False)
     sumber: Mapped[str] = mapped_column(String(20), nullable=False, server_default="manual")
+    catatan: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
