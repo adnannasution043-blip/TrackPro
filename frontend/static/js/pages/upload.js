@@ -49,18 +49,18 @@ export class UploadPage {
             <div style="font-size:12px;color:var(--text-muted);">Download template, isi dengan data asli Anda, lalu upload di bawah.</div>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <a href="/static/templates/template-meta-ads.csv" download="template-meta-ads.csv" class="btn" style="font-size:12px;padding:6px 12px;display:flex;align-items:center;gap:6px;">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              Meta Ads
-            </a>
-            <a href="/static/templates/template-shopee-commission.csv" download="template-shopee-commission.csv" class="btn" style="font-size:12px;padding:6px 12px;display:flex;align-items:center;gap:6px;">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              Shopee Komisi
-            </a>
-            <a href="/static/templates/template-shopee-click.csv" download="template-shopee-click.csv" class="btn" style="font-size:12px;padding:6px 12px;display:flex;align-items:center;gap:6px;">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              Shopee Klik
-            </a>
+            ${[
+              ['template-meta-ads.csv',                    'Meta Ads'],
+              ['template-shopee-commission.csv',           'Shopee Komisi'],
+              ['template-shopee-click.csv',                'Shopee Klik'],
+              ['template-meta-breakdown-placement.csv',    'Breakdown Penempatan'],
+              ['template-meta-breakdown-platform.csv',     'Breakdown Platform'],
+              ['template-meta-breakdown-age-gender.csv',   'Breakdown Usia & Gender'],
+            ].map(([file, label]) => `
+              <a href="/static/templates/${file}" download="${file}" class="btn" style="font-size:12px;padding:6px 12px;display:flex;align-items:center;gap:6px;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                ${label}
+              </a>`).join('')}
           </div>
         </div>
       </div>

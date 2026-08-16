@@ -1,6 +1,6 @@
-Order ID,Order Status,Commission,Sales Amount,Sub ID,Order Time
-2408010001,completed,12500,125000,pks180626,2026-08-01
-2408010002,pending,8000,80000,pks180626,2026-08-01
-2408010003,completed,15000,150000,pks180626,2026-08-02
-2408010004,cancelled,0,0,pks180626,2026-08-02
-2408020001,completed,9500,95000,abc123xyz,2026-08-02
+Order ID,Order Status,Commission,Sales Amount,Sub ID,Order Time,Product Name,Shop Name,Quantity
+2408010001,completed,12500,125000,pks180626,2026-08-01,Celana Cargo Pria,TokoBagusID,1
+2408010002,pending,8000,80000,pks180626,2026-08-01,Sepatu Sneakers Casual,SepatuKeren88,1
+2408010003,completed,15000,150000,pks180626,2026-08-02,Tas Ransel Anti Air,TasNusantara,1
+2408010004,cancelled,0,0,pks180626,2026-08-02,Kaos Polos Cotton,FashionMurahPro,2
+2408020001,completed,9500,95000,abc123xyz,2026-08-02,Dompet Kulit Pria,LeatherGoods.ID,1
