@@ -19,6 +19,7 @@ from datetime import date, datetime, timezone
 from uuid import UUID
 
 import sqlalchemy as sa
+import sqlalchemy.dialects.postgresql as sa_pg
 from fastapi import APIRouter, HTTPException, Query, UploadFile, status
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,9 +27,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.csv_parser import (
     CsvParseError,
     MetaAdsRow,
+    MetaBreakdownRow,
     ShopeeClickRow,
     ShopeeCommissionRow,
     parse_meta_ads_csv,
+    parse_meta_breakdown_csv,
     parse_shopee_click_csv,
     parse_shopee_commission_csv,
 )
@@ -36,7 +39,7 @@ from app.core.deps import DB, CurrentUser
 from app.models.account import MetaAccount, ShopeeAccount
 from app.models.campaign import Campaign, TagLink
 from app.models.import_log import CsvImport
-from app.models.metrics import ClickBySource, DailyMetric, OrderSnapshot
+from app.models.metrics import ClickBySource, DailyMetric, MetaBreakdown, OrderSnapshot
 from app.schemas.upload import UploadResponse
 
 router = APIRouter()
@@ -138,6 +141,62 @@ async def upload_shopee_commission(
             pass
 
     await db.flush()
+    return await _finish_import(import_log, ok, fail, db)
+
+
+@router.post("/meta-breakdown", response_model=UploadResponse, status_code=status.HTTP_201_CREATED)
+async def upload_meta_breakdown(
+    file: UploadFile,
+    current_user: CurrentUser,
+    db: DB,
+    meta_account_id: UUID = Query(...),
+):
+    await _assert_meta_account_owned(meta_account_id, current_user.id, db)
+    raw = await file.read()
+
+    import_log = _start_import(current_user.id, "meta_breakdown", file.filename, db)
+
+    try:
+        rows = parse_meta_breakdown_csv(raw)
+    except CsvParseError as exc:
+        return await _fail_import(import_log, db, str(exc))
+
+    ok, fail = 0, 0
+    for row in rows:
+        try:
+            campaign = await _get_or_create_campaign(
+                MetaAdsRow(
+                    meta_campaign_id=row.meta_campaign_id,
+                    nama_campaign=row.nama_campaign,
+                    tanggal=row.tanggal,
+                    spend_idr=row.spend_idr,
+                    clicks_meta=row.clicks,
+                ),
+                meta_account_id,
+                db,
+            )
+            stmt = sa_pg.insert(MetaBreakdown).values(
+                campaign_id=campaign.id,
+                tanggal=row.tanggal,
+                tipe=row.tipe,
+                nilai=row.nilai,
+                spend_idr=row.spend_idr,
+                impressions=row.impressions,
+                clicks=row.clicks,
+            )
+            stmt = stmt.on_conflict_do_update(
+                constraint="uq_meta_breakdown",
+                set_={
+                    "spend_idr": stmt.excluded.spend_idr,
+                    "impressions": stmt.excluded.impressions,
+                    "clicks": stmt.excluded.clicks,
+                },
+            )
+            await db.execute(stmt)
+            ok += 1
+        except Exception:
+            fail += 1
+
     return await _finish_import(import_log, ok, fail, db)
 
 

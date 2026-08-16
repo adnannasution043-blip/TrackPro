@@ -252,7 +252,76 @@ def parse_shopee_click_csv(file_bytes: bytes) -> list[ShopeeClickRow]:
 
 
 # ---------------------------------------------------------------------------
-# 4. Diff engine — untuk fitur "Perbarui Data Lama" (CLAUDE.md §2.8, §4 order_snapshots)
+# 4. Meta Ads Breakdown exports (Placement / Platform / Usia & Gender)
+# ---------------------------------------------------------------------------
+
+REQUIRED_BREAKDOWN_BASE = {"Campaign name", "Campaign ID", "Day", "Amount spent (IDR)", "Impressions", "Link clicks"}
+
+
+@dataclass
+class MetaBreakdownRow:
+    meta_campaign_id: str
+    nama_campaign: str
+    tanggal: date
+    tipe: str    # 'placement' | 'platform' | 'age_gender'
+    nilai: str   # e.g. "Facebook Feed" / "Instagram" / "18-24 / Male"
+    spend_idr: Decimal
+    impressions: int
+    clicks: int
+
+
+def parse_meta_breakdown_csv(file_bytes: bytes) -> list[MetaBreakdownRow]:
+    """
+    Auto-detect tipe breakdown dari header CSV:
+    - Ada kolom "Placement" → tipe=placement
+    - Ada kolom "Platform"  → tipe=platform
+    - Ada kolom "Age" DAN "Gender" → tipe=age_gender
+    """
+    rows = list(_read_rows(file_bytes))
+    if not rows:
+        return []
+
+    header = set(rows[0].keys())
+    missing_base = REQUIRED_BREAKDOWN_BASE - header
+    if missing_base:
+        raise CsvParseError(f"Kolom wajib hilang di file Breakdown: {sorted(missing_base)}")
+
+    if "Placement" in header:
+        tipe = "placement"
+        nilai_col = "Placement"
+    elif "Platform" in header:
+        tipe = "platform"
+        nilai_col = "Platform"
+    elif "Age" in header and "Gender" in header:
+        tipe = "age_gender"
+        nilai_col = None  # gabung dua kolom
+    else:
+        raise CsvParseError("Kolom breakdown tidak ditemukan. Tambahkan kolom Placement, Platform, atau Age+Gender.")
+
+    parsed: list[MetaBreakdownRow] = []
+    for i, row in enumerate(rows, start=2):
+        try:
+            if tipe == "age_gender":
+                nilai = f"{row['Age']} / {row['Gender']}"
+            else:
+                nilai = row[nilai_col] or "Unknown"
+            parsed.append(MetaBreakdownRow(
+                meta_campaign_id=row["Campaign ID"],
+                nama_campaign=row["Campaign name"],
+                tanggal=_to_date(row["Day"]),
+                tipe=tipe,
+                nilai=nilai,
+                spend_idr=_to_decimal(row["Amount spent (IDR)"]),
+                impressions=int(row["Impressions"] or 0),
+                clicks=int(row["Link clicks"] or 0),
+            ))
+        except CsvParseError as exc:
+            raise CsvParseError(f"Baris {i}: {exc}") from exc
+    return parsed
+
+
+# ---------------------------------------------------------------------------
+# 5. Diff engine — untuk fitur "Perbarui Data Lama" (CLAUDE.md §2.8, §4 order_snapshots)
 # ---------------------------------------------------------------------------
 
 @dataclass

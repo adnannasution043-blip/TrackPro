@@ -328,16 +328,64 @@ export class CampaignsPage {
       </div>`;
   }
 
-  _renderBreakdownTab(el, tab, r) {
+  async _renderBreakdownTab(el, tab, r) {
+    const tipes  = ['', 'placement', 'platform', 'age_gender'];
     const labels = ['', 'Penempatan', 'Platform', 'Usia & Gender'];
-    el.innerHTML = `
-      <div style="padding:32px;text-align:center;color:#9ca3af;">
-        <div style="font-size:36px;margin-bottom:12px;">📊</div>
-        <div style="font-size:14px;font-weight:600;color:#374151;margin-bottom:8px;">Data ${labels[tab]} belum tersedia</div>
-        <div style="font-size:12.5px;max-width:380px;margin:0 auto;line-height:1.6;">
-          Upload CSV breakdown Meta Ads (dengan kolom breakdown ${labels[tab].toLowerCase()}) untuk melihat segmentasi biaya, klik, CPC, CPM, dan CTR.
-        </div>
-      </div>`;
+    el.innerHTML = '<div class="loading">Memuat data…</div>';
+    try {
+      const data = await apiFetch(`/dashboard/campaigns/${r.id}/breakdown?tipe=${tipes[tab]}`);
+      if (!data || data.length === 0) {
+        el.innerHTML = `
+          <div style="padding:32px;text-align:center;color:#9ca3af;">
+            <div style="font-size:36px;margin-bottom:12px;">📊</div>
+            <div style="font-size:14px;font-weight:600;color:#374151;margin-bottom:8px;">Data ${labels[tab]} belum tersedia</div>
+            <div style="font-size:12.5px;max-width:380px;margin:0 auto;line-height:1.6;">
+              Upload CSV breakdown Meta Ads (kolom ${labels[tab]}) di halaman Upload Data Harian.
+            </div>
+          </div>`;
+        return;
+      }
+      const totalSpend = data.reduce((s, x) => s + x.spend_idr, 0);
+      el.innerHTML = `
+        <div class="table-wrap">
+          <table class="data-table" style="font-size:12px;">
+            <thead><tr>
+              <th>${labels[tab].toUpperCase()}</th>
+              <th>BIAYA</th>
+              <th>% BIAYA</th>
+              <th>IMPRESI</th>
+              <th>KLIK</th>
+              <th>CPM</th>
+              <th>CPC</th>
+              <th>CTR</th>
+            </tr></thead>
+            <tbody>
+              ${data.map(row => {
+                const barW = totalSpend > 0 ? Math.round(row.spend_idr / totalSpend * 100) : 0;
+                return `<tr>
+                  <td style="font-weight:600;">${row.nilai}</td>
+                  <td>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                      <div style="width:60px;height:4px;background:#f3f4f6;border-radius:2px;flex-shrink:0;">
+                        <div style="width:${barW}%;height:100%;background:#dc2626;border-radius:2px;"></div>
+                      </div>
+                      ${rp(Math.round(row.spend_idr))}
+                    </div>
+                  </td>
+                  <td>${row.persen_spend.toFixed(1)}%</td>
+                  <td>${num(row.impressions)}</td>
+                  <td>${num(row.clicks)}</td>
+                  <td>${row.cpm_idr != null ? rp(Math.round(row.cpm_idr)) : '—'}</td>
+                  <td>${row.cpc_idr != null ? rp(Math.round(row.cpc_idr)) : '—'}</td>
+                  <td>${row.ctr_persen != null ? row.ctr_persen.toFixed(2) + '%' : '—'}</td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>`;
+    } catch(e) {
+      el.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+    }
   }
 
   destroy() {}
