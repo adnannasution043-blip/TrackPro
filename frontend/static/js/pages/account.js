@@ -1,4 +1,4 @@
-import { apiFetch } from '../api.js';
+import { apiFetch, clearToken } from '../api.js';
 
 export class AccountPage {
   constructor(container) {
@@ -162,14 +162,14 @@ export class AccountPage {
                   <div style="font-weight:600;">Reset Data Tracking</div>
                   <div style="font-size:12px;color:#6b7280;margin-top:2px;">Menghapus data Shopee, Meta, import, dan cache laporan dari akun Anda.</div>
                 </div>
-                <button class="btn btn-sm" style="color:#dc2626;border-color:#dc2626;white-space:nowrap;">🔄</button>
+                <button class="btn btn-sm" id="btn-reset-data" style="color:#dc2626;border-color:#dc2626;white-space:nowrap;">🔄</button>
               </div>
               <div style="border:1px solid #e5e7eb;border-radius:6px;padding:14px;display:flex;justify-content:space-between;align-items:center;">
                 <div>
                   <div style="font-weight:600;">Hapus Akun</div>
                   <div style="font-size:12px;color:#6b7280;margin-top:2px;">Menghapus akun user dan seluruh data terkait secara permanen.</div>
                 </div>
-                <button class="btn btn-sm" style="color:#dc2626;border-color:#dc2626;white-space:nowrap;">🗑</button>
+                <button class="btn btn-sm" id="btn-hapus-akun" style="color:#dc2626;border-color:#dc2626;white-space:nowrap;">🗑</button>
               </div>
             </div>
           </div>
@@ -204,6 +204,9 @@ export class AccountPage {
       </div>
     `;
 
+    el.querySelector('#btn-reset-data')?.addEventListener('click', () => this._confirmReset());
+    el.querySelector('#btn-hapus-akun')?.addEventListener('click', () => this._confirmDeleteAccount());
+
     el.querySelector('#btn-update-pw')?.addEventListener('click', async () => {
       const errEl = el.querySelector('#pw-error');
       const successEl = el.querySelector('#pw-success');
@@ -237,6 +240,90 @@ export class AccountPage {
         errEl.style.display = 'block';
       }
     });
+  }
+
+  _confirmReset() {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;';
+    overlay.innerHTML = `
+      <div style="background:white;border-radius:10px;padding:28px;width:420px;max-width:90vw;">
+        <h3 style="margin:0 0 8px;color:#dc2626;">Reset Data Tracking</h3>
+        <p style="font-size:14px;color:#6b7280;margin-bottom:16px;">Semua data kampanye, metrik, komisi, klik, dan saldo iklan akan dihapus permanen. Akun dan pengaturan tetap.</p>
+        <p style="font-size:13px;margin-bottom:8px;">Ketik <strong>RESET</strong> untuk konfirmasi:</p>
+        <input id="reset-confirm-input" type="text" class="form-input" placeholder="Ketik RESET" style="margin-bottom:16px;">
+        <div id="reset-error" style="color:#dc2626;font-size:13px;margin-bottom:8px;display:none;"></div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;">
+          <button id="reset-cancel" class="btn">Batal</button>
+          <button id="reset-confirm" class="btn" style="background:#dc2626;color:white;border-color:#dc2626;">Reset Data</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    overlay.querySelector('#reset-cancel').onclick = () => overlay.remove();
+    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+    overlay.querySelector('#reset-confirm').onclick = async () => {
+      const val = overlay.querySelector('#reset-confirm-input').value.trim();
+      if (val !== 'RESET') {
+        overlay.querySelector('#reset-error').textContent = 'Ketik RESET (huruf kapital) untuk konfirmasi.';
+        overlay.querySelector('#reset-error').style.display = 'block';
+        return;
+      }
+      try {
+        overlay.querySelector('#reset-confirm').textContent = 'Menghapus…';
+        overlay.querySelector('#reset-confirm').disabled = true;
+        await apiFetch('/auth/reset-data', { method: 'POST' });
+        overlay.remove();
+        window.location.reload();
+      } catch (e) {
+        overlay.querySelector('#reset-error').textContent = e.message;
+        overlay.querySelector('#reset-error').style.display = 'block';
+        overlay.querySelector('#reset-confirm').textContent = 'Reset Data';
+        overlay.querySelector('#reset-confirm').disabled = false;
+      }
+    };
+  }
+
+  _confirmDeleteAccount() {
+    const email = this._user?.email || '';
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;';
+    overlay.innerHTML = `
+      <div style="background:white;border-radius:10px;padding:28px;width:420px;max-width:90vw;">
+        <h3 style="margin:0 0 8px;color:#dc2626;">Hapus Akun</h3>
+        <p style="font-size:14px;color:#6b7280;margin-bottom:16px;">Akun dan seluruh data terkait akan dihapus permanen. Tindakan ini tidak bisa dibatalkan.</p>
+        <p style="font-size:13px;margin-bottom:8px;">Ketik email Anda (<strong>${email}</strong>) untuk konfirmasi:</p>
+        <input id="delete-confirm-input" type="text" class="form-input" placeholder="${email}" style="margin-bottom:16px;">
+        <div id="delete-error" style="color:#dc2626;font-size:13px;margin-bottom:8px;display:none;"></div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;">
+          <button id="delete-cancel" class="btn">Batal</button>
+          <button id="delete-confirm" class="btn" style="background:#dc2626;color:white;border-color:#dc2626;">Hapus Akun Saya</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    overlay.querySelector('#delete-cancel').onclick = () => overlay.remove();
+    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+    overlay.querySelector('#delete-confirm').onclick = async () => {
+      const val = overlay.querySelector('#delete-confirm-input').value.trim();
+      if (val !== email) {
+        overlay.querySelector('#delete-error').textContent = 'Email tidak cocok.';
+        overlay.querySelector('#delete-error').style.display = 'block';
+        return;
+      }
+      try {
+        overlay.querySelector('#delete-confirm').textContent = 'Menghapus…';
+        overlay.querySelector('#delete-confirm').disabled = true;
+        await apiFetch('/auth/account', { method: 'DELETE' });
+        overlay.remove();
+        clearToken();
+        window.location.hash = '#/login';
+      } catch (e) {
+        overlay.querySelector('#delete-error').textContent = e.message;
+        overlay.querySelector('#delete-error').style.display = 'block';
+        overlay.querySelector('#delete-confirm').textContent = 'Hapus Akun Saya';
+        overlay.querySelector('#delete-confirm').disabled = false;
+      }
+    };
   }
 
   destroy() {}
