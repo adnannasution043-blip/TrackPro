@@ -88,14 +88,14 @@ function renderSidebar(currentPath, user) {
   const userName = user?.nama || 'User';
 
   let html = `
-    <div class="sidebar-balance">
+    <a href="#/balance" class="sidebar-balance" style="text-decoration:none;display:block;cursor:pointer;">
       <div class="sidebar-balance-header">
         <div class="dot"></div>
-        SALDO
+        <span id="sb-saldo-label">SALDO</span>
       </div>
-      <div class="sidebar-balance-amount">Rp 0</div>
-      <div class="sidebar-balance-update">Update hari ini</div>
-    </div>
+      <div class="sidebar-balance-amount" id="sb-saldo-amount">Rp —</div>
+      <div class="sidebar-balance-update" id="sb-saldo-update">Memuat…</div>
+    </a>
 
     <div class="sidebar-filter">
       <div class="sidebar-filter-label">FILTER AKUN</div>
@@ -292,6 +292,9 @@ function updateSidebarLive() {
 
   // Populate filter akun dropdown dari tree
   _initSidebarFilter();
+
+  // Load live balance untuk sidebar widget
+  _loadSidebarBalance();
 }
 
 async function _initSidebarFilter() {
@@ -402,6 +405,53 @@ async function _initSidebarFilter() {
     });
   } catch (_) {}
 }
+
+async function _loadSidebarBalance() {
+  const labelEl = document.getElementById('sb-saldo-label');
+  const amountEl = document.getElementById('sb-saldo-amount');
+  const updateEl = document.getElementById('sb-saldo-update');
+  if (!amountEl) return;
+
+  try {
+    const data = await apiFetch('/balance/');
+    if (!amountEl.isConnected) return;
+
+    const accounts = data?.accounts || [];
+    const f = getFilter();
+
+    let saldo, nama, updated;
+    if (f.type === 'meta' && f.id) {
+      const acc = accounts.find(a => a.meta_account_id === f.id);
+      saldo = acc ? Number(acc.sisa_saldo) : null;
+      nama = acc ? acc.nama_akun : null;
+      updated = acc?.updated_at;
+    } else {
+      saldo = accounts.reduce((s, a) => s + Number(a.sisa_saldo), 0);
+      nama = null;
+      updated = data?.terakhir_refresh;
+    }
+
+    const MONTHS = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+    const fmtUpd = iso => {
+      if (!iso) return 'Belum ada data';
+      const d = new Date(iso);
+      return `Update ${d.getDate()} ${MONTHS[d.getMonth()]}, ${String(d.getHours()).padStart(2,'0')}.${String(d.getMinutes()).padStart(2,'0')}`;
+    };
+
+    if (labelEl) {
+      const shortName = nama ? nama.slice(0, 14) + (nama.length > 14 ? '…' : '') : null;
+      labelEl.textContent = shortName ? `SALDO · ${shortName}` : 'SALDO';
+    }
+    if (amountEl) amountEl.textContent = saldo != null ? 'Rp ' + saldo.toLocaleString('id-ID') : 'Rp —';
+    if (updateEl) updateEl.textContent = fmtUpd(updated);
+  } catch (_) {
+    if (amountEl?.isConnected) amountEl.textContent = 'Rp —';
+    if (updateEl?.isConnected) updateEl.textContent = 'Belum ada data';
+  }
+}
+
+// Re-load sidebar balance ketika balance diupdate dari halaman Saldo Iklan
+window.addEventListener('trackpro:balance-updated', () => _loadSidebarBalance());
 
 const routes = {
   '/login': AuthPage,
