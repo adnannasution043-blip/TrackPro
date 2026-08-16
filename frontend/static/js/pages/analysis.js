@@ -1,4 +1,4 @@
-import { apiFetch } from '../api.js';
+import { apiFetch, getToken } from '../api.js';
 import { filterQS } from '../filter-state.js';
 
 const rp = n => 'Rp ' + Number(n || 0).toLocaleString('id-ID');
@@ -38,11 +38,17 @@ export class AnalysisPage {
           <h1>Analisis Iklan</h1>
           <p>Pantau dan sortir iklan berdasarkan tahap testing.</p>
         </div>
-        <div class="page-header-right" style="position:relative;display:flex;flex-direction:column;align-items:flex-end;gap:2px;">
-          <button id="btn-date" class="date-range-btn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-            <span id="date-label">${fmtLabel(this.dari)}</span>
-          </button>
+        <div class="page-header-right" style="position:relative;display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button id="btn-export-off" class="btn btn-sm" style="display:flex;align-items:center;gap:5px;font-size:12px;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Export OFF Filter Meta
+            </button>
+            <button id="btn-date" class="date-range-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              <span id="date-label">${fmtLabel(this.dari)}</span>
+            </button>
+          </div>
           <div id="date-picker" style="display:none;position:absolute;top:44px;right:0;background:var(--surface,#fff);border:1px solid var(--border,#e5e7eb);border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,0.13);z-index:200;min-width:220px;"></div>
           <div style="font-size:11px;color:var(--text-muted,#9ca3af);">${this.dari} - ${this.sampai} WIB</div>
         </div>
@@ -52,6 +58,9 @@ export class AnalysisPage {
 
     this._initDatePicker();
     document.addEventListener('click', this._closeDropPanels.bind(this));
+
+    this.container.querySelector('#btn-export-off')?.addEventListener('click', () => this._exportOff());
+
     await this._load();
   }
 
@@ -296,6 +305,37 @@ export class AnalysisPage {
         alert(e.message || 'Gagal mengubah status iklan.');
       }
     });
+  }
+
+  async _exportOff() {
+    const btn = this.container.querySelector('#btn-export-off');
+    const orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.textContent = 'Memproses…';
+    try {
+      const qs = filterQS ? filterQS() : '';
+      const token = getToken();
+      const url = `/api/export/laporan-off?tanggal_dari=${this.dari}&tanggal_sampai=${this.sampai}${qs}`;
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert('Export gagal: ' + (err.detail || res.statusText));
+        return;
+      }
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      const cd = res.headers.get('Content-Disposition') || '';
+      const match = cd.match(/filename="?([^"]+)"?/);
+      a.download = match ? match[1] : 'OFF FILTER META.xlsx';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch(e) {
+      alert('Export gagal: ' + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = orig;
+    }
   }
 
   destroy() {
