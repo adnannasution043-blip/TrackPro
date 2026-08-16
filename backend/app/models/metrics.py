@@ -59,3 +59,19 @@ class ClickBySource(Base):
     clicks: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
 
     __table_args__ = (UniqueConstraint("tag_link_id", "tanggal", "sumber", name="uq_click_by_source"),)
+
+
+class MetaBreakdown(Base):
+    """Breakdown Meta Ads per (campaign, tanggal, tipe, nilai) — placement / platform / age_gender."""
+    __tablename__ = "meta_breakdowns"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    campaign_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("campaigns.id", ondelete="CASCADE"), nullable=False)
+    tanggal: Mapped[date] = mapped_column(Date, nullable=False)
+    tipe: Mapped[str] = mapped_column(String(20), nullable=False)   # placement | platform | age_gender
+    nilai: Mapped[str] = mapped_column(String(150), nullable=False)  # "Facebook Feed" / "18-24 / Male"
+    spend_idr: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False, server_default="0")
+    impressions: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    clicks: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+
+    __table_args__ = (UniqueConstraint("campaign_id", "tanggal", "tipe", "nilai", name="uq_meta_breakdown"),)

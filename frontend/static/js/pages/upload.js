@@ -134,6 +134,48 @@ export class UploadPage {
           <div id="name-meta" style="font-size:12px;color:#6b7280;margin-top:4px;"></div>
         </div>
 
+        <div style="margin-top:16px;">
+          <div class="form-label" style="margin-bottom:8px;">
+            Meta Breakdown CSV
+            <span class="badge badge-yellow" style="margin-left:6px;">Opsional</span>
+          </div>
+          <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">
+            Upload 1–3 file breakdown Meta Ads (Penempatan, Platform, atau Usia &amp; Gender). Tipe otomatis terdeteksi dari kolom CSV.
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
+            <div>
+              <div style="font-size:11px;font-weight:600;color:#6b7280;margin-bottom:6px;">PENEMPATAN</div>
+              <div class="upload-zone" id="zone-breakdown-placement" style="padding:16px;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:24px;height:24px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <p style="font-size:12px;margin-top:6px;"><strong>Pilih file</strong></p>
+                <p style="font-size:11px;color:#9ca3af;">kolom: Placement</p>
+              </div>
+              <input type="file" id="file-breakdown-placement" accept=".csv" style="display:none">
+              <div id="name-breakdown-placement" style="font-size:11px;color:#6b7280;margin-top:4px;"></div>
+            </div>
+            <div>
+              <div style="font-size:11px;font-weight:600;color:#6b7280;margin-bottom:6px;">PLATFORM</div>
+              <div class="upload-zone" id="zone-breakdown-platform" style="padding:16px;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:24px;height:24px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <p style="font-size:12px;margin-top:6px;"><strong>Pilih file</strong></p>
+                <p style="font-size:11px;color:#9ca3af;">kolom: Platform</p>
+              </div>
+              <input type="file" id="file-breakdown-platform" accept=".csv" style="display:none">
+              <div id="name-breakdown-platform" style="font-size:11px;color:#6b7280;margin-top:4px;"></div>
+            </div>
+            <div>
+              <div style="font-size:11px;font-weight:600;color:#6b7280;margin-bottom:6px;">USIA & GENDER</div>
+              <div class="upload-zone" id="zone-breakdown-age" style="padding:16px;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:24px;height:24px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <p style="font-size:12px;margin-top:6px;"><strong>Pilih file</strong></p>
+                <p style="font-size:11px;color:#9ca3af;">kolom: Age + Gender</p>
+              </div>
+              <input type="file" id="file-breakdown-age" accept=".csv" style="display:none">
+              <div id="name-breakdown-age" style="font-size:11px;color:#6b7280;margin-top:4px;"></div>
+            </div>
+          </div>
+        </div>
+
         <div id="upload-error" class="alert alert-error" style="display:none;margin-top:12px;"></div>
         <div id="upload-success" class="alert alert-success" style="display:none;margin-top:12px;"></div>
 
@@ -148,6 +190,9 @@ export class UploadPage {
     this._bindUploadZone('zone-commission', 'file-commission', 'name-commission');
     this._bindUploadZone('zone-click', 'file-click', 'name-click');
     this._bindUploadZone('zone-meta', 'file-meta', 'name-meta');
+    this._bindUploadZone('zone-breakdown-placement', 'file-breakdown-placement', 'name-breakdown-placement');
+    this._bindUploadZone('zone-breakdown-platform', 'file-breakdown-platform', 'name-breakdown-platform');
+    this._bindUploadZone('zone-breakdown-age', 'file-breakdown-age', 'name-breakdown-age');
 
     el.querySelector('#btn-upload').addEventListener('click', () => this._submit());
   }
@@ -243,6 +288,22 @@ export class UploadPage {
           fd.append('file', metaFile);
           const res = await apiUpload(`/upload/meta-ads?meta_account_id=${metaId}`, fd);
           results.push(`Meta Ads: ${res?.baris_diproses ?? 0} baris berhasil`);
+        }
+      }
+
+      const metaAccounts = this._accounts.filter(a => a.tipe === 'meta');
+      const metaId = metaAccounts[0]?.id;
+      for (const [fileId, label] of [
+        ['file-breakdown-placement', 'Breakdown Penempatan'],
+        ['file-breakdown-platform', 'Breakdown Platform'],
+        ['file-breakdown-age', 'Breakdown Usia & Gender'],
+      ]) {
+        const f = this.container.querySelector(`#${fileId}`)?.files[0];
+        if (f && metaId) {
+          const fd = new FormData();
+          fd.append('file', f);
+          const res = await apiUpload(`/upload/meta-breakdown?meta_account_id=${metaId}`, fd);
+          results.push(`${label}: ${res?.baris_diproses ?? 0} baris berhasil`);
         }
       }
 

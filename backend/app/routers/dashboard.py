@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import DB, CurrentUser
 from app.models.account import MetaAccount, ShopeeAccount
 from app.models.campaign import Campaign, CampaignTagMap, TagLink
-from app.models.metrics import DailyMetric, OrderSnapshot
+from app.models.metrics import DailyMetric, MetaBreakdown, OrderSnapshot
 from app.schemas.dashboard import (
     CampaignHarianResponse, CampaignHarianRow, CampaignRow, CampaignsResponse,
     DashboardResponse, DashboardSummary, HarianRow, TahapUpdate, TopProdukResponse, TopProdukRow,
@@ -386,6 +386,65 @@ async def get_campaign_harian(
         roi_persen=roi_total,
         harian=harian,
     )
+
+
+@router.get("/campaigns/{campaign_id}/breakdown")
+async def get_campaign_breakdown(
+    campaign_id: UUID,
+    current_user: CurrentUser,
+    db: DB,
+    tipe: str = Query(...),  # placement | platform | age_gender
+    tanggal_dari: date | None = Query(None),
+    tanggal_sampai: date | None = Query(None),
+):
+    from fastapi import HTTPException
+    # Verify ownership
+    camp = (await db.execute(
+        sa.select(Campaign)
+        .join(MetaAccount, Campaign.meta_account_id == MetaAccount.id)
+        .where(Campaign.id == campaign_id, MetaAccount.user_id == current_user.id)
+    )).scalar_one_or_none()
+    if not camp:
+        raise HTTPException(404, "Campaign tidak ditemukan.")
+
+    q = (
+        sa.select(
+            MetaBreakdown.nilai,
+            sa.func.sum(MetaBreakdown.spend_idr).label("spend_idr"),
+            sa.func.sum(MetaBreakdown.impressions).label("impressions"),
+            sa.func.sum(MetaBreakdown.clicks).label("clicks"),
+        )
+        .where(MetaBreakdown.campaign_id == campaign_id, MetaBreakdown.tipe == tipe)
+        .group_by(MetaBreakdown.nilai)
+        .order_by(sa.func.sum(MetaBreakdown.spend_idr).desc())
+    )
+    if tanggal_dari:
+        q = q.where(MetaBreakdown.tanggal >= tanggal_dari)
+    if tanggal_sampai:
+        q = q.where(MetaBreakdown.tanggal <= tanggal_sampai)
+
+    rows = (await db.execute(q)).all()
+    total_spend = sum(r.spend_idr or _ZERO for r in rows) or _ZERO
+    result = []
+    for r in rows:
+        spend = r.spend_idr or _ZERO
+        impressions = r.impressions or 0
+        clicks = r.clicks or 0
+        cpm = (spend / impressions * 1000).quantize(Decimal("0.01")) if impressions else None
+        cpc = (spend / clicks).quantize(Decimal("0.01")) if clicks else None
+        ctr = (Decimal(clicks) / impressions * 100).quantize(Decimal("0.01")) if impressions else None
+        persen = (spend / total_spend * 100).quantize(Decimal("0.1")) if total_spend else _ZERO
+        result.append({
+            "nilai": r.nilai,
+            "spend_idr": float(spend),
+            "impressions": impressions,
+            "clicks": clicks,
+            "cpm_idr": float(cpm) if cpm is not None else None,
+            "cpc_idr": float(cpc) if cpc is not None else None,
+            "ctr_persen": float(ctr) if ctr is not None else None,
+            "persen_spend": float(persen),
+        })
+    return result
 
 
 _VALID_TAHAP = {"pra_filter", "filter", "fix_scale_up", "off"}
