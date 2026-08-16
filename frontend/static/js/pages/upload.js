@@ -245,14 +245,19 @@ export class UploadPage {
     const commFile = this.container.querySelector('#file-commission').files[0];
     const clickFile = this.container.querySelector('#file-click').files[0];
     const metaFile  = this.container.querySelector('#file-meta').files[0];
+    const bdPlacement = this.container.querySelector('#file-breakdown-placement').files[0];
+    const bdPlatform  = this.container.querySelector('#file-breakdown-platform').files[0];
+    const bdAge       = this.container.querySelector('#file-breakdown-age').files[0];
+    const anyBreakdown = bdPlacement || bdPlatform || bdAge;
 
-    if (!shopeeId) {
+    const needsShopee = commFile || clickFile;
+    if (needsShopee && !shopeeId) {
       errEl.textContent = 'Pilih akun Shopee terlebih dahulu.';
       errEl.style.display = 'block';
       return;
     }
-    if (!commFile && !metaFile) {
-      errEl.textContent = 'Upload minimal satu file CSV (Shopee Commission atau Meta Ads).';
+    if (!commFile && !metaFile && !anyBreakdown) {
+      errEl.textContent = 'Upload minimal satu file CSV.';
       errEl.style.display = 'block';
       return;
     }
@@ -293,16 +298,15 @@ export class UploadPage {
 
       const metaAccounts = this._accounts.filter(a => a.tipe === 'meta');
       const metaId = metaAccounts[0]?.id;
-      for (const [fileId, label] of [
-        ['file-breakdown-placement', 'Breakdown Penempatan'],
-        ['file-breakdown-platform', 'Breakdown Platform'],
-        ['file-breakdown-age', 'Breakdown Usia & Gender'],
+      for (const [f, label] of [
+        [bdPlacement, 'Breakdown Penempatan'],
+        [bdPlatform,  'Breakdown Platform'],
+        [bdAge,       'Breakdown Usia & Gender'],
       ]) {
-        const f = this.container.querySelector(`#${fileId}`)?.files[0];
         if (f && metaId) {
-          const fd = new FormData();
-          fd.append('file', f);
-          const res = await apiUpload(`/upload/meta-breakdown?meta_account_id=${metaId}`, fd);
+          const fdBd = new FormData();
+          fdBd.append('file', f);
+          const res = await apiUpload(`/upload/meta-breakdown?meta_account_id=${metaId}`, fdBd);
           results.push(`${label}: ${res?.baris_diproses ?? 0} baris berhasil`);
         }
       }
