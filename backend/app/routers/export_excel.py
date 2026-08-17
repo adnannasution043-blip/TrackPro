@@ -318,6 +318,174 @@ async def export_laporan_fix(
 
 
 # ---------------------------------------------------------------------------
+# Endpoint: PRA FILTER ADV — per campaign pra_filter, dua snapshot tanggal
+# ---------------------------------------------------------------------------
+
+@router.get("/laporan-pra-filter")
+async def export_laporan_pra_filter(
+    current_user: CurrentUser,
+    db: DB,
+    tanggal_dari: date = Query(...),
+    tanggal_sampai: date = Query(...),
+    meta_account_id: UUID | None = Query(None),
+    shopee_account_id: UUID | None = Query(None),
+):
+    # Ambil campaign pra_filter milik user
+    q_camp = (
+        sa.select(Campaign)
+        .join(MetaAccount, Campaign.meta_account_id == MetaAccount.id)
+        .where(MetaAccount.user_id == current_user.id, Campaign.tahap == "pra_filter")
+    )
+    if meta_account_id:
+        q_camp = q_camp.where(Campaign.meta_account_id == meta_account_id)
+    campaigns = (await db.execute(q_camp)).scalars().all()
+    if not campaigns:
+        raise HTTPException(404, "Tidak ada campaign dengan tahap Pra Filter.")
+
+    camp_ids = [c.id for c in campaigns]
+
+    # Tag link mapping
+    maps = (await db.execute(
+        sa.select(CampaignTagMap).where(CampaignTagMap.campaign_id.in_(camp_ids))
+    )).scalars().all()
+    camp_to_tags: dict[UUID, list[UUID]] = defaultdict(list)
+    for m in maps:
+        camp_to_tags[m.campaign_id].append(m.tag_link_id)
+    all_tag_ids = list({t for tags in camp_to_tags.values() for t in tags})
+
+    # Spend + klik per (campaign, tanggal) — snapshot hari pertama dan terakhir
+    meta_rows = (await db.execute(
+        sa.select(DailyMetric.campaign_id, DailyMetric.tanggal,
+                  DailyMetric.spend_idr, DailyMetric.clicks_meta)
+        .where(
+            DailyMetric.campaign_id.in_(camp_ids),
+            DailyMetric.tanggal.in_([tanggal_dari, tanggal_sampai]),
+        )
+    )).all()
+    meta_by: dict[UUID, dict[date, dict]] = defaultdict(dict)
+    for r in meta_rows:
+        meta_by[r.campaign_id][r.tanggal] = {
+            "spend": float(r.spend_idr or 0),
+            "clicks": r.clicks_meta or 0,
+        }
+
+    # Komisi + klik shopee per (tag_link) — total seluruh periode
+    shopee_rows = (await db.execute(
+        sa.select(DailyMetric.tag_link_id,
+                  sa.func.sum(DailyMetric.commission_idr).label("total_komisi"),
+                  sa.func.sum(DailyMetric.clicks_shopee).label("total_klik"))
+        .where(
+            DailyMetric.tag_link_id.in_(all_tag_ids) if all_tag_ids else sa.false(),
+            DailyMetric.tanggal >= tanggal_dari,
+            DailyMetric.tanggal <= tanggal_sampai,
+        )
+        .group_by(DailyMetric.tag_link_id)
+    )).all() if all_tag_ids else []
+
+    komisi_by_tag: dict[UUID, float] = {}
+    klik_by_tag: dict[UUID, int] = {}
+    for r in shopee_rows:
+        komisi_by_tag[r.tag_link_id] = float(r.total_komisi or 0)
+        klik_by_tag[r.tag_link_id] = int(r.total_klik or 0)
+
+    # Build workbook
+    wb = Workbook()
+    wb.remove(wb.active)
+
+    d1_label = tanggal_dari.strftime("%-d %B - %H:%M").upper() if hasattr(tanggal_dari, 'strftime') else tanggal_dari.strftime("%d %B").upper()
+    d2_label = tanggal_sampai.strftime("%-d %B - %H:%M").upper() if hasattr(tanggal_sampai, 'strftime') else tanggal_sampai.strftime("%d %B").upper()
+    # Windows-safe date label
+    d1_label = tanggal_dari.strftime("%d %B").lstrip("0").upper()
+    d2_label = tanggal_sampai.strftime("%d %B").lstrip("0").upper()
+
+    sheet_name = tanggal_dari.strftime("%d %B ADV").lstrip("0").upper()[:31]
+    ws = wb.create_sheet(sheet_name)
+
+    # ── Row 1: headers utama ──────────────────────────────────────────────
+    def _h(cell, value):
+        cell.value = value
+        cell.font = _hdr_font_w()
+        cell.fill = _hdr_fill()
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        cell.border = _thin_border()
+
+    _h(ws["A1"], "NAMA CAMPAIGN")
+    _h(ws["B1"], "JENIS")
+    _h(ws["C1"], d1_label)    # span C-E
+    _h(ws["G1"], d2_label)    # span G-J
+    _h(ws["K1"], "KOMISI")
+    _h(ws["L1"], "(%) PROFIT")
+    _h(ws["M1"], "KLIK SHP")
+    _h(ws["N1"], "(%) KLIK")
+    _h(ws["O1"], "NOTE")
+    ws.merge_cells("C1:E1")
+    ws.merge_cells("G1:J1")
+
+    # ── Row 2: sub-headers ────────────────────────────────────────────────
+    tayang_label = f"TAYANG {d1_label}"
+    _h(ws["A2"], tayang_label)
+    _h(ws["C2"], "CPC")
+    _h(ws["D2"], "SPENT")
+    _h(ws["E2"], "KLIK META")
+    _h(ws["G2"], "CPC")
+    _h(ws["H2"], "SPENT")
+    _h(ws["I2"], "(+) 5%")
+    _h(ws["J2"], "KLIK META")
+
+    # ── Data rows ─────────────────────────────────────────────────────────
+    FMT_IDR = "#,##0"
+    FMT_PCT = "0.00%"
+
+    for ridx, camp in enumerate(sorted(campaigns, key=lambda c: c.nama_campaign), start=3):
+        snap1 = meta_by[camp.id].get(tanggal_dari, {})
+        snap2 = meta_by[camp.id].get(tanggal_sampai, {})
+        tag_ids_for_camp = camp_to_tags.get(camp.id, [])
+        total_komisi = sum(komisi_by_tag.get(t, 0) for t in tag_ids_for_camp)
+        total_klik_shp = sum(klik_by_tag.get(t, 0) for t in tag_ids_for_camp)
+
+        ws.cell(ridx, 1, camp.nama_campaign)
+        ws.cell(ridx, 2, "")  # JENIS — isi manual
+
+        # Snapshot 1
+        s1_spend = snap1.get("spend", 0)
+        s1_klik = snap1.get("clicks", 0)
+        if s1_spend:
+            ws.cell(ridx, 4, s1_spend).number_format = FMT_IDR
+        if s1_klik:
+            ws.cell(ridx, 5, s1_klik)
+        if s1_spend and s1_klik:
+            ws.cell(ridx, 3, f"=D{ridx}/E{ridx}").number_format = FMT_IDR
+
+        # Snapshot 2
+        s2_spend = snap2.get("spend", 0)
+        s2_klik = snap2.get("clicks", 0)
+        if s2_spend:
+            ws.cell(ridx, 8, s2_spend).number_format = FMT_IDR
+            ws.cell(ridx, 9, f"=H{ridx}+(H{ridx}*5%)").number_format = FMT_IDR
+        if s2_klik:
+            ws.cell(ridx, 10, s2_klik)
+        if s2_spend and s2_klik:
+            ws.cell(ridx, 7, f"=H{ridx}/J{ridx}").number_format = FMT_IDR
+
+        # Komisi & derived
+        if total_komisi:
+            ws.cell(ridx, 11, total_komisi).number_format = FMT_IDR
+        ws.cell(ridx, 12, f"=IF(I{ridx}=0,\"\",(K{ridx}-I{ridx})/I{ridx})").number_format = FMT_PCT
+        if total_klik_shp:
+            ws.cell(ridx, 13, total_klik_shp)
+        ws.cell(ridx, 14, f"=IF(J{ridx}=0,\"\",M{ridx}/J{ridx})").number_format = FMT_PCT
+
+    # Lebar kolom
+    for col, w in zip("ABCDEFGHIJKLMNO",
+                      [32, 10, 12, 14, 12, 4, 12, 14, 14, 12, 14, 12, 12, 10, 20]):
+        ws.column_dimensions[col].width = w
+    ws.freeze_panes = "C3"
+
+    bulan = tanggal_dari.strftime("%B %Y").upper()
+    return _stream_wb(wb, f"PRA FILTER ADV {bulan}.xlsx")
+
+
+# ---------------------------------------------------------------------------
 # Endpoint: LAP HARIAN — semua tag link, tanpa filter tahap
 # ---------------------------------------------------------------------------
 
