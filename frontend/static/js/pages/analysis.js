@@ -40,30 +40,22 @@ export class AnalysisPage {
         </div>
         <div class="page-header-right" style="position:relative;display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
           <div style="display:flex;gap:8px;align-items:center;">
-            <button id="btn-export-pra" class="btn btn-sm" style="display:flex;align-items:center;gap:5px;font-size:12px;">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              Export PRA FILTER ADV
-            </button>
-            <button id="btn-export-harian" class="btn btn-sm" style="display:flex;align-items:center;gap:5px;font-size:12px;">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              Export LAP HARIAN
-            </button>
-            <button id="btn-export-off-fix" class="btn btn-sm" style="display:flex;align-items:center;gap:5px;font-size:12px;">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              Export OFF FIX Meta
-            </button>
-            <button id="btn-export-filter" class="btn btn-sm" style="display:flex;align-items:center;gap:5px;font-size:12px;">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              Export FILTER Meta
-            </button>
-            <button id="btn-export-fix" class="btn btn-sm" style="display:flex;align-items:center;gap:5px;font-size:12px;">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              Export FIX Meta
-            </button>
-            <button id="btn-export-off" class="btn btn-sm" style="display:flex;align-items:center;gap:5px;font-size:12px;">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              Export OFF Filter Meta
-            </button>
+            <div style="position:relative;">
+              <button id="btn-export" class="btn btn-sm" style="display:flex;align-items:center;gap:5px;font-size:12px;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Export
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="11" height="11"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+              <div id="export-menu" style="display:none;position:absolute;top:calc(100% + 4px);right:0;background:var(--surface,#fff);border:1px solid var(--border,#e5e7eb);border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.14);z-index:400;min-width:195px;padding:4px 0;white-space:nowrap;">
+                <div class="export-item" data-key="pra"    style="padding:8px 14px;font-size:12.5px;cursor:pointer;display:flex;align-items:center;gap:8px;">PRA FILTER ADV</div>
+                <div class="export-item" data-key="harian" style="padding:8px 14px;font-size:12.5px;cursor:pointer;display:flex;align-items:center;gap:8px;">LAP HARIAN</div>
+                <div style="height:1px;background:var(--border,#e5e7eb);margin:3px 0;"></div>
+                <div class="export-item" data-key="off-fix" style="padding:8px 14px;font-size:12.5px;cursor:pointer;display:flex;align-items:center;gap:8px;">OFF FIX Meta</div>
+                <div class="export-item" data-key="filter"  style="padding:8px 14px;font-size:12.5px;cursor:pointer;display:flex;align-items:center;gap:8px;">FILTER Meta</div>
+                <div class="export-item" data-key="fix"     style="padding:8px 14px;font-size:12.5px;cursor:pointer;display:flex;align-items:center;gap:8px;">FIX Meta</div>
+                <div class="export-item" data-key="off"     style="padding:8px 14px;font-size:12.5px;cursor:pointer;display:flex;align-items:center;gap:8px;">OFF Filter Meta</div>
+              </div>
+            </div>
             <button id="btn-date" class="date-range-btn">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
               <span id="date-label">${fmtLabel(this.dari)}</span>
@@ -79,12 +71,34 @@ export class AnalysisPage {
     this._initDatePicker();
     document.addEventListener('click', this._closeDropPanels.bind(this));
 
-    this.container.querySelector('#btn-export-pra')?.addEventListener('click', () => this._exportPra());
-    this.container.querySelector('#btn-export-harian')?.addEventListener('click', () => this._exportHarian());
-    this.container.querySelector('#btn-export-off-fix')?.addEventListener('click', () => this._exportOffFix());
-    this.container.querySelector('#btn-export-filter')?.addEventListener('click', () => this._exportFilter());
-    this.container.querySelector('#btn-export-fix')?.addEventListener('click', () => this._exportFix());
-    this.container.querySelector('#btn-export-off')?.addEventListener('click', () => this._exportOff());
+    // Export dropdown
+    const exportBtn  = this.container.querySelector('#btn-export');
+    const exportMenu = this.container.querySelector('#export-menu');
+    const exportMap  = {
+      pra: () => this._exportPra(),
+      harian: () => this._exportHarian(),
+      'off-fix': () => this._exportOffFix(),
+      filter: () => this._exportFilter(),
+      fix: () => this._exportFix(),
+      off: () => this._exportOff(),
+    };
+    exportBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      const open = exportMenu.style.display !== 'none';
+      this._closeDropPanels();
+      exportMenu.style.display = open ? 'none' : 'block';
+    });
+    exportMenu.querySelectorAll('.export-item').forEach(item => {
+      item.addEventListener('mouseenter', () => { item.style.background = 'var(--hover,#f3f4f6)'; });
+      item.addEventListener('mouseleave', () => { item.style.background = ''; });
+      item.addEventListener('click', e => {
+        e.stopPropagation();
+        exportMenu.style.display = 'none';
+        const fn = exportMap[item.dataset.key];
+        if (fn) fn();
+      });
+    });
+    exportMenu.addEventListener('click', e => e.stopPropagation());
 
     await this._load();
   }
@@ -125,6 +139,8 @@ export class AnalysisPage {
     document.querySelectorAll('.tahap-panel').forEach(p => p.remove());
     const picker = this.container.querySelector('#date-picker');
     if (picker) picker.style.display = 'none';
+    const exportMenu = this.container.querySelector('#export-menu');
+    if (exportMenu) exportMenu.style.display = 'none';
     this._activeDropPanel = null;
   }
 
@@ -266,9 +282,10 @@ export class AnalysisPage {
 
         const id = btn.dataset.id;
         const curTahap = btn.dataset.tahap;
+        const rect = btn.getBoundingClientRect();
         const panel = document.createElement('div');
         panel.className = 'tahap-panel';
-        panel.style.cssText = 'position:absolute;top:calc(100% + 4px);left:0;background:var(--surface,#fff);border:1px solid var(--border,#e5e7eb);border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.12);z-index:300;min-width:160px;padding:4px 0;';
+        panel.style.cssText = `position:fixed;top:${rect.bottom + 4}px;left:${rect.left}px;background:var(--surface,#fff);border:1px solid var(--border,#e5e7eb);border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.15);z-index:9999;min-width:160px;padding:4px 0;`;
 
         TAHAP_KEYS.forEach(key => {
           const isActive = key === curTahap;
@@ -288,7 +305,7 @@ export class AnalysisPage {
           panel.appendChild(item);
         });
 
-        btn.closest('.tahap-drop-wrap').appendChild(panel);
+        document.body.appendChild(panel);
         panel.addEventListener('click', e => e.stopPropagation());
       });
     });
