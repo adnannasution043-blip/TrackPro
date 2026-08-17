@@ -46,6 +46,7 @@ class CampaignRow(BaseModel):
     nama_campaign: str
     status: str
     tahap: str | None
+    jenis_iklan: str | None
     tag_link: str | None
     tag_link_id: UUID | None
     spend_idr: Decimal
@@ -107,3 +108,7 @@ class TopProdukResponse(BaseModel):
 
 class TahapUpdate(BaseModel):
     tahap: str  # pra_filter | filter | fix_scale_up | off
+
+
+class JenisIklanUpdate(BaseModel):
+    jenis_iklan: str | None  # GAMBAR | VIDEO | None

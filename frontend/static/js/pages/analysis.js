@@ -51,7 +51,8 @@ export class AnalysisPage {
                 <div class="export-item" data-key="harian" style="padding:8px 14px;font-size:12.5px;cursor:pointer;display:flex;align-items:center;gap:8px;">LAP HARIAN</div>
                 <div style="height:1px;background:var(--border,#e5e7eb);margin:3px 0;"></div>
                 <div class="export-item" data-key="off-fix" style="padding:8px 14px;font-size:12.5px;cursor:pointer;display:flex;align-items:center;gap:8px;">OFF FIX Meta</div>
-                <div class="export-item" data-key="filter"  style="padding:8px 14px;font-size:12.5px;cursor:pointer;display:flex;align-items:center;gap:8px;">FILTER Meta</div>
+                <div class="export-item" data-key="filter"       style="padding:8px 14px;font-size:12.5px;cursor:pointer;display:flex;align-items:center;gap:8px;">FILTER Meta</div>
+                <div class="export-item" data-key="filter-gambar" style="padding:8px 14px;font-size:12.5px;cursor:pointer;display:flex;align-items:center;gap:8px;">FILTER Meta GAMBAR</div>
                 <div class="export-item" data-key="fix"     style="padding:8px 14px;font-size:12.5px;cursor:pointer;display:flex;align-items:center;gap:8px;">FIX Meta</div>
                 <div class="export-item" data-key="off"     style="padding:8px 14px;font-size:12.5px;cursor:pointer;display:flex;align-items:center;gap:8px;">OFF Filter Meta</div>
               </div>
@@ -79,6 +80,7 @@ export class AnalysisPage {
       harian: () => this._exportHarian(),
       'off-fix': () => this._exportOffFix(),
       filter: () => this._exportFilter(),
+      'filter-gambar': () => this._exportFilterGambar(),
       fix: () => this._exportFix(),
       off: () => this._exportOff(),
     };
@@ -408,6 +410,31 @@ export class AnalysisPage {
     } finally {
       btn.disabled = false;
       btn.innerHTML = orig;
+    }
+  }
+
+  async _exportFilterGambar() {
+    const orig = 'FILTER Meta GAMBAR';
+    try {
+      const qs = filterQS ? filterQS() : '';
+      const token = getToken();
+      const url = `/api/export/laporan-filter-gambar?tanggal_dari=${this.dari}&tanggal_sampai=${this.sampai}${qs}`;
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert('Export gagal: ' + (err.detail || res.statusText));
+        return;
+      }
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      const cd = res.headers.get('Content-Disposition') || '';
+      const match = cd.match(/filename="?([^"]+)"?/);
+      a.download = match ? match[1] : 'FILTER META GAMBAR.xlsx';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch(e) {
+      alert('Export gagal: ' + e.message);
     }
   }
 

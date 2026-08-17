@@ -20,6 +20,7 @@ class Campaign(Base):
     nama_campaign: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="aktif")
     tahap: Mapped[str] = mapped_column(TahapCampaign, nullable=False, server_default="pra_filter")
+    jenis_iklan: Mapped[str | None] = mapped_column(String(20), nullable=True)  # GAMBAR | VIDEO | None
     catatan: Mapped[str | None] = mapped_column(Text)
     ai_score: Mapped[int | None] = mapped_column(SmallInteger)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

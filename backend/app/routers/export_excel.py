@@ -595,6 +595,70 @@ async def export_laporan_filter(
 
 
 # ---------------------------------------------------------------------------
+# Endpoint: FILTER META GAMBAR — filter campaign jenis_iklan=GAMBAR, per campaign
+# ---------------------------------------------------------------------------
+
+@router.get("/laporan-filter-gambar")
+async def export_laporan_filter_gambar(
+    current_user: CurrentUser,
+    db: DB,
+    tanggal_dari: date = Query(...),
+    tanggal_sampai: date = Query(...),
+    meta_account_id: UUID | None = Query(None),
+    shopee_account_id: UUID | None = Query(None),
+):
+    dates = [tanggal_dari + timedelta(days=i)
+             for i in range((tanggal_sampai - tanggal_dari).days + 1)]
+
+    q_camp = (
+        sa.select(Campaign)
+        .join(MetaAccount, Campaign.meta_account_id == MetaAccount.id)
+        .where(
+            MetaAccount.user_id == current_user.id,
+            Campaign.tahap == "filter",
+            Campaign.jenis_iklan == "GAMBAR",
+        )
+    )
+    if meta_account_id:
+        q_camp = q_camp.where(Campaign.meta_account_id == meta_account_id)
+    campaigns = (await db.execute(q_camp)).scalars().all()
+    if not campaigns:
+        raise HTTPException(404, "Tidak ada campaign Filter dengan jenis iklan GAMBAR.")
+    camp_ids = [c.id for c in campaigns]
+
+    maps = (await db.execute(
+        sa.select(CampaignTagMap).where(CampaignTagMap.campaign_id.in_(camp_ids))
+    )).scalars().all()
+    camp_to_tags: dict = defaultdict(list)
+    for m in maps:
+        camp_to_tags[m.campaign_id].append(m.tag_link_id)
+    all_tag_ids = list({t for tags in camp_to_tags.values() for t in tags})
+
+    tag_objs = (await db.execute(
+        sa.select(TagLink).where(TagLink.id.in_(all_tag_ids))
+    )).scalars().all() if all_tag_ids else []
+    tag_name_map = {t.id: t.tag for t in tag_objs}
+
+    meta_by, shopee_by = await _fetch_campaign_data(
+        db, camp_ids, all_tag_ids, tanggal_dari, tanggal_sampai
+    )
+
+    wb = Workbook()
+    wb.remove(wb.active)
+
+    for camp in sorted(campaigns, key=lambda c: c.nama_campaign):
+        ws = wb.create_sheet(camp.nama_campaign[:31])
+        _fill_campaign_sheet(
+            ws, camp.id, camp.nama_campaign,
+            camp_to_tags.get(camp.id, []),
+            tag_name_map, meta_by, shopee_by, dates,
+        )
+
+    bulan = tanggal_dari.strftime("%B %Y").upper()
+    return _stream_wb(wb, f"FILTER META GAMBAR {bulan}.xlsx")
+
+
+# ---------------------------------------------------------------------------
 # Endpoint: OFF FIX META — gabungan tahap off + fix_scale_up, per campaign
 # ---------------------------------------------------------------------------
 
