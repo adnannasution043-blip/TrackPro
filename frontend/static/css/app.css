@@ -1358,6 +1358,22 @@ button { font-family: inherit; cursor: pointer; }
 .plan-duration { font-size: 11px; color: var(--text-muted); text-align: right; }
 .plan-features { font-size: 11.5px; color: var(--text-muted); }
 
+/* ============================================================ Scrollbar */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border, #cbd5e1) transparent;
+}
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--border, #cbd5e1);
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted, #94a3b8); }
+::-webkit-scrollbar-corner { background: transparent; }
+
 /* ============================================================ Responsive */
 
 @media (max-width: 1024px) {
