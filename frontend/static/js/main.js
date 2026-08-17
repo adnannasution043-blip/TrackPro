@@ -205,9 +205,9 @@ function renderShell(path, user) {
             </div>
           </div>
           <div class="topbar-spacer"></div>
-          <div class="topbar-meta-status">
+          <div class="topbar-meta-status" id="topbar-meta-status" style="opacity:0.4;">
             <div class="dot"></div>
-            Meta Terhubung
+            <span id="topbar-meta-label">Meta…</span>
           </div>
           <button class="topbar-group-btn">
             ${icon('group')}
@@ -289,6 +289,9 @@ function updateSidebarLive() {
       if (expEl) expEl.textContent = '–';
     });
   }
+
+  // Status koneksi Meta di topbar
+  _loadMetaStatus();
 
   // Populate filter akun dropdown dari tree
   _initSidebarFilter();
@@ -448,6 +451,42 @@ async function _loadSidebarBalance() {
     if (amountEl?.isConnected) amountEl.textContent = 'Rp —';
     if (updateEl?.isConnected) updateEl.textContent = 'Belum ada data';
   }
+}
+
+async function _loadMetaStatus() {
+  const el = document.getElementById('topbar-meta-status');
+  const label = document.getElementById('topbar-meta-label');
+  if (!el || !label) return;
+  try {
+    const list = await apiFetch('/accounts/meta');
+    if (!list || list.length === 0) {
+      el.style.opacity = '0.4';
+      el.style.color = '';
+      label.textContent = 'Meta Tidak Terhubung';
+      const dot = el.querySelector('.dot');
+      if (dot) dot.style.background = '#9ca3af';
+      return;
+    }
+    const aktif = list.filter(m => m.has_token && m.status_koneksi === 'terhubung');
+    const expired = list.filter(m => m.has_token && m.status_koneksi === 'token_expired');
+    const dot = el.querySelector('.dot');
+    if (aktif.length > 0) {
+      el.style.opacity = '1';
+      el.style.color = '';
+      if (dot) dot.style.background = '';
+      label.textContent = aktif.length === 1 ? 'Meta Terhubung' : `Meta Terhubung (${aktif.length})`;
+    } else if (expired.length > 0) {
+      el.style.opacity = '1';
+      el.style.color = '#f59e0b';
+      if (dot) dot.style.background = '#f59e0b';
+      label.textContent = 'Token Expired';
+    } else {
+      el.style.opacity = '0.4';
+      el.style.color = '';
+      if (dot) dot.style.background = '#9ca3af';
+      label.textContent = 'Belum Ada Token';
+    }
+  } catch (_) {}
 }
 
 // Re-load sidebar balance ketika balance diupdate dari halaman Saldo Iklan
