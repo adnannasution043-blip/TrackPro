@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.routers import accounts, auth, balance, clicks, csv_upload, dashboard, export_excel, orders, taglink
+from app.routers import accounts, auth, balance, clicks, csv_upload, dashboard, export_excel, meta_sync, orders, taglink
 
 app = FastAPI(title="AdCommTrack API", version="0.1.0")
 
@@ -26,6 +26,7 @@ app.include_router(orders.router, prefix="/api/orders", tags=["orders"])
 app.include_router(clicks.router, prefix="/api/clicks", tags=["clicks"])
 app.include_router(balance.router, prefix="/api/balance", tags=["balance"])
 app.include_router(export_excel.router, prefix="/api/export", tags=["export"])
+app.include_router(meta_sync.router, prefix="/api/meta-sync", tags=["meta-sync"])
 
 
 @app.get("/api/health")

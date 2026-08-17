@@ -20,12 +20,18 @@ class MetaAccountUpdate(BaseModel):
     status_koneksi: str | None = None
 
 
+class MetaTokenUpdate(BaseModel):
+    access_token: str  # long-lived token dari Meta (EAA...)
+
+
 class MetaAccountResponse(BaseModel):
     id: UUID
     ad_account_id: str
     nama_tampilan: str
     mata_uang: str
     status_koneksi: str
+    token_expires_at: datetime | None = None
+    has_token: bool = False
     created_at: datetime
 
     model_config = {"from_attributes": True}

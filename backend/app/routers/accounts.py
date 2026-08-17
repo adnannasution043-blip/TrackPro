@@ -6,6 +6,8 @@ from sqlalchemy import delete, select
 
 from app.core.deps import DB, CurrentUser
 from app.models.account import AccountLink, MetaAccount, ShopeeAccount
+from datetime import datetime, timedelta, timezone
+
 from app.schemas.account import (
     AccountItem,
     AccountLinkRequest,
@@ -13,6 +15,7 @@ from app.schemas.account import (
     MetaAccountCreate,
     MetaAccountResponse,
     MetaAccountUpdate,
+    MetaTokenUpdate,
     ShopeeAccountCreate,
     ShopeeAccountResponse,
     ShopeeAccountUpdate,
@@ -124,7 +127,7 @@ async def list_meta_accounts(current_user: CurrentUser, db: DB):
         .where(MetaAccount.user_id == current_user.id)
         .order_by(MetaAccount.created_at)
     )
-    return result.scalars().all()
+    return [_to_meta_response(m) for m in result.scalars().all()]
 
 
 @router.post("/meta", response_model=MetaAccountResponse, status_code=status.HTTP_201_CREATED)
@@ -142,7 +145,7 @@ async def create_meta_account(body: MetaAccountCreate, current_user: CurrentUser
     db.add(account)
     await db.commit()
     await db.refresh(account)
-    return account
+    return _to_meta_response(account)
 
 
 @router.patch("/meta/{account_id}", response_model=MetaAccountResponse)
@@ -152,7 +155,26 @@ async def update_meta_account(account_id: UUID, body: MetaAccountUpdate, current
         setattr(account, field, value)
     await db.commit()
     await db.refresh(account)
-    return account
+    return _to_meta_response(account)
+
+
+@router.patch("/meta/{account_id}/token", status_code=status.HTTP_204_NO_CONTENT)
+async def update_meta_token(account_id: UUID, body: MetaTokenUpdate, current_user: CurrentUser, db: DB):
+    """Simpan long-lived token Meta (berlaku 60 hari)."""
+    account = await _get_meta_account(account_id, current_user.id, db)
+    account.access_token_enc = body.access_token.strip()
+    account.token_expires_at = datetime.now(timezone.utc) + timedelta(days=60)
+    account.status_koneksi = "terhubung"
+    await db.commit()
+
+
+@router.delete("/meta/{account_id}/token", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_meta_token(account_id: UUID, current_user: CurrentUser, db: DB):
+    """Hapus token Meta dari akun."""
+    account = await _get_meta_account(account_id, current_user.id, db)
+    account.access_token_enc = None
+    account.token_expires_at = None
+    await db.commit()
 
 
 @router.delete("/meta/{account_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -273,3 +295,16 @@ async def _assert_shopee_owned(shopee_id: UUID, user_id, db: DB) -> None:
     )
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Akun Shopee tidak ditemukan.")
+
+
+def _to_meta_response(m: MetaAccount) -> MetaAccountResponse:
+    return MetaAccountResponse(
+        id=m.id,
+        ad_account_id=m.ad_account_id,
+        nama_tampilan=m.nama_tampilan,
+        mata_uang=m.mata_uang,
+        status_koneksi=m.status_koneksi,
+        token_expires_at=m.token_expires_at,
+        has_token=bool(m.access_token_enc),
+        created_at=m.created_at,
+    )
