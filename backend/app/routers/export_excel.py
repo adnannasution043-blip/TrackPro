@@ -318,6 +318,282 @@ async def export_laporan_fix(
 
 
 # ---------------------------------------------------------------------------
+# Endpoint: FILTER META — per campaign, kolom tambahan per tag link
+# ---------------------------------------------------------------------------
+
+@router.get("/laporan-filter")
+async def export_laporan_filter(
+    current_user: CurrentUser,
+    db: DB,
+    tanggal_dari: date = Query(...),
+    tanggal_sampai: date = Query(...),
+    meta_account_id: UUID | None = Query(None),
+    shopee_account_id: UUID | None = Query(None),
+):
+    dates = [tanggal_dari + timedelta(days=i)
+             for i in range((tanggal_sampai - tanggal_dari).days + 1)]
+    nd = len(dates)
+
+    # 1. Ambil campaign filter milik user
+    q_camp = (
+        sa.select(Campaign)
+        .join(MetaAccount, Campaign.meta_account_id == MetaAccount.id)
+        .where(MetaAccount.user_id == current_user.id, Campaign.tahap == "filter")
+    )
+    if meta_account_id:
+        q_camp = q_camp.where(Campaign.meta_account_id == meta_account_id)
+    campaigns = (await db.execute(q_camp)).scalars().all()
+    if not campaigns:
+        raise HTTPException(404, "Tidak ada campaign dengan tahap Filter.")
+    camp_ids = [c.id for c in campaigns]
+
+    # 2. Campaign → tag link mapping
+    maps = (await db.execute(
+        sa.select(CampaignTagMap).where(CampaignTagMap.campaign_id.in_(camp_ids))
+    )).scalars().all()
+    camp_to_tags: dict[UUID, list[UUID]] = defaultdict(list)
+    for m in maps:
+        camp_to_tags[m.campaign_id].append(m.tag_link_id)
+    all_tag_ids = list({t for tags in camp_to_tags.values() for t in tags})
+
+    tag_objs = (await db.execute(
+        sa.select(TagLink).where(TagLink.id.in_(all_tag_ids))
+    )).scalars().all() if all_tag_ids else []
+    tag_name_map: dict[UUID, str] = {t.id: t.tag for t in tag_objs}
+
+    # 3. Meta data per (campaign, tanggal)
+    meta_rows = (await db.execute(
+        sa.select(DailyMetric.campaign_id, DailyMetric.tanggal,
+                  DailyMetric.spend_idr, DailyMetric.clicks_meta)
+        .where(
+            DailyMetric.campaign_id.in_(camp_ids),
+            DailyMetric.tanggal >= tanggal_dari,
+            DailyMetric.tanggal <= tanggal_sampai,
+        )
+    )).all()
+    meta_by: dict[UUID, dict[date, dict]] = defaultdict(dict)
+    for r in meta_rows:
+        meta_by[r.campaign_id][r.tanggal] = {
+            "spend": float(r.spend_idr or 0),
+            "clicks": r.clicks_meta or 0,
+        }
+
+    # 4. Shopee data per (tag_link, tanggal)
+    shopee_rows = (await db.execute(
+        sa.select(DailyMetric.tag_link_id, DailyMetric.tanggal,
+                  DailyMetric.commission_idr, DailyMetric.clicks_shopee)
+        .where(
+            DailyMetric.tag_link_id.in_(all_tag_ids),
+            DailyMetric.tanggal >= tanggal_dari,
+            DailyMetric.tanggal <= tanggal_sampai,
+        )
+    )).all() if all_tag_ids else []
+    shopee_by: dict[UUID, dict[date, dict]] = defaultdict(dict)
+    for r in shopee_rows:
+        shopee_by[r.tag_link_id][r.tanggal] = {
+            "komisi": float(r.commission_idr or 0),
+            "klik": r.clicks_shopee or 0,
+        }
+
+    # 5. Akumulasi total per tanggal (untuk TOTAL FILTER sheet)
+    total_by_date: dict[date, dict] = defaultdict(lambda: {
+        "spend": _ZERO, "komisi": _ZERO, "clicks_meta": 0, "clicks_shopee": 0
+    })
+
+    wb = Workbook()
+    wb.remove(wb.active)
+
+    FMT_IDR = "#,##0"
+    FMT_PCT = "0.00%"
+
+    # ── Per-campaign sheets ───────────────────────────────────────────────────
+    MAIN_COLS = ["TGL", "Spend", "(+) 5%", "KOMISI", "PROFIT", "(%) PROFIT",
+                 "Klik FP", "Klik Shp", "(%) Klik", "CPC FP", "CPC Shp"]
+    TAG_SUB = ["TGL", "KOMISI", "Klik Shp", "CPC Shp", "STATUS"]
+    TAG_W = len(TAG_SUB)  # 5
+    TAG_GAP = 1           # 1 kolom kosong antar grup
+    TAG_START_COL = 16    # grup tag pertama mulai kolom 16
+
+    for camp in sorted(campaigns, key=lambda c: c.nama_campaign):
+        sheet_name = camp.nama_campaign[:31]
+        ws = wb.create_sheet(sheet_name)
+
+        # Header baris 1: kolom utama
+        for ci, label in enumerate(MAIN_COLS, start=1):
+            c = ws.cell(1, ci, label)
+            c.font = _hdr_font_w(); c.fill = _hdr_fill()
+            c.alignment = Alignment(horizontal="center"); c.border = _thin_border()
+
+        # Header baris 1: kolom per tag link
+        tag_ids_for_camp = camp_to_tags.get(camp.id, [])
+        for ti, tag_id in enumerate(tag_ids_for_camp):
+            base = TAG_START_COL + ti * (TAG_W + TAG_GAP)
+            tag_label = tag_name_map.get(tag_id, str(tag_id)[:20])
+            # merge header
+            ws.merge_cells(
+                start_row=1, start_column=base,
+                end_row=1, end_column=base + TAG_W - 1
+            )
+            hc = ws.cell(1, base, tag_label)
+            hc.font = _hdr_font_w(); hc.fill = _hdr_fill()
+            hc.alignment = Alignment(horizontal="center"); hc.border = _thin_border()
+            # sub-headers baris 2
+            for si, slabel in enumerate(TAG_SUB):
+                sc = ws.cell(2, base + si, slabel)
+                sc.font = _hdr_font_w(); sc.fill = _hdr_fill()
+                sc.alignment = Alignment(horizontal="center"); sc.border = _thin_border()
+
+        # Data rows (baris 3+)
+        for ridx, d in enumerate(dates, start=3):
+            m = meta_by[camp.id].get(d, {})
+            spend = m.get("spend", 0)
+            clicks_fp = m.get("clicks", 0)
+
+            # Komisi + klik shopee dari semua tag
+            komisi_total = sum(
+                shopee_by[t].get(d, {}).get("komisi", 0) for t in tag_ids_for_camp
+            )
+            klik_shp_total = sum(
+                shopee_by[t].get(d, {}).get("klik", 0) for t in tag_ids_for_camp
+            )
+
+            # Akumulasi total
+            td = total_by_date[d]
+            td["spend"] += Decimal(str(spend))
+            td["komisi"] += Decimal(str(komisi_total))
+            td["clicks_meta"] += clicks_fp
+            td["clicks_shopee"] += klik_shp_total
+
+            # Kolom utama
+            ws.cell(ridx, 1, d).number_format = "DD/MM/YYYY"
+            if spend:
+                ws.cell(ridx, 2, spend).number_format = FMT_IDR
+                ws.cell(ridx, 3, f"=B{ridx}+(B{ridx}*5%)").number_format = FMT_IDR
+            if komisi_total:
+                ws.cell(ridx, 4, komisi_total).number_format = FMT_IDR
+            ws.cell(ridx, 5, f"=IF(C{ridx}=\"\",\"\",D{ridx}-C{ridx})").number_format = FMT_IDR
+            ws.cell(ridx, 6, f"=IF(C{ridx}=0,\"\",(D{ridx}-C{ridx})/C{ridx})").number_format = FMT_PCT
+            if clicks_fp:
+                ws.cell(ridx, 7, clicks_fp)
+            if klik_shp_total:
+                ws.cell(ridx, 8, klik_shp_total)
+            ws.cell(ridx, 9, f"=IF(G{ridx}=0,\"\",H{ridx}/G{ridx})").number_format = FMT_PCT
+            ws.cell(ridx, 10, f"=IF(G{ridx}=0,\"\",C{ridx}/G{ridx})").number_format = FMT_IDR
+            ws.cell(ridx, 11, f"=IF(H{ridx}=0,\"\",D{ridx}/H{ridx})").number_format = FMT_IDR
+
+            # Kolom per tag link
+            for ti, tag_id in enumerate(tag_ids_for_camp):
+                base = TAG_START_COL + ti * (TAG_W + TAG_GAP)
+                s = shopee_by[tag_id].get(d, {})
+                komisi = s.get("komisi", 0)
+                klik = s.get("klik", 0)
+                bc = get_column_letter(base)
+                cc = get_column_letter(base + 1)
+                dc = get_column_letter(base + 2)
+                ec = get_column_letter(base + 3)
+                ws.cell(ridx, base, d).number_format = "DD/MM/YYYY"
+                if komisi:
+                    ws.cell(ridx, base + 1, komisi).number_format = FMT_IDR
+                if klik:
+                    ws.cell(ridx, base + 2, klik)
+                ws.cell(ridx, base + 3,
+                        f"=IF({dc}{ridx}=0,\"\",{cc}{ridx}/{dc}{ridx})").number_format = FMT_IDR
+
+        # Baris TOTAL
+        tr = nd + 3
+        ws.cell(tr, 1, "TOTAL").font = _total_font()
+        for col_i, formula in [
+            (2, f"=SUM(B3:B{nd+2})"),
+            (3, f"=B{tr}+(B{tr}*5%)"),
+            (4, f"=SUM(D3:D{nd+2})"),
+            (5, f"=D{tr}-C{tr}"),
+            (6, f"=IF(C{tr}=0,\"\",(D{tr}-C{tr})/C{tr})"),
+            (7, f"=SUM(G3:G{nd+2})"),
+            (8, f"=SUM(H3:H{nd+2})"),
+            (9, f"=IF(G{tr}=0,\"\",H{tr}/G{tr})"),
+            (10, f"=IF(G{tr}=0,\"\",C{tr}/G{tr})"),
+            (11, f"=IF(H{tr}=0,\"\",D{tr}/H{tr})"),
+        ]:
+            c = ws.cell(tr, col_i, formula)
+            c.number_format = FMT_PCT if col_i in (6, 9) else FMT_IDR
+        _apply_total_row(ws, tr, 11 + len(tag_ids_for_camp) * (TAG_W + TAG_GAP))
+
+        for tag_id in tag_ids_for_camp:
+            for ti2, tid2 in enumerate(tag_ids_for_camp):
+                if tid2 != tag_id:
+                    continue
+                base = TAG_START_COL + ti2 * (TAG_W + TAG_GAP)
+                cc = get_column_letter(base + 1)
+                dc = get_column_letter(base + 2)
+                ws.cell(tr, base + 1, f"=SUM({cc}3:{cc}{nd+2})").number_format = FMT_IDR
+                ws.cell(tr, base + 2, f"=SUM({dc}3:{dc}{nd+2})")
+                ec = get_column_letter(base + 3)
+                ws.cell(tr, base + 3,
+                        f"=IF({dc}{tr}=0,\"\",{cc}{tr}/{dc}{tr})").number_format = FMT_IDR
+
+        # Lebar kolom utama
+        for col, w in zip("ABCDEFGHIJK", [12,14,14,14,14,10,10,10,10,12,12]):
+            ws.column_dimensions[col].width = w
+        # Lebar kolom tag link
+        for ti, tag_id in enumerate(tag_ids_for_camp):
+            base = TAG_START_COL + ti * (TAG_W + TAG_GAP)
+            for offset, w in enumerate([12, 14, 10, 12, 10]):
+                ws.column_dimensions[get_column_letter(base + offset)].width = w
+        ws.freeze_panes = "B3"
+
+    # ── TOTAL FILTER sheet (index 0) ──────────────────────────────────────────
+    TCOLS = ["TGL", "Spend", "(+) 5%", "KOMISI", "PROFIT", "(%) PROFIT",
+             "Klik FP", "Klik Shp", "(%) Klik", "CPC FP", "CPC Shp"]
+    ws_t = wb.create_sheet("TOTAL FILTER", index=0)
+    for ci, label in enumerate(TCOLS, start=1):
+        c = ws_t.cell(1, ci, label)
+        c.font = _hdr_font_w(); c.fill = _hdr_fill()
+        c.alignment = Alignment(horizontal="center"); c.border = _thin_border()
+
+    for ridx, d in enumerate(dates, start=3):
+        td = total_by_date[d]
+        spend = float(td["spend"]); komisi = float(td["komisi"])
+        cm = td["clicks_meta"]; cs = td["clicks_shopee"]
+        ws_t.cell(ridx, 1, d).number_format = "DD/MM/YYYY"
+        if spend:
+            ws_t.cell(ridx, 2, spend).number_format = FMT_IDR
+            ws_t.cell(ridx, 3, f"=B{ridx}+(B{ridx}*5%)").number_format = FMT_IDR
+        if komisi:
+            ws_t.cell(ridx, 4, komisi).number_format = FMT_IDR
+        ws_t.cell(ridx, 5, f"=IF(C{ridx}=\"\",\"\",D{ridx}-C{ridx})").number_format = FMT_IDR
+        ws_t.cell(ridx, 6, f"=IF(C{ridx}=0,\"\",(D{ridx}-C{ridx})/C{ridx})").number_format = FMT_PCT
+        if cm: ws_t.cell(ridx, 7, cm)
+        if cs: ws_t.cell(ridx, 8, cs)
+        ws_t.cell(ridx, 9, f"=IF(G{ridx}=0,\"\",H{ridx}/G{ridx})").number_format = FMT_PCT
+        ws_t.cell(ridx, 10, f"=IF(G{ridx}=0,\"\",C{ridx}/G{ridx})").number_format = FMT_IDR
+        ws_t.cell(ridx, 11, f"=IF(H{ridx}=0,\"\",D{ridx}/H{ridx})").number_format = FMT_IDR
+
+    tr = nd + 3
+    ws_t.cell(tr, 1, "TOTAL").font = _total_font()
+    for col_i, formula in [
+        (2, f"=SUM(B3:B{nd+2})"),
+        (3, f"=B{tr}+(B{tr}*5%)"),
+        (4, f"=SUM(D3:D{nd+2})"),
+        (5, f"=D{tr}-C{tr}"),
+        (6, f"=IF(C{tr}=0,\"\",(D{tr}-C{tr})/C{tr})"),
+        (7, f"=SUM(G3:G{nd+2})"),
+        (8, f"=SUM(H3:H{nd+2})"),
+        (9, f"=IF(G{tr}=0,\"\",H{tr}/G{tr})"),
+        (10, f"=IF(G{tr}=0,\"\",C{tr}/G{tr})"),
+        (11, f"=IF(H{tr}=0,\"\",D{tr}/H{tr})"),
+    ]:
+        c = ws_t.cell(tr, col_i, formula)
+        c.number_format = FMT_PCT if col_i in (6, 9) else FMT_IDR
+    _apply_total_row(ws_t, tr, len(TCOLS))
+    for col, w in zip("ABCDEFGHIJK", [12,14,14,14,14,10,10,10,10,12,12]):
+        ws_t.column_dimensions[col].width = w
+    ws_t.freeze_panes = "B3"
+
+    bulan = tanggal_dari.strftime("%B %Y").upper()
+    return _stream_wb(wb, f"FILTER META {bulan}.xlsx")
+
+
+# ---------------------------------------------------------------------------
 # Endpoint: PRA FILTER ADV — per campaign pra_filter, dua snapshot tanggal
 # ---------------------------------------------------------------------------
 
