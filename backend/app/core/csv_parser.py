@@ -86,7 +86,22 @@ def _read_rows(file_bytes: bytes) -> Iterable[dict]:
 # 1. Meta Ads export
 # ---------------------------------------------------------------------------
 
-REQUIRED_META_COLUMNS = {"Campaign name", "Campaign ID", "Day", "Amount spent (IDR)", "Link clicks"}
+# Setiap alias adalah nama kolom yang diterima (English & Bahasa Indonesia)
+_META_ALIAS: dict[str, list[str]] = {
+    "campaign_name": ["Campaign name", "Nama kampanye"],
+    "campaign_id":   ["Campaign ID"],                                           # opsional
+    "day":           ["Day", "Awal pelaporan", "Akhir pelaporan"],
+    "spend":         ["Amount spent (IDR)", "Jumlah yang dibelanjakan (IDR)"],
+    "clicks":        ["Link clicks", "Klik Tautan Unik"],
+}
+
+
+def _resolve_col(row: dict, aliases: list[str]) -> str | None:
+    """Kembalikan nilai kolom pertama yang ditemukan di aliases, atau None."""
+    for a in aliases:
+        if a in row:
+            return row[a]
+    return None
 
 
 @dataclass
@@ -103,21 +118,37 @@ def parse_meta_ads_csv(file_bytes: bytes) -> list[MetaAdsRow]:
     if not rows:
         return []
 
+    # Validasi: pastikan minimal kolom wajib tersedia (salah satu alias-nya)
     header = set(rows[0].keys())
-    missing = REQUIRED_META_COLUMNS - header
-    if missing:
-        raise CsvParseError(f"Kolom wajib hilang di file Meta Ads: {sorted(missing)}")
+    required_keys = ["campaign_name", "day", "spend", "clicks"]
+    for key in required_keys:
+        if not any(a in header for a in _META_ALIAS[key]):
+            raise CsvParseError(
+                f"Kolom wajib '{key}' tidak ditemukan. "
+                f"Diharapkan salah satu dari: {_META_ALIAS[key]}"
+            )
 
     parsed: list[MetaAdsRow] = []
-    for i, row in enumerate(rows, start=2):  # baris 1 = header
+    for i, row in enumerate(rows, start=2):
         try:
+            nama = _resolve_col(row, _META_ALIAS["campaign_name"]) or ""
+            if not nama:
+                continue  # skip baris kosong / total
+
+            # Campaign ID opsional — fallback ke nama kampanye sebagai identifier
+            campaign_id = _resolve_col(row, _META_ALIAS["campaign_id"]) or nama
+
+            spend_raw = _resolve_col(row, _META_ALIAS["spend"]) or "0"
+            clicks_raw = _resolve_col(row, _META_ALIAS["clicks"]) or "0"
+            day_raw = _resolve_col(row, _META_ALIAS["day"]) or ""
+
             parsed.append(
                 MetaAdsRow(
-                    meta_campaign_id=row["Campaign ID"],
-                    nama_campaign=row["Campaign name"],
-                    tanggal=_to_date(row["Day"]),
-                    spend_idr=_to_decimal(row["Amount spent (IDR)"]),
-                    clicks_meta=int(row["Link clicks"] or 0),
+                    meta_campaign_id=campaign_id,
+                    nama_campaign=nama,
+                    tanggal=_to_date(day_raw),
+                    spend_idr=_to_decimal(spend_raw),
+                    clicks_meta=int(clicks_raw.split(".")[0] or 0),
                 )
             )
         except CsvParseError as exc:
@@ -129,12 +160,17 @@ def parse_meta_ads_csv(file_bytes: bytes) -> list[MetaAdsRow]:
 # 2. Shopee Commission export
 # ---------------------------------------------------------------------------
 
-REQUIRED_SHOPEE_COMMISSION_COLUMNS = {
-    "Order ID", "Order Status", "Commission", "Sales Amount", "Sub ID", "Order Time",
+_COMMISSION_ALIAS: dict[str, list[str]] = {
+    "order_id":    ["Order ID", "ID Pemesanan"],
+    "order_status":["Order Status", "Status Pesanan"],
+    "commission":  ["Commission", "Komisi Bersih Affiliate (Rp)", "Total Komisi per Pesanan(Rp)"],
+    "sales":       ["Sales Amount", "Nilai Pembelian(Rp)"],
+    "sub_id":      ["Sub ID", "Tag_link1"],
+    "order_time":  ["Order Time", "Waktu Pemesanan"],
 }
 
-# Kolom opsional — nama bervariasi tergantung setting bahasa Shopee Affiliate
-_PRODUK_COLS = ("Product Name", "Nama Produk", "Product")
+# Kolom opsional — nama bervariasi tergantung bahasa Shopee Affiliate
+_PRODUK_COLS = ("Product Name", "Nama Produk", "Product", "Nama Barange", "Nama Barang")
 _TOKO_COLS   = ("Shop Name", "Seller Name", "Nama Toko", "Toko")
 _QTY_COLS    = ("Quantity", "Qty", "Jumlah")
 
@@ -152,7 +188,7 @@ class ShopeeCommissionRow:
     status: str          # dinormalisasi ke: completed / pending / unpaid / cancelled
     commission_idr: Decimal
     sales_idr: Decimal
-    tag: str              # dari kolom "Sub ID" -> ini yang jadi tag_link
+    tag: str              # dari kolom "Sub ID" / "Tag_link1" -> jadi tag_link
     tanggal_order: date
     nama_produk: str | None = None
     nama_toko: str | None = None
@@ -168,6 +204,7 @@ _STATUS_MAP = {
     "cancelled": "cancelled",
     "canceled": "cancelled",
     "dibatalkan": "cancelled",
+    "ada": "pending",  # kolom "Status Pemebelian" kadang isi "Ada"
 }
 
 
@@ -184,22 +221,33 @@ def parse_shopee_commission_csv(file_bytes: bytes) -> list[ShopeeCommissionRow]:
         return []
 
     header = set(rows[0].keys())
-    missing = REQUIRED_SHOPEE_COMMISSION_COLUMNS - header
-    if missing:
-        raise CsvParseError(f"Kolom wajib hilang di file Shopee Commission: {sorted(missing)}")
+    for key, aliases in _COMMISSION_ALIAS.items():
+        if not any(a in header for a in aliases):
+            raise CsvParseError(
+                f"Kolom wajib '{key}' tidak ditemukan. "
+                f"Diharapkan salah satu dari: {aliases}"
+            )
 
     parsed: list[ShopeeCommissionRow] = []
     for i, row in enumerate(rows, start=2):
         try:
+            order_id = _resolve_col(row, _COMMISSION_ALIAS["order_id"]) or ""
+            if not order_id:
+                continue
+
             qty_raw = _find_col(row, _QTY_COLS)
+            tag_raw = _resolve_col(row, _COMMISSION_ALIAS["sub_id"]) or "non-meta"
+            # Shopee sering kirim tag dengan suffix "----", bersihkan
+            tag = tag_raw.rstrip("-").strip() or "non-meta"
+
             parsed.append(
                 ShopeeCommissionRow(
-                    order_id=row["Order ID"],
-                    status=_normalize_status(row["Order Status"]),
-                    commission_idr=_to_decimal(row["Commission"]),
-                    sales_idr=_to_decimal(row["Sales Amount"]),
-                    tag=row["Sub ID"] or "non-meta",
-                    tanggal_order=_to_date(row["Order Time"]),
+                    order_id=order_id,
+                    status=_normalize_status(_resolve_col(row, _COMMISSION_ALIAS["order_status"]) or ""),
+                    commission_idr=_to_decimal(_resolve_col(row, _COMMISSION_ALIAS["commission"]) or "0"),
+                    sales_idr=_to_decimal(_resolve_col(row, _COMMISSION_ALIAS["sales"]) or "0"),
+                    tag=tag,
+                    tanggal_order=_to_date(_resolve_col(row, _COMMISSION_ALIAS["order_time"]) or ""),
                     nama_produk=_find_col(row, _PRODUK_COLS),
                     nama_toko=_find_col(row, _TOKO_COLS),
                     qty=int(qty_raw) if qty_raw and qty_raw.isdigit() else 1,
@@ -212,9 +260,14 @@ def parse_shopee_commission_csv(file_bytes: bytes) -> list[ShopeeCommissionRow]:
 
 # ---------------------------------------------------------------------------
 # 3. Shopee Click export
+#
+# Dua format yang diterima:
+# A. Aggregated (lama): Sub ID, Date, Clicks, Source    → 1 baris per (tag, tanggal, sumber)
+# B. Raw log  (baru):   Tag_link, Waktu Klik, Perujuk   → 1 baris per klik, perlu digroup
 # ---------------------------------------------------------------------------
 
 REQUIRED_SHOPEE_CLICK_COLUMNS = {"Sub ID", "Date", "Clicks", "Source"}
+_SHOPEE_CLICK_RAW_COLS = {"Tag_link", "Waktu Klik", "Perujuk"}
 
 
 @dataclass
@@ -231,16 +284,49 @@ def parse_shopee_click_csv(file_bytes: bytes) -> list[ShopeeClickRow]:
         return []
 
     header = set(rows[0].keys())
+
+    # --- Format B: raw click log per baris ---
+    if _SHOPEE_CLICK_RAW_COLS <= header:
+        counts: dict[tuple[str, date, str], int] = {}
+        for i, row in enumerate(rows, start=2):
+            try:
+                tag_raw = row.get("Tag_link", "") or "non-meta"
+                # Hapus suffix "----" yang ditambah Shopee pada tag
+                tag = tag_raw.rstrip("-").strip() or "non-meta"
+
+                waktu_raw = row.get("Waktu Klik", "")
+                if not waktu_raw:
+                    continue
+                # Format "2026-08-14 23:59:54" → ambil tanggal saja
+                tanggal = _to_date(waktu_raw.split(" ")[0])
+
+                sumber = row.get("Perujuk", "") or "Others"
+                key = (tag, tanggal, sumber)
+                counts[key] = counts.get(key, 0) + 1
+            except CsvParseError as exc:
+                raise CsvParseError(f"Baris {i}: {exc}") from exc
+
+        return [
+            ShopeeClickRow(tag=tag, tanggal=tgl, clicks=n, sumber=src)
+            for (tag, tgl, src), n in counts.items()
+        ]
+
+    # --- Format A: aggregated ---
     missing = REQUIRED_SHOPEE_CLICK_COLUMNS - header
     if missing:
-        raise CsvParseError(f"Kolom wajib hilang di file Shopee Click: {sorted(missing)}")
+        raise CsvParseError(
+            f"Kolom wajib hilang di file Shopee Click: {sorted(missing)}. "
+            f"Pastikan file adalah laporan klik Shopee Affiliate."
+        )
 
     parsed: list[ShopeeClickRow] = []
     for i, row in enumerate(rows, start=2):
         try:
+            tag_raw = row.get("Sub ID", "") or "non-meta"
+            tag = tag_raw.rstrip("-").strip() or "non-meta"
             parsed.append(
                 ShopeeClickRow(
-                    tag=row["Sub ID"] or "non-meta",
+                    tag=tag,
                     tanggal=_to_date(row["Date"]),
                     clicks=int(row["Clicks"] or 0),
                     sumber=row["Source"] or "Others",
