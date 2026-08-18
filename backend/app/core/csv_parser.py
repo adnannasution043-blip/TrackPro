@@ -65,9 +65,11 @@ def _to_decimal(raw: str) -> Decimal:
 
 
 def _to_date(raw: str) -> date:
+    # Buang komponen waktu kalau ada (misal "2026-08-14 23:54:14" → "2026-08-14")
+    date_part = raw.strip().split(" ")[0]
     for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%d-%b-%y"):
         try:
-            return datetime.strptime(raw.strip(), fmt).date()
+            return datetime.strptime(date_part, fmt).date()
         except ValueError:
             continue
     raise CsvParseError(f"Format tanggal tidak dikenali: {raw!r}")
