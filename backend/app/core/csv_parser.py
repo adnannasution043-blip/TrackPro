@@ -203,6 +203,7 @@ _STATUS_MAP = {
     "pending": "pending",
     "tertunda": "pending",
     "unpaid": "unpaid",
+    "belum dibayar": "unpaid",
     "cancelled": "cancelled",
     "canceled": "cancelled",
     "dibatalkan": "cancelled",
