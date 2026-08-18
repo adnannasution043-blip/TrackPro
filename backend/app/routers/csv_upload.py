@@ -94,6 +94,7 @@ async def upload_shopee_commission(
     current_user: CurrentUser,
     db: DB,
     shopee_account_id: UUID = Query(...),
+    tag_slot: int = Query(1, ge=1, le=5),
 ):
     await _assert_shopee_account_owned(shopee_account_id, current_user.id, db)
     raw = await file.read()
@@ -102,7 +103,7 @@ async def upload_shopee_commission(
                                shopee_account_id=shopee_account_id)
 
     try:
-        rows = parse_shopee_commission_csv(raw)
+        rows = parse_shopee_commission_csv(raw, tag_slot=tag_slot)
     except CsvParseError as exc:
         return await _fail_import(import_log, db, str(exc))
 
@@ -216,6 +217,7 @@ async def upload_shopee_click(
     current_user: CurrentUser,
     db: DB,
     shopee_account_id: UUID = Query(...),
+    tag_slot: int = Query(1, ge=1, le=5),
 ):
     await _assert_shopee_account_owned(shopee_account_id, current_user.id, db)
     raw = await file.read()

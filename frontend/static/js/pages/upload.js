@@ -242,6 +242,7 @@ export class UploadPage {
     successEl.style.display = 'none';
 
     const shopeeId = this.container.querySelector('#sel-shopee').value;
+    const tagSlot  = this.container.querySelector('#sel-slot').value || '1';
     const commFile = this.container.querySelector('#file-commission').files[0];
     const clickFile = this.container.querySelector('#file-click').files[0];
     const metaFile  = this.container.querySelector('#file-meta').files[0];
@@ -271,14 +272,14 @@ export class UploadPage {
       if (commFile) {
         const fd = new FormData();
         fd.append('file', commFile);
-        const res = await apiUpload(`/upload/shopee-commission?shopee_account_id=${shopeeId}`, fd);
+        const res = await apiUpload(`/upload/shopee-commission?shopee_account_id=${shopeeId}&tag_slot=${tagSlot}`, fd);
         results.push(`Komisi: ${res?.baris_diproses ?? 0} baris berhasil`);
       }
 
       if (clickFile) {
         const fd = new FormData();
         fd.append('file', clickFile);
-        const res = await apiUpload(`/upload/shopee-click?shopee_account_id=${shopeeId}`, fd);
+        const res = await apiUpload(`/upload/shopee-click?shopee_account_id=${shopeeId}&tag_slot=${tagSlot}`, fd);
         results.push(`Klik: ${res?.baris_diproses ?? 0} baris berhasil`);
       }
 

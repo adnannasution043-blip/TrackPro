@@ -215,13 +215,20 @@ def _normalize_status(raw: str) -> str:
     return _STATUS_MAP[key]
 
 
-def parse_shopee_commission_csv(file_bytes: bytes) -> list[ShopeeCommissionRow]:
+def parse_shopee_commission_csv(file_bytes: bytes, tag_slot: int = 1) -> list[ShopeeCommissionRow]:
     rows = list(_read_rows(file_bytes))
     if not rows:
         return []
 
+    # Bangun alias sub_id: utamakan kolom slot yang dipilih, lalu fallback ke yang lain
+    slot_col = f"Tag_link{tag_slot}"
+    other_slots = [f"Tag_link{i}" for i in range(1, 6) if i != tag_slot]
+    sub_id_aliases = [slot_col, "Sub ID"] + other_slots
+
+    alias = {**_COMMISSION_ALIAS, "sub_id": sub_id_aliases}
+
     header = set(rows[0].keys())
-    for key, aliases in _COMMISSION_ALIAS.items():
+    for key, aliases in alias.items():
         if not any(a in header for a in aliases):
             raise CsvParseError(
                 f"Kolom wajib '{key}' tidak ditemukan. "
@@ -231,23 +238,23 @@ def parse_shopee_commission_csv(file_bytes: bytes) -> list[ShopeeCommissionRow]:
     parsed: list[ShopeeCommissionRow] = []
     for i, row in enumerate(rows, start=2):
         try:
-            order_id = _resolve_col(row, _COMMISSION_ALIAS["order_id"]) or ""
+            order_id = _resolve_col(row, alias["order_id"]) or ""
             if not order_id:
                 continue
 
             qty_raw = _find_col(row, _QTY_COLS)
-            tag_raw = _resolve_col(row, _COMMISSION_ALIAS["sub_id"]) or "non-meta"
+            tag_raw = _resolve_col(row, alias["sub_id"]) or "non-meta"
             # Shopee sering kirim tag dengan suffix "----", bersihkan
             tag = tag_raw.rstrip("-").strip() or "non-meta"
 
             parsed.append(
                 ShopeeCommissionRow(
                     order_id=order_id,
-                    status=_normalize_status(_resolve_col(row, _COMMISSION_ALIAS["order_status"]) or ""),
-                    commission_idr=_to_decimal(_resolve_col(row, _COMMISSION_ALIAS["commission"]) or "0"),
-                    sales_idr=_to_decimal(_resolve_col(row, _COMMISSION_ALIAS["sales"]) or "0"),
+                    status=_normalize_status(_resolve_col(row, alias["order_status"]) or ""),
+                    commission_idr=_to_decimal(_resolve_col(row, alias["commission"]) or "0"),
+                    sales_idr=_to_decimal(_resolve_col(row, alias["sales"]) or "0"),
                     tag=tag,
-                    tanggal_order=_to_date(_resolve_col(row, _COMMISSION_ALIAS["order_time"]) or ""),
+                    tanggal_order=_to_date(_resolve_col(row, alias["order_time"]) or ""),
                     nama_produk=_find_col(row, _PRODUK_COLS),
                     nama_toko=_find_col(row, _TOKO_COLS),
                     qty=int(qty_raw) if qty_raw and qty_raw.isdigit() else 1,
