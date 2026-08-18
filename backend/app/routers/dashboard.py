@@ -450,6 +450,77 @@ async def get_campaign_breakdown(
     return result
 
 
+@router.get("/laporan-harian2")
+async def get_laporan_harian2(
+    current_user: CurrentUser,
+    db: DB,
+    tanggal_dari: date = Query(...),
+    tanggal_sampai: date = Query(...),
+    shopee_account_id: UUID | None = Query(None),
+):
+    """Laporan harian komisi dikelompokkan per keyword tag link."""
+
+    def _sum_if(keyword: str):
+        return sa.func.coalesce(
+            sa.func.sum(
+                sa.case(
+                    (TagLink.tag.ilike(f"%{keyword}%"), DailyMetric.commission_idr),
+                    else_=sa.literal(Decimal("0")),
+                )
+            ),
+            Decimal("0"),
+        )
+
+    q = (
+        sa.select(
+            DailyMetric.tanggal,
+            _sum_if("live").label("komisi_live"),
+            _sum_if("story").label("komisi_story"),
+            _sum_if("feed").label("komisi_feed"),
+            _sum_if("meta").label("komisi_meta"),
+            _sum_if("adu").label("komisi_adu"),
+            _sum_if("terra").label("komisi_terra"),
+        )
+        .join(TagLink, DailyMetric.tag_link_id == TagLink.id)
+        .join(ShopeeAccount, TagLink.shopee_account_id == ShopeeAccount.id)
+        .where(
+            ShopeeAccount.user_id == current_user.id,
+            DailyMetric.tag_link_id.isnot(None),
+            DailyMetric.tanggal.between(tanggal_dari, tanggal_sampai),
+        )
+        .group_by(DailyMetric.tanggal)
+        .order_by(DailyMetric.tanggal)
+    )
+    if shopee_account_id:
+        q = q.where(TagLink.shopee_account_id == shopee_account_id)
+
+    rows = (await db.execute(q)).all()
+
+    result = []
+    for r in rows:
+        live  = r.komisi_live  or _ZERO
+        story = r.komisi_story or _ZERO
+        feed  = r.komisi_feed  or _ZERO
+        meta  = r.komisi_meta  or _ZERO
+        adu   = r.komisi_adu   or _ZERO
+        terra = r.komisi_terra or _ZERO
+        total_fp    = live + story + feed
+        total_iklan = meta + adu + terra
+        result.append({
+            "tanggal":      str(r.tanggal),
+            "komisi_live":  float(live),
+            "komisi_story": float(story),
+            "komisi_feed":  float(feed),
+            "total_fp":     float(total_fp),
+            "komisi_meta":  float(meta),
+            "komisi_adu":   float(adu),
+            "komisi_terra": float(terra),
+            "total_iklan":  float(total_iklan),
+            "total_kotor":  float(total_fp + total_iklan),
+        })
+    return result
+
+
 _VALID_TAHAP = {"pra_filter", "filter", "fix_scale_up", "off"}
 
 

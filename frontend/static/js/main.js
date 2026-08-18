@@ -19,11 +19,13 @@ import { MetaAccountPage } from './pages/meta_account.js';
 import { CardGeneratorPage } from './pages/card_generator.js';
 import { TaxPage } from './pages/tax.js';
 import { AdsTrackerPage } from './pages/ads_tracker.js';
+import { LaporanHarian2Page } from './pages/laporan_harian2.js';
 
 const NAV_ITEMS = [
   { section: 'RINGKASAN' },
   { path: '/dashboard', label: 'Dasbor', icon: 'dashboard' },
   { path: '/daily', label: 'Laporan Harian', icon: 'calendar' },
+  { path: '/laporan-harian2', label: 'Laporan Harian 2', icon: 'calendar' },
   { path: '/campaigns', label: 'Kampanye Meta', icon: 'megaphone' },
   { path: '/analysis', label: 'Analisis Iklan', icon: 'chart' },
   { groupLink: 'Laporan Komisi', icon: 'coin', path: '/commission', children: [
@@ -511,6 +513,7 @@ const routes = {
   '/card-generator': guard(CardGeneratorPage),
   '/ads-tracker': guard(AdsTrackerPage),
   '/tax': guard(TaxPage),
+  '/laporan-harian2': guard(LaporanHarian2Page),
 };
 
 function getContainer(path) {
