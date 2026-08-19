@@ -302,13 +302,13 @@ export class IklanPage {
         const rect = btn.getBoundingClientRect();
         const panel = document.createElement('div');
         panel.className = 'tahap-panel';
-        panel.style.cssText = `position:fixed;top:${rect.bottom+4}px;left:${rect.left}px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.15);z-index:9999;min-width:160px;padding:4px 0;`;
+        panel.style.cssText = `position:fixed;top:${rect.bottom+4}px;left:${rect.left}px;background:#ffffff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.18);z-index:9999;min-width:160px;padding:4px 0;`;
         TAHAP_KEYS.forEach(key => {
           const isActive = key === curTahap;
           const item = document.createElement('div');
-          item.style.cssText = `padding:8px 14px;cursor:pointer;font-size:12.5px;font-weight:500;display:flex;align-items:center;justify-content:space-between;gap:8px;${isActive?'background:#fef2f2;color:#dc2626;':'color:var(--text);'}`;
+          item.style.cssText = `padding:8px 14px;cursor:pointer;font-size:12.5px;font-weight:500;display:flex;align-items:center;justify-content:space-between;gap:8px;${isActive?'background:#fef2f2;color:#dc2626;':'color:#111827;'}`;
           item.innerHTML = `<span>${TAHAP_LABELS[key]}</span>${isActive?'<span style="font-size:10px;font-weight:700;padding:1px 5px;background:#dc2626;color:#fff;border-radius:3px;">AKTIF</span>':''}`;
-          item.addEventListener('mouseenter', () => { if(!isActive) item.style.background='var(--bg-muted)'; });
+          item.addEventListener('mouseenter', () => { if(!isActive) item.style.background='#f9fafb'; });
           item.addEventListener('mouseleave', () => { if(!isActive) item.style.background=''; });
           item.addEventListener('click', ev => {
             ev.stopPropagation(); panel.remove();
@@ -383,7 +383,7 @@ export class IklanPage {
     const rect = btn.getBoundingClientRect();
     const popup = document.createElement('div');
     popup.className = 'catatan-popup';
-    popup.style.cssText = `position:fixed;top:${rect.bottom+6}px;right:${window.innerWidth-rect.right}px;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,0.16);z-index:9999;width:300px;padding:14px;`;
+    popup.style.cssText = `position:fixed;top:${rect.bottom+6}px;right:${window.innerWidth-rect.right}px;background:#ffffff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,0.18);z-index:9999;width:300px;padding:14px;`;
     popup.innerHTML = `
       <div style="font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">Catatan Iklan</div>
       <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.nama_campaign}</div>
