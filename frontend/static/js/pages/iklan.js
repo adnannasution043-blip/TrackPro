@@ -203,9 +203,11 @@ export class IklanPage {
         <td style="white-space:nowrap;">${epc!=null ? rp(Math.round(epc)) : '—'}</td>
         <td style="font-weight:600;color:${laba>=0?'#16a34a':'#dc2626'};white-space:nowrap;">${laba>=0?'+':'-'}${rp(Math.abs(Math.round(laba)))}</td>
         <td style="font-weight:600;color:${roi!=null&&roi>=0?'#16a34a':'#dc2626'};white-space:nowrap;">${roi!=null?pct(roi):'—'}</td>
-        <td style="padding:4px;width:32px;">
-          <button class="btn btn-sm" style="padding:2px 6px;" title="Catatan" onclick="event.stopPropagation()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        <td style="padding:4px;width:36px;text-align:center;">
+          <button class="btn btn-sm catatan-btn" data-catatan-id="${r.id}"
+            style="padding:2px 6px;position:relative;" title="${r.catatan ? r.catatan : 'Tambah catatan'}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="${r.catatan?'#2563eb':'currentColor'}" stroke-width="2" width="13" height="13"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            ${r.catatan ? '<span style="position:absolute;top:1px;right:1px;width:6px;height:6px;border-radius:50%;background:#2563eb;"></span>' : ''}
           </button>
         </td>
       </tr>`;
@@ -322,6 +324,15 @@ export class IklanPage {
       });
     });
 
+    // Catatan button
+    el.querySelectorAll('.catatan-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const r = this._rows.find(x => x.id === btn.dataset.catatanId);
+        if (r) this._showCatatanPopup(r, btn, el);
+      });
+    });
+
     // Klik baris → modal
     el.querySelectorAll('.iklan-row').forEach(row => {
       row.addEventListener('click', e => {
@@ -367,6 +378,60 @@ export class IklanPage {
     });
   }
 
+  _showCatatanPopup(r, btn, tableEl) {
+    document.querySelectorAll('.catatan-popup').forEach(p => p.remove());
+    const rect = btn.getBoundingClientRect();
+    const popup = document.createElement('div');
+    popup.className = 'catatan-popup';
+    popup.style.cssText = `position:fixed;top:${rect.bottom+6}px;right:${window.innerWidth-rect.right}px;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,0.16);z-index:9999;width:300px;padding:14px;`;
+    popup.innerHTML = `
+      <div style="font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">Catatan Iklan</div>
+      <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.nama_campaign}</div>
+      <textarea id="popup-catatan" placeholder="Tulis catatan…" rows="4"
+        style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;resize:vertical;background:var(--bg-muted);color:var(--text);font-family:inherit;outline:none;">${r.catatan||''}</textarea>
+      <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:10px;">
+        <button id="popup-hapus" class="btn btn-sm" style="font-size:12px;color:#dc2626;border-color:#fca5a5;">Hapus</button>
+        <button id="popup-batal" class="btn btn-sm" style="font-size:12px;">Batal</button>
+        <button id="popup-simpan" class="btn btn-primary btn-sm" style="font-size:12px;">Simpan</button>
+      </div>`;
+    document.body.appendChild(popup);
+    popup.addEventListener('click', e => e.stopPropagation());
+
+    const close = () => popup.remove();
+    popup.querySelector('#popup-batal').addEventListener('click', close);
+    popup.querySelector('#popup-hapus').addEventListener('click', async () => {
+      close();
+      try {
+        await apiFetch(`/dashboard/campaigns/${r.id}/catatan`, {
+          method: 'PATCH', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ catatan: null }),
+        });
+        const row = this._rows.find(x => x.id === r.id);
+        if (row) row.catatan = null;
+        this._renderContent(tableEl);
+      } catch(e) { alert(e.message || 'Gagal menghapus catatan.'); }
+    });
+    popup.querySelector('#popup-simpan').addEventListener('click', async () => {
+      const val = popup.querySelector('#popup-catatan').value.trim();
+      close();
+      try {
+        await apiFetch(`/dashboard/campaigns/${r.id}/catatan`, {
+          method: 'PATCH', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ catatan: val || null }),
+        });
+        const row = this._rows.find(x => x.id === r.id);
+        if (row) row.catatan = val || null;
+        this._renderContent(tableEl);
+      } catch(e) { alert(e.message || 'Gagal menyimpan catatan.'); }
+    });
+
+    const outsideClick = e => {
+      if (!popup.contains(e.target)) { popup.remove(); document.removeEventListener('click', outsideClick); }
+    };
+    setTimeout(() => document.addEventListener('click', outsideClick), 10);
+    popup.querySelector('#popup-catatan').focus();
+  }
+
   async _showModal(r) {
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
@@ -378,6 +443,7 @@ export class IklanPage {
             <p style="font-size:11px;color:var(--text-muted);">
               ${r.tag_link ? `Tag: <strong>${r.tag_link}</strong> · ` : ''}
               ${TAHAP_LABELS[r.tahap]||'Pra Filter'}
+              ${r.catatan ? `· <span style="color:#2563eb;">📝 ${r.catatan.slice(0,40)}${r.catatan.length>40?'…':''}</span>` : ''}
             </p>
           </div>
           <button class="modal-close" id="modal-close">×</button>
@@ -532,6 +598,7 @@ export class IklanPage {
 
   _closePanels() {
     document.querySelectorAll('.tahap-panel').forEach(p => p.remove());
+    document.querySelectorAll('.catatan-popup').forEach(p => p.remove());
     const m = this.container.querySelector('#export-menu');
     if (m) m.style.display = 'none';
   }

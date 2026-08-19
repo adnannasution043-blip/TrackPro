@@ -59,6 +59,7 @@ class CampaignRow(BaseModel):
     roi_persen: Decimal | None
     cpc: Decimal | None
     hari: int
+    catatan: str | None = None
 
 
 class CampaignsResponse(BaseModel):
@@ -112,3 +113,7 @@ class TahapUpdate(BaseModel):
 
 class JenisIklanUpdate(BaseModel):
     jenis_iklan: str | None  # GAMBAR | VIDEO | None
+
+
+class CatatanUpdate(BaseModel):
+    catatan: str | None = None

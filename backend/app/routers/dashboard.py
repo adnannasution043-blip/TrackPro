@@ -24,7 +24,7 @@ from app.models.campaign import Campaign, CampaignTagMap, TagLink
 from app.models.metrics import DailyMetric, MetaBreakdown, OrderSnapshot
 from app.schemas.dashboard import (
     CampaignHarianResponse, CampaignHarianRow, CampaignRow, CampaignsResponse,
-    DashboardResponse, DashboardSummary, HarianRow, JenisIklanUpdate, TahapUpdate,
+    CatatanUpdate, DashboardResponse, DashboardSummary, HarianRow, JenisIklanUpdate, TahapUpdate,
     TopProdukResponse, TopProdukRow,
 )
 
@@ -211,6 +211,7 @@ async def get_campaigns(
             Campaign.status,
             Campaign.tahap,
             Campaign.jenis_iklan,
+            Campaign.catatan,
             sa.func.coalesce(sa.func.sum(DailyMetric.spend_idr), _ZERO).label("spend_idr"),
             sa.func.coalesce(sa.func.sum(DailyMetric.clicks_meta), 0).label("clicks_meta"),
             sa.func.count(sa.distinct(DailyMetric.tanggal)).label("hari"),
@@ -221,7 +222,7 @@ async def get_campaigns(
             sa.and_(DailyMetric.campaign_id == Campaign.id, DailyMetric.tanggal.between(dari, sampai)),
         )
         .where(MetaAccount.user_id == current_user.id)
-        .group_by(Campaign.id, Campaign.nama_campaign, Campaign.status, Campaign.tahap, Campaign.jenis_iklan)
+        .group_by(Campaign.id, Campaign.nama_campaign, Campaign.status, Campaign.tahap, Campaign.jenis_iklan, Campaign.catatan)
         .order_by(sa.func.coalesce(sa.func.sum(DailyMetric.spend_idr), _ZERO).desc())
     )
     if meta_account_id:
@@ -289,6 +290,7 @@ async def get_campaigns(
             roi_persen=roi,
             cpc=cpc,
             hari=r.hari or 0,
+            catatan=r.catatan,
         ))
 
     return CampaignsResponse(campaigns=campaigns)
@@ -544,6 +546,26 @@ async def update_campaign_tahap(
         raise HTTPException(404, "Campaign tidak ditemukan.")
 
     camp.tahap = body.tahap
+    await db.commit()
+
+
+@router.patch("/campaigns/{campaign_id}/catatan", status_code=204)
+async def update_campaign_catatan(
+    campaign_id: UUID,
+    body: CatatanUpdate,
+    current_user: CurrentUser,
+    db: DB,
+):
+    from fastapi import HTTPException
+    camp = (await db.execute(
+        sa.select(Campaign)
+        .join(MetaAccount, Campaign.meta_account_id == MetaAccount.id)
+        .where(Campaign.id == campaign_id, MetaAccount.user_id == current_user.id)
+    )).scalar_one_or_none()
+    if not camp:
+        raise HTTPException(404, "Campaign tidak ditemukan.")
+
+    camp.catatan = body.catatan or None
     await db.commit()
 
 
