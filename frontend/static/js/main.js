@@ -26,7 +26,7 @@ import { KomisiBersihPage } from './pages/komisi_bersih.js';
 const NAV_ITEMS = [
   { section: 'RINGKASAN' },
   // { path: '/dashboard', label: 'Dasbor', icon: 'dashboard' },
-  { path: '/daily', label: 'Laporan Harian', icon: 'calendar' },
+  // { path: '/daily', label: 'Laporan Harian', icon: 'calendar' },
   { path: '/laporan-harian2', label: 'Laporan Harian 2', icon: 'calendar' },
   { path: '/komisi-bersih', label: 'Komisi Bersih', icon: 'coin' },
   // { path: '/campaigns', label: 'Kampanye Meta', icon: 'megaphone' },
