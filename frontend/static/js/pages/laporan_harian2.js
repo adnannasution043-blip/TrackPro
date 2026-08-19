@@ -1,19 +1,21 @@
 import { apiFetch } from '../api.js';
+import { filterQS } from '../filter-state.js';
 
-const rp = n => Number(n || 0).toLocaleString('id-ID');
+const rp  = n => 'Rp ' + Number(n || 0).toLocaleString('id-ID');
+const num = n => n != null ? Number(n).toLocaleString('id-ID') : '—';
+const rpSigned = n => (n >= 0 ? '+Rp ' : '-Rp ') + Math.abs(n).toLocaleString('id-ID');
 
 const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+const FULL_MONTHS  = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+const FULL_DAYS    = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+
 function fmtDate(s) {
   const [y, m, d] = s.split('-');
   return `${d}-${MONTHS_SHORT[+m - 1]}-${y.slice(2)}`;
 }
-function todayStr() { return new Date().toISOString().split('T')[0]; }
-function firstOfMonth() {
-  const n = new Date();
-  return new Date(n.getFullYear(), n.getMonth(), 1).toISOString().split('T')[0];
-}
+function todayStr()    { return new Date().toISOString().split('T')[0]; }
+function firstOfMonth(){ const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), 1).toISOString().split('T')[0]; }
 
-// Definisi filter: key → kolom data yang ditampilkan
 const FILTERS = [
   { key: 'semua',  label: 'Semua' },
   { key: 'live',   label: 'Shopee Live' },
@@ -22,13 +24,24 @@ const FILTERS = [
   { key: 'terra',  label: 'Terra' },
 ];
 
+const CAT_ROWS = [
+  { key: 'komisi_live',  label: 'Live',     group: 'FP' },
+  { key: 'komisi_story', label: 'Story',    group: 'FP' },
+  { key: 'komisi_feed',  label: 'Few Feed', group: 'FP' },
+  { key: 'komisi_meta',  label: 'Meta',     group: 'Iklan' },
+  { key: 'komisi_adu',   label: 'Adu',      group: 'Iklan' },
+  { key: 'komisi_terra', label: 'Terra',    group: 'Iklan' },
+];
+
 export class LaporanHarian2Page {
   constructor(container) {
     this.container = container;
-    this.dari    = firstOfMonth();
-    this.sampai  = todayStr();
-    this._rows   = [];
-    this._filter = 'semua';
+    this.dari      = firstOfMonth();
+    this.sampai    = todayStr();
+    this._rows     = [];       // dari /dashboard (metrics harian)
+    this._bdMap    = {};       // dari /laporan-harian2 (breakdown kategori), key = tanggal
+    this._filter   = 'semua';
+    this._expanded = new Set();
   }
 
   async render() {
@@ -36,7 +49,7 @@ export class LaporanHarian2Page {
       <div class="page-header">
         <div class="page-header-left">
           <h1>Laporan Harian 2</h1>
-          <p>Komisi harian dikelompokkan per kategori tag link.</p>
+          <p>Performa harian dengan breakdown komisi per kategori. Klik ▶ untuk expand, klik tanggal untuk detail produk.</p>
         </div>
         <div class="page-header-right" style="display:flex;gap:8px;align-items:center;">
           <input type="date" id="inp-dari"   class="form-input" style="width:140px;" value="${this.dari}">
@@ -48,15 +61,13 @@ export class LaporanHarian2Page {
 
       <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;" id="filter-pills">
         ${FILTERS.map(f => `
-          <button class="pill-filter${f.key === this._filter ? ' active' : ''}"
-                  data-filter="${f.key}"
-                  style="padding:6px 16px;border-radius:20px;border:1.5px solid var(--border);
-                         background:${f.key === this._filter ? 'var(--primary)' : 'var(--bg-card)'};
-                         color:${f.key === this._filter ? '#fff' : 'var(--text)'};
-                         font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;">
+          <button class="pill-filter${f.key === this._filter ? ' active' : ''}" data-filter="${f.key}"
+            style="padding:6px 16px;border-radius:20px;border:1.5px solid ${f.key === this._filter ? 'var(--primary)' : 'var(--border)'};
+                   background:${f.key === this._filter ? 'var(--primary)' : 'var(--bg-card)'};
+                   color:${f.key === this._filter ? '#fff' : 'var(--text)'};
+                   font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;">
             ${f.label}
-          </button>
-        `).join('')}
+          </button>`).join('')}
       </div>
 
       <div class="card" style="padding:0;overflow:hidden;">
@@ -69,6 +80,7 @@ export class LaporanHarian2Page {
     this.container.querySelector('#btn-terapkan').addEventListener('click', () => {
       this.dari   = this.container.querySelector('#inp-dari').value;
       this.sampai = this.container.querySelector('#inp-sampai').value;
+      this._expanded.clear();
       this._load();
     });
 
@@ -76,12 +88,11 @@ export class LaporanHarian2Page {
       const btn = e.target.closest('[data-filter]');
       if (!btn) return;
       this._filter = btn.dataset.filter;
-      // Update pill style
       this.container.querySelectorAll('[data-filter]').forEach(b => {
-        const active = b.dataset.filter === this._filter;
-        b.style.background = active ? 'var(--primary)' : 'var(--bg-card)';
-        b.style.color      = active ? '#fff' : 'var(--text)';
-        b.style.borderColor = active ? 'var(--primary)' : 'var(--border)';
+        const on = b.dataset.filter === this._filter;
+        b.style.background   = on ? 'var(--primary)' : 'var(--bg-card)';
+        b.style.color        = on ? '#fff' : 'var(--text)';
+        b.style.borderColor  = on ? 'var(--primary)' : 'var(--border)';
       });
       this._render();
     });
@@ -93,120 +104,326 @@ export class LaporanHarian2Page {
     const wrap = this.container.querySelector('#tbl-wrap');
     wrap.innerHTML = '<div class="loading" style="padding:32px;text-align:center;">Memuat…</div>';
     try {
-      this._rows = await apiFetch(
-        `/dashboard/laporan-harian2?tanggal_dari=${this.dari}&tanggal_sampai=${this.sampai}`
-      );
+      const qs = filterQS ? filterQS() : '';
+      const [dash, bd] = await Promise.all([
+        apiFetch(`/dashboard?tanggal_dari=${this.dari}&tanggal_sampai=${this.sampai}${qs}`),
+        apiFetch(`/dashboard/laporan-harian2?tanggal_dari=${this.dari}&tanggal_sampai=${this.sampai}${qs}`),
+      ]);
+      this._rows  = dash?.harian || [];
+      this._bdMap = {};
+      for (const row of (bd || [])) this._bdMap[row.tanggal] = row;
       this._render();
     } catch (e) {
       wrap.innerHTML = `<div class="alert alert-error" style="margin:16px;">${e.message}</div>`;
     }
   }
 
-  _render() {
-    const rows = this._rows;
-    const wrap = this.container.querySelector('#tbl-wrap');
+  _visible() {
+    const f = this._filter;
+    if (f === 'semua') return this._rows;
+    const key = f === 'live' ? 'komisi_live' : f === 'meta' ? 'komisi_meta'
+              : f === 'adu'  ? 'komisi_adu'  : 'komisi_terra';
+    return this._rows.filter(r => {
+      const bd = this._bdMap[r.tanggal];
+      return bd && Number(bd[key] || 0) > 0;
+    });
+  }
 
-    if (!rows || rows.length === 0) {
+  _render() {
+    const wrap = this.container.querySelector('#tbl-wrap');
+    const rows = this._visible();
+
+    if (!rows.length) {
       wrap.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);">Tidak ada data untuk rentang tanggal ini.</div>';
       return;
     }
 
-    const f = this._filter;
+    // Totals
+    const tSpend  = rows.reduce((s, r) => s + Number(r.spend_idr  || 0), 0);
+    const tKomisi = rows.reduce((s, r) => s + Number(r.komisi     || 0), 0);
+    const tLaba   = rows.reduce((s, r) => s + Number(r.laba       || 0), 0);
+    const tClM    = rows.reduce((s, r) => s + Number(r.clicks_meta|| 0), 0);
+    const tClS    = rows.reduce((s, r) => s + Number(r.clicks_shopee||0), 0);
+    const tOrd    = rows.reduce((s, r) => s + Number(r.orders_selesai||0) + Number(r.orders_tertunda||0), 0);
+    const tPlus5  = tSpend * 1.05;
+    const tEpc    = tClS > 0 ? tKomisi / tClS : null;
+    const tRoi    = tSpend > 0 ? tLaba / tSpend * 100 : null;
+    const tCpcFp  = tClM > 0 ? tSpend / tClM : null;
+    const tPctKlik = tClM > 0 ? tClS / tClM * 100 : null;
 
-    // Untuk filter spesifik: tampilkan tabel ringkas 1 kolom + total
-    if (f !== 'semua') {
-      const colMap = {
-        live:  { label: 'Shopee Live',  key: 'komisi_live'  },
-        meta:  { label: 'Meta',         key: 'komisi_meta'  },
-        adu:   { label: 'Adu',          key: 'komisi_adu'   },
-        terra: { label: 'Terra',        key: 'komisi_terra' },
-      };
-      const col   = colMap[f];
-      const total = rows.reduce((s, r) => s + (r[col.key] || 0), 0);
-
-      wrap.innerHTML = `
-        <table class="data-table" style="min-width:320px;">
-          <thead>
-            <tr>
-              <th style="text-align:left;">TGL</th>
-              <th style="text-align:right;">Komisi ${col.label}</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rows.map(r => `
-              <tr>
-                <td style="white-space:nowrap;font-weight:500;">${fmtDate(r.tanggal)}</td>
-                <td style="text-align:right;font-weight:600;color:var(--primary);">${rp(r[col.key])}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-          <tfoot>
-            <tr style="background:var(--bg-muted);font-weight:700;">
-              <td>TOTAL</td>
-              <td style="text-align:right;color:var(--primary);">${rp(total)}</td>
-            </tr>
-          </tfoot>
-        </table>
-      `;
-      return;
-    }
-
-    // Filter "Semua" → tabel lengkap
-    const tot = rows.reduce((a, r) => {
-      a.live  += r.komisi_live  || 0;
-      a.story += r.komisi_story || 0;
-      a.feed  += r.komisi_feed  || 0;
-      a.fp    += r.total_fp     || 0;
-      a.meta  += r.komisi_meta  || 0;
-      a.adu   += r.komisi_adu   || 0;
-      a.terra += r.komisi_terra || 0;
-      a.iklan += r.total_iklan  || 0;
-      a.kotor += r.total_kotor  || 0;
-      return a;
-    }, { live:0, story:0, feed:0, fp:0, meta:0, adu:0, terra:0, iklan:0, kotor:0 });
-
-    const th = (...labels) => labels.map(l => `<th style="text-align:right;">${l}</th>`).join('');
-    const td = (...vals)   => vals.map(v => `<td style="text-align:right;">${rp(v)}</td>`).join('');
+    const rowsHtml = rows.map((r, i) => this._rowHtml(r, i)).join('');
 
     wrap.innerHTML = `
-      <table class="data-table" style="min-width:900px;">
+      <table class="data-table" style="font-size:12.5px;min-width:1100px;">
         <thead>
-          <tr style="background:var(--bg-card);">
-            <th rowspan="2" style="text-align:left;white-space:nowrap;">TGL</th>
-            <th colspan="3" style="text-align:center;border-bottom:1px solid var(--border);">Komisi FP</th>
-            <th rowspan="2" style="text-align:right;white-space:nowrap;">Total<br>Komisi FP</th>
-            <th colspan="3" style="text-align:center;border-bottom:1px solid var(--border);">Komisi Iklan</th>
-            <th rowspan="2" style="text-align:right;white-space:nowrap;">Total<br>Komisi Iklan</th>
-            <th rowspan="2" style="text-align:right;white-space:nowrap;">Total<br>Komisi Kotor</th>
-          </tr>
-          <tr style="background:var(--bg-card);">
-            ${th('Live', 'Story', 'Few Feed', 'Meta', 'Adu', 'Terra')}
+          <tr>
+            <th style="width:28px;"></th>
+            <th style="min-width:90px;">TGL</th>
+            <th>SPEND</th>
+            <th style="white-space:nowrap;">(+) 5%</th>
+            <th style="white-space:nowrap;">KLIK FP</th>
+            <th style="white-space:nowrap;">KLIK SHOPEE</th>
+            <th style="white-space:nowrap;">(%) KLIK</th>
+            <th style="white-space:nowrap;">CPC FP</th>
+            <th># ORDER</th>
+            <th>KOMISI</th>
+            <th>EPC</th>
+            <th>PROFIT</th>
+            <th style="white-space:nowrap;">(%) PROFIT</th>
           </tr>
         </thead>
-        <tbody>
-          ${rows.map(r => `
-            <tr>
-              <td style="white-space:nowrap;font-weight:500;">${fmtDate(r.tanggal)}</td>
-              ${td(r.komisi_live, r.komisi_story, r.komisi_feed)}
-              <td style="text-align:right;font-weight:600;">${rp(r.total_fp)}</td>
-              ${td(r.komisi_meta, r.komisi_adu, r.komisi_terra)}
-              <td style="text-align:right;font-weight:600;">${rp(r.total_iklan)}</td>
-              <td style="text-align:right;font-weight:700;color:var(--primary);">${rp(r.total_kotor)}</td>
-            </tr>
-          `).join('')}
+        <tbody id="tbl-body">
+          ${rowsHtml}
         </tbody>
         <tfoot>
-          <tr style="background:var(--bg-muted);font-weight:700;">
-            <td>TOTAL</td>
-            ${td(tot.live, tot.story, tot.feed)}
-            <td style="text-align:right;">${rp(tot.fp)}</td>
-            ${td(tot.meta, tot.adu, tot.terra)}
-            <td style="text-align:right;">${rp(tot.iklan)}</td>
-            <td style="text-align:right;color:var(--primary);">${rp(tot.kotor)}</td>
+          <tr style="font-weight:700;background:var(--bg-muted);border-top:2px solid var(--border);font-size:12px;">
+            <td></td>
+            <td style="font-weight:800;">TOTAL (${rows.length} hari)</td>
+            <td>${rp(Math.round(tSpend))}</td>
+            <td>${rp(Math.round(tPlus5))}</td>
+            <td>${num(tClM)}</td>
+            <td>${num(tClS)}</td>
+            <td>${tPctKlik != null ? tPctKlik.toFixed(1) + '%' : '—'}</td>
+            <td>${tCpcFp != null ? rp(Math.round(tCpcFp)) : '—'}</td>
+            <td>${num(tOrd)}</td>
+            <td style="color:#10b981;">${rp(Math.round(tKomisi))}</td>
+            <td>${tEpc != null ? rp(Math.round(tEpc)) : '—'}</td>
+            <td style="color:${tLaba >= 0 ? '#16a34a' : '#dc2626'};">${rpSigned(Math.round(tLaba))}</td>
+            <td style="color:${tRoi != null && tRoi >= 0 ? '#16a34a' : '#dc2626'};">${tRoi != null ? (tRoi >= 0 ? '+' : '') + tRoi.toFixed(1) + '%' : '—'}</td>
           </tr>
         </tfoot>
-      </table>
-    `;
+      </table>`;
+
+    // Wire expand buttons
+    wrap.querySelectorAll('.exp-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const tgl = btn.dataset.tgl;
+        if (this._expanded.has(tgl)) this._expanded.delete(tgl);
+        else this._expanded.add(tgl);
+        this._render();
+      });
+    });
+
+    // Wire modal (click tanggal)
+    wrap.querySelectorAll('.tgl-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const r = this._rows.find(x => x.tanggal === btn.dataset.tgl);
+        if (r) this._showModal(r);
+      });
+    });
+  }
+
+  _rowHtml(r, i) {
+    const spend   = Number(r.spend_idr   || 0);
+    const komisi  = Number(r.komisi      || 0);
+    const laba    = Number(r.laba        || 0);
+    const clM     = Number(r.clicks_meta || 0);
+    const clS     = Number(r.clicks_shopee || 0);
+    const ord     = Number(r.orders_selesai || 0) + Number(r.orders_tertunda || 0);
+    const tertunda = Number(r.orders_tertunda || 0);
+    const plus5   = spend * 1.05;
+    const epc     = clS > 0 ? komisi / clS : null;
+    const roi     = spend > 0 ? laba / spend * 100 : null;
+    const cpcFp   = clM > 0 ? spend / clM : null;
+    const pctKlik = clM > 0 ? clS / clM * 100 : null;
+    const isExp   = this._expanded.has(r.tanggal);
+    const bd      = this._bdMap[r.tanggal];
+
+    const expandBtn = `
+      <button class="exp-btn" data-tgl="${r.tanggal}"
+        style="width:22px;height:22px;border:1px solid var(--border);border-radius:4px;background:var(--bg-muted);
+               cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .15s;
+               ${isExp ? 'transform:rotate(90deg);border-color:#dc2626;color:#dc2626;' : ''}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="10" height="10"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>`;
+
+    const mainRow = `
+      <tr style="background:${i % 2 === 0 ? 'var(--bg-card)' : 'var(--bg-muted)'};${isExp ? 'border-bottom:none;' : ''}">
+        <td style="padding:6px 8px;">${expandBtn}</td>
+        <td>
+          <button class="tgl-btn" data-tgl="${r.tanggal}"
+            style="background:none;border:none;cursor:pointer;font-weight:700;font-size:13px;color:#2563eb;padding:0;text-decoration:underline;text-underline-offset:2px;">
+            ${fmtDate(r.tanggal)}
+          </button>
+        </td>
+        <td style="white-space:nowrap;">${rp(spend)}</td>
+        <td style="white-space:nowrap;color:var(--text-muted);">${rp(Math.round(plus5))}</td>
+        <td>${num(clM)}</td>
+        <td>${num(clS)}</td>
+        <td style="${pctKlik != null && pctKlik < 10 ? 'color:#dc2626;' : ''}">${pctKlik != null ? pctKlik.toFixed(1) + '%' : '—'}</td>
+        <td>${cpcFp != null ? rp(Math.round(cpcFp)) : '—'}</td>
+        <td>
+          ${num(ord)}
+          ${tertunda > 0 ? `<span style="font-size:10px;padding:1px 5px;background:#fef3c7;color:#d97706;border-radius:3px;margin-left:4px;">+${tertunda}</span>` : ''}
+        </td>
+        <td style="color:#10b981;font-weight:500;">${rp(Math.round(komisi))}</td>
+        <td>${epc != null ? rp(Math.round(epc)) : '—'}</td>
+        <td style="font-weight:600;color:${laba >= 0 ? '#16a34a' : '#dc2626'};">${rpSigned(Math.round(laba))}</td>
+        <td style="font-weight:600;color:${roi != null && roi >= 0 ? '#16a34a' : '#dc2626'};">${roi != null ? (roi >= 0 ? '+' : '') + roi.toFixed(1) + '%' : '—'}</td>
+      </tr>`;
+
+    if (!isExp) return mainRow;
+
+    // Sub-rows per kategori
+    const catRows = CAT_ROWS.map(cat => {
+      const val = bd ? Number(bd[cat.key] || 0) : 0;
+      const groupColor = cat.group === 'FP' ? '#7c3aed' : '#dc2626';
+      return `<tr style="background:#fafafa;">
+        <td></td>
+        <td style="padding-left:32px;">
+          <span style="font-size:11px;font-weight:600;padding:1px 7px;border-radius:3px;
+            background:${cat.group === 'FP' ? '#f5f3ff' : '#fef2f2'};
+            color:${groupColor};border:1px solid ${cat.group === 'FP' ? '#ede9fe' : '#fecaca'};">
+            ${cat.label}
+          </span>
+        </td>
+        <td colspan="7" style="color:var(--text-muted);font-size:12px;">Komisi ${cat.group}</td>
+        <td style="font-weight:600;color:${val > 0 ? '#10b981' : 'var(--text-muted)'};">
+          ${val > 0 ? rp(Math.round(val)) : '—'}
+        </td>
+        <td colspan="3"></td>
+      </tr>`;
+    }).join('');
+
+    // Totals sub-row
+    const tFP    = bd ? Number(bd.total_fp    || 0) : 0;
+    const tIklan = bd ? Number(bd.total_iklan || 0) : 0;
+    const tKotor = bd ? Number(bd.total_kotor || 0) : 0;
+    const totalsRow = `<tr style="background:#f0fdf4;border-top:1px dashed #bbf7d0;border-bottom:2px solid var(--border);">
+      <td></td>
+      <td style="padding-left:32px;font-size:11px;font-weight:700;color:#15803d;text-transform:uppercase;">Total</td>
+      <td colspan="7" style="font-size:11.5px;color:var(--text-muted);">
+        FP: <strong style="color:#7c3aed;">${rp(Math.round(tFP))}</strong>
+        &nbsp;·&nbsp;
+        Iklan: <strong style="color:#dc2626;">${rp(Math.round(tIklan))}</strong>
+      </td>
+      <td style="font-weight:700;color:#15803d;">${rp(Math.round(tKotor))}</td>
+      <td colspan="3"></td>
+    </tr>`;
+
+    return mainRow + catRows + totalsRow;
+  }
+
+  async _showModal(r) {
+    const dt       = new Date(r.tanggal + 'T00:00:00');
+    const judulTgl = `${dt.getDate()} ${FULL_MONTHS[dt.getMonth()]} ${dt.getFullYear()}`;
+    const judulHari = FULL_DAYS[dt.getDay()];
+    const laba  = Number(r.laba || 0);
+    const spend = Number(r.spend_idr || 0);
+    const roi   = spend > 0 ? laba / spend * 100 : 0;
+    const totalOrders = Number(r.orders_selesai||0) + Number(r.orders_tertunda||0) + Number(r.orders_batal||0);
+
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal" style="max-width:720px;width:95vw;max-height:90vh;display:flex;flex-direction:column;">
+        <div class="modal-header" style="flex-shrink:0;">
+          <div><h2 style="font-size:17px;">${judulTgl} · ${judulHari}</h2></div>
+          <button class="modal-close" id="modal-close">×</button>
+        </div>
+        <div class="modal-body" style="flex:1;overflow-y:auto;padding-top:12px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:14px;">
+            <div style="padding:12px;border:1px solid #e5e7eb;border-radius:8px;">
+              <div style="font-size:10.5px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px;">SPEND</div>
+              <div style="font-size:16px;font-weight:700;">${rp(spend)}</div>
+            </div>
+            <div style="padding:12px;border:1px solid #e5e7eb;border-radius:8px;">
+              <div style="font-size:10.5px;font-weight:700;color:#10b981;text-transform:uppercase;margin-bottom:4px;">KOMISI</div>
+              <div style="font-size:16px;font-weight:700;color:#10b981;">${rp(r.komisi)}</div>
+            </div>
+            <div style="padding:12px;border:1px solid #e5e7eb;border-radius:8px;">
+              <div style="font-size:10.5px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px;">NET PROFIT</div>
+              <div style="font-size:16px;font-weight:700;color:${laba>=0?'#16a34a':'#dc2626'};">${rpSigned(Math.round(laba))}</div>
+            </div>
+            <div style="padding:12px;border:1px solid #e5e7eb;border-radius:8px;">
+              <div style="font-size:10.5px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px;">ROI</div>
+              <div style="font-size:16px;font-weight:700;color:${roi>=0?'#16a34a':'#dc2626'};">${roi>=0?'+':''}${roi.toFixed(2).replace('.',',')}%</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#f9fafb;border-radius:8px;margin-bottom:14px;font-size:12.5px;flex-wrap:wrap;">
+            <span style="font-weight:600;">${totalOrders} orders →</span>
+            <span style="color:#16a34a;">Selesai <span id="m-selesai" style="font-weight:700;">${r.orders_selesai||0}</span></span>
+            <span style="color:#f59e0b;">Diproses <span id="m-diproses" style="font-weight:700;">…</span></span>
+            <span style="color:#9ca3af;">Belum Dibayar <span id="m-unpaid" style="font-weight:700;">…</span></span>
+            <span style="color:#ef4444;">Dibatalkan <span id="m-batal" style="font-weight:700;">${r.orders_batal||0}</span></span>
+          </div>
+          <div style="display:flex;gap:0;border-bottom:2px solid #e5e7eb;margin-bottom:0;">
+            ${['Top Komisi','Top Penjualan','Top Produk'].map((t,i)=>
+              `<button class="modal-tab" data-tab="${i}"
+                style="padding:8px 16px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:600;
+                color:${i===0?'#dc2626':'#6b7280'};border-bottom:${i===0?'2px solid #dc2626':'2px solid transparent'};margin-bottom:-2px;">${t}</button>`
+            ).join('')}
+            <span style="margin-left:auto;padding:8px 14px;font-size:11px;font-weight:700;color:#9ca3af;letter-spacing:.05em;">TOP 30</span>
+          </div>
+          <div id="modal-tab-content" style="min-height:200px;">
+            <div class="loading" style="padding:32px;text-align:center;">Memuat data produk…</div>
+          </div>
+        </div>
+      </div>`;
+
+    document.body.appendChild(overlay);
+    overlay.querySelector('#modal-close').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+    let activeTab = 0;
+    let topData   = null;
+
+    const renderTabContent = (data, tab) => {
+      const lists = [data.top_komisi, data.top_penjualan, data.top_produk];
+      const rows  = lists[tab] || [];
+      const noData = rows.length === 0 || (rows.length === 1 && rows[0].nama_produk === '—');
+      const content = overlay.querySelector('#modal-tab-content');
+      if (noData) {
+        content.innerHTML = `<div class="empty" style="padding:40px;text-align:center;color:#9ca3af;">Tidak ada data produk.<br><span style="font-size:12px;">Upload ulang Shopee CSV yang menyertakan kolom Product Name.</span></div>`;
+        return;
+      }
+      content.innerHTML = `<div class="table-wrap"><table class="data-table" style="font-size:12px;">
+        <thead><tr>
+          <th style="width:28px;">#</th><th>PRODUK</th><th>TOKO</th>
+          <th style="text-align:right;">QTY</th>
+          <th style="text-align:right;">PENJUALAN</th>
+          <th style="text-align:right;color:#10b981;">KOMISI</th>
+        </tr></thead>
+        <tbody>${rows.map((p,i)=>`<tr>
+          <td style="color:#9ca3af;font-weight:700;">${i+1}</td>
+          <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${p.nama_produk}">${p.nama_produk}</td>
+          <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#6b7280;" title="${p.nama_toko||''}">${p.nama_toko||'—'}</td>
+          <td style="text-align:right;">${num(p.qty)}</td>
+          <td style="text-align:right;">${rp(p.penjualan)}</td>
+          <td style="text-align:right;color:#10b981;font-weight:600;">${rp(p.komisi)}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>`;
+    };
+
+    try {
+      const qs = filterQS ? filterQS() : '';
+      topData = await apiFetch(`/dashboard/top-products?tanggal=${r.tanggal}${qs}`);
+      if (topData) {
+        const el = id => overlay.querySelector(id);
+        if (el('#m-diproses')) el('#m-diproses').textContent = num(topData.orders_diproses);
+        if (el('#m-unpaid'))   el('#m-unpaid').textContent   = num(topData.orders_tertunda);
+        if (el('#m-batal'))    el('#m-batal').textContent    = num(topData.orders_batal);
+        if (el('#m-selesai'))  el('#m-selesai').textContent  = num(topData.orders_selesai);
+        renderTabContent(topData, activeTab);
+      }
+    } catch {
+      overlay.querySelector('#modal-tab-content').innerHTML =
+        `<div class="empty" style="padding:40px;text-align:center;color:#9ca3af;">Tidak ada data produk untuk hari ini.</div>`;
+    }
+
+    overlay.querySelectorAll('.modal-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        activeTab = Number(btn.dataset.tab);
+        overlay.querySelectorAll('.modal-tab').forEach((b, i) => {
+          const on = i === activeTab;
+          b.style.color        = on ? '#dc2626' : '#6b7280';
+          b.style.borderBottom = on ? '2px solid #dc2626' : '2px solid transparent';
+        });
+        if (topData) renderTabContent(topData, activeTab);
+      });
+    });
   }
 
   destroy() {}
