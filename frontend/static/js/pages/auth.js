@@ -8,7 +8,7 @@ export class AuthPage {
   }
 
   async render() {
-    if (getToken()) { redirect('/dashboard'); return; }
+    if (getToken()) { redirect('/laporan-harian2'); return; }
 
     this.container.innerHTML = `
       <div class="auth-wrap">
@@ -97,7 +97,7 @@ export class AuthPage {
 
       if (body?.access_token) {
         setToken(body.access_token);
-        redirect('/dashboard');
+        redirect('/laporan-harian2');
       }
     } catch (err) {
       errEl.textContent = err.message;

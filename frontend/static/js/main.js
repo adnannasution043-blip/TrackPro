@@ -24,7 +24,7 @@ import { IklanPage } from './pages/iklan.js';
 
 const NAV_ITEMS = [
   { section: 'RINGKASAN' },
-  { path: '/dashboard', label: 'Dasbor', icon: 'dashboard' },
+  // { path: '/dashboard', label: 'Dasbor', icon: 'dashboard' },
   { path: '/daily', label: 'Laporan Harian', icon: 'calendar' },
   { path: '/laporan-harian2', label: 'Laporan Harian 2', icon: 'calendar' },
   // { path: '/campaigns', label: 'Kampanye Meta', icon: 'megaphone' },
