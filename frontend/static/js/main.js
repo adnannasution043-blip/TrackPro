@@ -21,12 +21,14 @@ import { TaxPage } from './pages/tax.js';
 import { AdsTrackerPage } from './pages/ads_tracker.js';
 import { LaporanHarian2Page } from './pages/laporan_harian2.js';
 import { IklanPage } from './pages/iklan.js';
+import { KomisiBersihPage } from './pages/komisi_bersih.js';
 
 const NAV_ITEMS = [
   { section: 'RINGKASAN' },
   // { path: '/dashboard', label: 'Dasbor', icon: 'dashboard' },
   { path: '/daily', label: 'Laporan Harian', icon: 'calendar' },
   { path: '/laporan-harian2', label: 'Laporan Harian 2', icon: 'calendar' },
+  { path: '/komisi-bersih', label: 'Komisi Bersih', icon: 'coin' },
   // { path: '/campaigns', label: 'Kampanye Meta', icon: 'megaphone' },
   // { path: '/analysis', label: 'Analisis Iklan', icon: 'chart' },
   { path: '/iklan', label: 'Iklan', icon: 'megaphone' },
@@ -517,6 +519,7 @@ const routes = {
   '/tax': guard(TaxPage),
   '/laporan-harian2': guard(LaporanHarian2Page),
   '/iklan': guard(IklanPage),
+  '/komisi-bersih': guard(KomisiBersihPage),
 };
 
 function getContainer(path) {
