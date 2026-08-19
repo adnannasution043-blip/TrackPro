@@ -20,6 +20,7 @@ import { CardGeneratorPage } from './pages/card_generator.js';
 import { TaxPage } from './pages/tax.js';
 import { AdsTrackerPage } from './pages/ads_tracker.js';
 import { LaporanHarian2Page } from './pages/laporan_harian2.js';
+import { IklanPage } from './pages/iklan.js';
 
 const NAV_ITEMS = [
   { section: 'RINGKASAN' },
@@ -28,6 +29,7 @@ const NAV_ITEMS = [
   { path: '/laporan-harian2', label: 'Laporan Harian 2', icon: 'calendar' },
   { path: '/campaigns', label: 'Kampanye Meta', icon: 'megaphone' },
   { path: '/analysis', label: 'Analisis Iklan', icon: 'chart' },
+  { path: '/iklan', label: 'Iklan', icon: 'megaphone' },
   { groupLink: 'Laporan Komisi', icon: 'coin', path: '/commission', children: [
     { path: '/orders', label: 'Laporan Pesanan', icon: 'box' },
     { path: '/clicks', label: 'Laporan Klik', icon: 'cursor' },
@@ -514,6 +516,7 @@ const routes = {
   '/ads-tracker': guard(AdsTrackerPage),
   '/tax': guard(TaxPage),
   '/laporan-harian2': guard(LaporanHarian2Page),
+  '/iklan': guard(IklanPage),
 };
 
 function getContainer(path) {
