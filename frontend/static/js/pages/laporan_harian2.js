@@ -17,20 +17,11 @@ function todayStr()    { return new Date().toISOString().split('T')[0]; }
 function firstOfMonth(){ const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), 1).toISOString().split('T')[0]; }
 
 const FILTERS = [
-  { key: 'semua',  label: 'Semua' },
-  { key: 'live',   label: 'Shopee Live' },
-  { key: 'meta',   label: 'Meta' },
-  { key: 'adu',    label: 'Adu' },
-  { key: 'terra',  label: 'Terra' },
-];
-
-const CAT_ROWS = [
-  { key: 'komisi_live',  label: 'Live',     group: 'FP' },
-  { key: 'komisi_story', label: 'Story',    group: 'FP' },
-  { key: 'komisi_feed',  label: 'Few Feed', group: 'FP' },
-  { key: 'komisi_meta',  label: 'Meta',     group: 'Iklan' },
-  { key: 'komisi_adu',   label: 'Adu',      group: 'Iklan' },
-  { key: 'komisi_terra', label: 'Terra',    group: 'Iklan' },
+  { key: 'semua', label: 'Semua' },
+  { key: 'live',  label: 'Shopee Live' },
+  { key: 'meta',  label: 'Meta' },
+  { key: 'adu',   label: 'Adu' },
+  { key: 'terra', label: 'Terra' },
 ];
 
 export class LaporanHarian2Page {
@@ -38,10 +29,9 @@ export class LaporanHarian2Page {
     this.container = container;
     this.dari      = firstOfMonth();
     this.sampai    = todayStr();
-    this._rows     = [];       // dari /dashboard (metrics harian)
-    this._bdMap    = {};       // dari /laporan-harian2 (breakdown kategori), key = tanggal
+    this._rows     = [];   // dari /dashboard (metrics harian)
+    this._bdMap    = {};   // dari /laporan-harian2 (breakdown kategori)
     this._filter   = 'semua';
-    this._expanded = new Set();
   }
 
   async render() {
@@ -49,7 +39,7 @@ export class LaporanHarian2Page {
       <div class="page-header">
         <div class="page-header-left">
           <h1>Laporan Harian 2</h1>
-          <p>Performa harian dengan breakdown komisi per kategori. Klik ▶ untuk expand, klik tanggal untuk detail produk.</p>
+          <p>Rekapan komisi harian per kategori. Klik tanggal untuk detail produk.</p>
         </div>
         <div class="page-header-right" style="display:flex;gap:8px;align-items:center;">
           <input type="date" id="inp-dari"   class="form-input" style="width:140px;" value="${this.dari}">
@@ -80,7 +70,6 @@ export class LaporanHarian2Page {
     this.container.querySelector('#btn-terapkan').addEventListener('click', () => {
       this.dari   = this.container.querySelector('#inp-dari').value;
       this.sampai = this.container.querySelector('#inp-sampai').value;
-      this._expanded.clear();
       this._load();
     });
 
@@ -90,9 +79,9 @@ export class LaporanHarian2Page {
       this._filter = btn.dataset.filter;
       this.container.querySelectorAll('[data-filter]').forEach(b => {
         const on = b.dataset.filter === this._filter;
-        b.style.background   = on ? 'var(--primary)' : 'var(--bg-card)';
-        b.style.color        = on ? '#fff' : 'var(--text)';
-        b.style.borderColor  = on ? 'var(--primary)' : 'var(--border)';
+        b.style.background  = on ? 'var(--primary)' : 'var(--bg-card)';
+        b.style.color       = on ? '#fff' : 'var(--text)';
+        b.style.borderColor = on ? 'var(--primary)' : 'var(--border)';
       });
       this._render();
     });
@@ -121,12 +110,8 @@ export class LaporanHarian2Page {
   _visible() {
     const f = this._filter;
     if (f === 'semua') return this._rows;
-    const key = f === 'live' ? 'komisi_live' : f === 'meta' ? 'komisi_meta'
-              : f === 'adu'  ? 'komisi_adu'  : 'komisi_terra';
-    return this._rows.filter(r => {
-      const bd = this._bdMap[r.tanggal];
-      return bd && Number(bd[key] || 0) > 0;
-    });
+    const key = { live:'komisi_live', meta:'komisi_meta', adu:'komisi_adu', terra:'komisi_terra' }[f];
+    return this._rows.filter(r => Number((this._bdMap[r.tanggal] || {})[key] || 0) > 0);
   }
 
   _render() {
@@ -138,113 +123,67 @@ export class LaporanHarian2Page {
       return;
     }
 
-    // Totals
-    const tSpend  = rows.reduce((s, r) => s + Number(r.spend_idr  || 0), 0);
-    const tKomisi = rows.reduce((s, r) => s + Number(r.komisi     || 0), 0);
-    const tLaba   = rows.reduce((s, r) => s + Number(r.laba       || 0), 0);
-    const tClM    = rows.reduce((s, r) => s + Number(r.clicks_meta|| 0), 0);
-    const tClS    = rows.reduce((s, r) => s + Number(r.clicks_shopee||0), 0);
-    const tOrd    = rows.reduce((s, r) => s + Number(r.orders_selesai||0) + Number(r.orders_tertunda||0), 0);
-    const tPlus5  = tSpend * 1.05;
-    const tEpc    = tClS > 0 ? tKomisi / tClS : null;
-    const tRoi    = tSpend > 0 ? tLaba / tSpend * 100 : null;
-    const tCpcFp  = tClM > 0 ? tSpend / tClM : null;
-    const tPctKlik = tClM > 0 ? tClS / tClM * 100 : null;
-
-    const rowsHtml = rows.map((r, i) => this._rowHtml(r, i)).join('');
-
-    wrap.innerHTML = `
-      <table class="data-table" style="font-size:12.5px;min-width:1100px;">
-        <thead>
-          <tr>
-            <th style="width:28px;"></th>
-            <th style="min-width:90px;">TGL</th>
-            <th>SPEND</th>
-            <th style="white-space:nowrap;">(+) 5%</th>
-            <th style="white-space:nowrap;">KLIK FP</th>
-            <th style="white-space:nowrap;">KLIK SHOPEE</th>
-            <th style="white-space:nowrap;">(%) KLIK</th>
-            <th style="white-space:nowrap;">CPC FP</th>
-            <th># ORDER</th>
-            <th>KOMISI</th>
-            <th>EPC</th>
-            <th>PROFIT</th>
-            <th style="white-space:nowrap;">(%) PROFIT</th>
-          </tr>
-        </thead>
-        <tbody id="tbl-body">
-          ${rowsHtml}
-        </tbody>
-        <tfoot>
-          <tr style="font-weight:700;background:var(--bg-muted);border-top:2px solid var(--border);font-size:12px;">
-            <td></td>
-            <td style="font-weight:800;">TOTAL (${rows.length} hari)</td>
-            <td>${rp(Math.round(tSpend))}</td>
-            <td>${rp(Math.round(tPlus5))}</td>
-            <td>${num(tClM)}</td>
-            <td>${num(tClS)}</td>
-            <td>${tPctKlik != null ? tPctKlik.toFixed(1) + '%' : '—'}</td>
-            <td>${tCpcFp != null ? rp(Math.round(tCpcFp)) : '—'}</td>
-            <td>${num(tOrd)}</td>
-            <td style="color:#10b981;">${rp(Math.round(tKomisi))}</td>
-            <td>${tEpc != null ? rp(Math.round(tEpc)) : '—'}</td>
-            <td style="color:${tLaba >= 0 ? '#16a34a' : '#dc2626'};">${rpSigned(Math.round(tLaba))}</td>
-            <td style="color:${tRoi != null && tRoi >= 0 ? '#16a34a' : '#dc2626'};">${tRoi != null ? (tRoi >= 0 ? '+' : '') + tRoi.toFixed(1) + '%' : '—'}</td>
-          </tr>
-        </tfoot>
-      </table>`;
-
-    // Wire expand buttons
-    wrap.querySelectorAll('.exp-btn').forEach(btn => {
-      btn.addEventListener('click', e => {
-        e.stopPropagation();
-        const tgl = btn.dataset.tgl;
-        if (this._expanded.has(tgl)) this._expanded.delete(tgl);
-        else this._expanded.add(tgl);
-        this._render();
-      });
+    // Aggregat totals
+    const tot = {
+      spend: 0, clM: 0, clS: 0, ord: 0, komisi: 0, laba: 0,
+      live: 0, story: 0, feed: 0, fp: 0,
+      meta: 0, adu: 0, terra: 0, iklan: 0, kotor: 0,
+    };
+    rows.forEach(r => {
+      tot.spend  += Number(r.spend_idr    || 0);
+      tot.clM    += Number(r.clicks_meta  || 0);
+      tot.clS    += Number(r.clicks_shopee|| 0);
+      tot.ord    += Number(r.orders_selesai||0) + Number(r.orders_tertunda||0);
+      tot.komisi += Number(r.komisi       || 0);
+      tot.laba   += Number(r.laba         || 0);
+      const bd = this._bdMap[r.tanggal] || {};
+      tot.live  += Number(bd.komisi_live  || 0);
+      tot.story += Number(bd.komisi_story || 0);
+      tot.feed  += Number(bd.komisi_feed  || 0);
+      tot.fp    += Number(bd.total_fp     || 0);
+      tot.meta  += Number(bd.komisi_meta  || 0);
+      tot.adu   += Number(bd.komisi_adu   || 0);
+      tot.terra += Number(bd.komisi_terra || 0);
+      tot.iklan += Number(bd.total_iklan  || 0);
+      tot.kotor += Number(bd.total_kotor  || 0);
     });
+    const tPlus5   = tot.spend * 1.05;
+    const tEpc     = tot.clS   > 0 ? tot.komisi / tot.clS    : null;
+    const tRoi     = tot.spend > 0 ? tot.laba   / tot.spend * 100 : null;
+    const tPctKlik = tot.clM   > 0 ? tot.clS    / tot.clM    * 100 : null;
+    const tCpcFp   = tot.clM   > 0 ? tot.spend  / tot.clM    : null;
 
-    // Wire modal (click tanggal)
-    wrap.querySelectorAll('.tgl-btn').forEach(btn => {
-      btn.addEventListener('click', e => {
-        e.stopPropagation();
-        const r = this._rows.find(x => x.tanggal === btn.dataset.tgl);
-        if (r) this._showModal(r);
-      });
-    });
-  }
+    const thBase = 'padding:8px 10px;font-size:11px;font-weight:700;white-space:nowrap;text-transform:uppercase;letter-spacing:.4px;background:#f1f5f9;border-bottom:2px solid var(--border);';
+    const thFP   = thBase + 'background:#f5f3ff;color:#7c3aed;';
+    const thIklan= thBase + 'background:#fef2f2;color:#dc2626;';
 
-  _rowHtml(r, i) {
-    const spend   = Number(r.spend_idr   || 0);
-    const komisi  = Number(r.komisi      || 0);
-    const laba    = Number(r.laba        || 0);
-    const clM     = Number(r.clicks_meta || 0);
-    const clS     = Number(r.clicks_shopee || 0);
-    const ord     = Number(r.orders_selesai || 0) + Number(r.orders_tertunda || 0);
-    const tertunda = Number(r.orders_tertunda || 0);
-    const plus5   = spend * 1.05;
-    const epc     = clS > 0 ? komisi / clS : null;
-    const roi     = spend > 0 ? laba / spend * 100 : null;
-    const cpcFp   = clM > 0 ? spend / clM : null;
-    const pctKlik = clM > 0 ? clS / clM * 100 : null;
-    const isExp   = this._expanded.has(r.tanggal);
-    const bd      = this._bdMap[r.tanggal];
+    const rowsHtml = rows.map((r, i) => {
+      const spend  = Number(r.spend_idr    || 0);
+      const clM    = Number(r.clicks_meta  || 0);
+      const clS    = Number(r.clicks_shopee|| 0);
+      const ord    = Number(r.orders_selesai||0) + Number(r.orders_tertunda||0);
+      const tertunda = Number(r.orders_tertunda || 0);
+      const laba   = Number(r.laba         || 0);
+      const roi    = spend > 0 ? laba / spend * 100 : null;
+      const epc    = clS > 0 ? Number(r.komisi||0) / clS : null;
+      const plus5  = spend * 1.05;
+      const pctKlik = clM > 0 ? clS / clM * 100 : null;
+      const bd = this._bdMap[r.tanggal] || {};
+      const live  = Number(bd.komisi_live  || 0);
+      const story = Number(bd.komisi_story || 0);
+      const feed  = Number(bd.komisi_feed  || 0);
+      const fp    = Number(bd.total_fp     || 0);
+      const meta  = Number(bd.komisi_meta  || 0);
+      const adu   = Number(bd.komisi_adu   || 0);
+      const terra = Number(bd.komisi_terra || 0);
+      const iklan = Number(bd.total_iklan  || 0);
+      const kotor = Number(bd.total_kotor  || 0);
+      const bgRow = i % 2 === 0 ? '' : 'background:var(--bg-muted);';
 
-    const expandBtn = `
-      <button class="exp-btn" data-tgl="${r.tanggal}"
-        style="width:22px;height:22px;border:1px solid var(--border);border-radius:4px;background:var(--bg-muted);
-               cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .15s;
-               ${isExp ? 'transform:rotate(90deg);border-color:#dc2626;color:#dc2626;' : ''}">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="10" height="10"><polyline points="9 18 15 12 9 6"/></svg>
-      </button>`;
-
-    const mainRow = `
-      <tr style="background:${i % 2 === 0 ? 'var(--bg-card)' : 'var(--bg-muted)'};${isExp ? 'border-bottom:none;' : ''}">
-        <td style="padding:6px 8px;">${expandBtn}</td>
-        <td>
+      return `<tr style="${bgRow}font-size:12.5px;">
+        <td style="white-space:nowrap;padding:7px 10px;">
           <button class="tgl-btn" data-tgl="${r.tanggal}"
-            style="background:none;border:none;cursor:pointer;font-weight:700;font-size:13px;color:#2563eb;padding:0;text-decoration:underline;text-underline-offset:2px;">
+            style="background:none;border:none;cursor:pointer;font-weight:700;font-size:12.5px;color:#2563eb;padding:0;text-decoration:underline;text-underline-offset:2px;white-space:nowrap;">
             ${fmtDate(r.tanggal)}
           </button>
         </td>
@@ -253,62 +192,87 @@ export class LaporanHarian2Page {
         <td>${num(clM)}</td>
         <td>${num(clS)}</td>
         <td style="${pctKlik != null && pctKlik < 10 ? 'color:#dc2626;' : ''}">${pctKlik != null ? pctKlik.toFixed(1) + '%' : '—'}</td>
-        <td>${cpcFp != null ? rp(Math.round(cpcFp)) : '—'}</td>
+        <td style="white-space:nowrap;">${epc != null ? rp(Math.round(epc)) : '—'}</td>
         <td>
-          ${num(ord)}
-          ${tertunda > 0 ? `<span style="font-size:10px;padding:1px 5px;background:#fef3c7;color:#d97706;border-radius:3px;margin-left:4px;">+${tertunda}</span>` : ''}
+          ${num(ord)}${tertunda > 0 ? `<span style="font-size:10px;padding:1px 5px;background:#fef3c7;color:#d97706;border-radius:3px;margin-left:4px;">+${tertunda}</span>` : ''}
         </td>
-        <td style="color:#10b981;font-weight:500;">${rp(Math.round(komisi))}</td>
-        <td>${epc != null ? rp(Math.round(epc)) : '—'}</td>
-        <td style="font-weight:600;color:${laba >= 0 ? '#16a34a' : '#dc2626'};">${rpSigned(Math.round(laba))}</td>
-        <td style="font-weight:600;color:${roi != null && roi >= 0 ? '#16a34a' : '#dc2626'};">${roi != null ? (roi >= 0 ? '+' : '') + roi.toFixed(1) + '%' : '—'}</td>
-      </tr>`;
-
-    if (!isExp) return mainRow;
-
-    // Sub-rows per kategori
-    const catRows = CAT_ROWS.map(cat => {
-      const val = bd ? Number(bd[cat.key] || 0) : 0;
-      const groupColor = cat.group === 'FP' ? '#7c3aed' : '#dc2626';
-      return `<tr style="background:#fafafa;">
-        <td></td>
-        <td style="padding-left:32px;">
-          <span style="font-size:11px;font-weight:600;padding:1px 7px;border-radius:3px;
-            background:${cat.group === 'FP' ? '#f5f3ff' : '#fef2f2'};
-            color:${groupColor};border:1px solid ${cat.group === 'FP' ? '#ede9fe' : '#fecaca'};">
-            ${cat.label}
-          </span>
-        </td>
-        <td colspan="7" style="color:var(--text-muted);font-size:12px;">Komisi ${cat.group}</td>
-        <td style="font-weight:600;color:${val > 0 ? '#10b981' : 'var(--text-muted)'};">
-          ${val > 0 ? rp(Math.round(val)) : '—'}
-        </td>
-        <td colspan="3"></td>
+        <td style="font-weight:500;color:${roi != null && roi >= 0 ? '#16a34a' : '#dc2626'};">${roi != null ? (roi >= 0 ? '+' : '') + roi.toFixed(1) + '%' : '—'}</td>
+        <td style="color:#7c3aed;">${rp(Math.round(live))}</td>
+        <td style="color:#7c3aed;">${rp(Math.round(story))}</td>
+        <td style="color:#7c3aed;">${rp(Math.round(feed))}</td>
+        <td style="font-weight:700;color:#7c3aed;background:#f5f3ff;">${rp(Math.round(fp))}</td>
+        <td style="color:#dc2626;">${rp(Math.round(meta))}</td>
+        <td style="color:#dc2626;">${rp(Math.round(adu))}</td>
+        <td style="color:#dc2626;">${rp(Math.round(terra))}</td>
+        <td style="font-weight:700;color:#dc2626;background:#fef2f2;">${rp(Math.round(iklan))}</td>
+        <td style="font-weight:700;color:#10b981;">${rp(Math.round(kotor))}</td>
       </tr>`;
     }).join('');
 
-    // Totals sub-row
-    const tFP    = bd ? Number(bd.total_fp    || 0) : 0;
-    const tIklan = bd ? Number(bd.total_iklan || 0) : 0;
-    const tKotor = bd ? Number(bd.total_kotor || 0) : 0;
-    const totalsRow = `<tr style="background:#f0fdf4;border-top:1px dashed #bbf7d0;border-bottom:2px solid var(--border);">
-      <td></td>
-      <td style="padding-left:32px;font-size:11px;font-weight:700;color:#15803d;text-transform:uppercase;">Total</td>
-      <td colspan="7" style="font-size:11.5px;color:var(--text-muted);">
-        FP: <strong style="color:#7c3aed;">${rp(Math.round(tFP))}</strong>
-        &nbsp;·&nbsp;
-        Iklan: <strong style="color:#dc2626;">${rp(Math.round(tIklan))}</strong>
-      </td>
-      <td style="font-weight:700;color:#15803d;">${rp(Math.round(tKotor))}</td>
-      <td colspan="3"></td>
-    </tr>`;
+    wrap.innerHTML = `
+      <table class="data-table" style="font-size:12.5px;min-width:1400px;border-collapse:collapse;">
+        <thead>
+          <tr style="background:#f8fafc;">
+            <th rowspan="2" style="${thBase}min-width:80px;">TGL</th>
+            <th rowspan="2" style="${thBase}">SPEND</th>
+            <th rowspan="2" style="${thBase}white-space:nowrap;">(+) 5%</th>
+            <th rowspan="2" style="${thBase}white-space:nowrap;">KLIK FP</th>
+            <th rowspan="2" style="${thBase}white-space:nowrap;">KLIK SHOPEE</th>
+            <th rowspan="2" style="${thBase}white-space:nowrap;">(%) KLIK</th>
+            <th rowspan="2" style="${thBase}white-space:nowrap;">CPC FP</th>
+            <th rowspan="2" style="${thBase}"># ORDER</th>
+            <th rowspan="2" style="${thBase}white-space:nowrap;">(%) PROFIT</th>
+            <th colspan="4" style="${thFP}text-align:center;border-left:2px solid #ede9fe;">KOMISI FP</th>
+            <th colspan="4" style="${thIklan}text-align:center;border-left:2px solid #fecaca;">KOMISI IKLAN</th>
+            <th rowspan="2" style="${thBase}background:#f0fdf4;color:#15803d;white-space:nowrap;border-left:2px solid #bbf7d0;">TOTAL KOTOR</th>
+          </tr>
+          <tr>
+            <th style="${thFP}border-left:2px solid #ede9fe;">LIVE</th>
+            <th style="${thFP}">STORY</th>
+            <th style="${thFP}">FEW FEED</th>
+            <th style="${thFP}font-weight:800;">TOTAL FP</th>
+            <th style="${thIklan}border-left:2px solid #fecaca;">META</th>
+            <th style="${thIklan}">ADU</th>
+            <th style="${thIklan}">TERRA</th>
+            <th style="${thIklan}font-weight:800;">TOTAL IKLAN</th>
+          </tr>
+        </thead>
+        <tbody>${rowsHtml}</tbody>
+        <tfoot>
+          <tr style="font-weight:700;background:var(--bg-muted);border-top:2px solid var(--border);font-size:12px;">
+            <td style="font-weight:800;white-space:nowrap;padding:8px 10px;">TOTAL (${rows.length} hari)</td>
+            <td>${rp(Math.round(tot.spend))}</td>
+            <td>${rp(Math.round(tPlus5))}</td>
+            <td>${num(tot.clM)}</td>
+            <td>${num(tot.clS)}</td>
+            <td>${tPctKlik != null ? tPctKlik.toFixed(1) + '%' : '—'}</td>
+            <td>${tCpcFp != null ? rp(Math.round(tCpcFp)) : '—'}</td>
+            <td>${num(tot.ord)}</td>
+            <td style="color:${tRoi != null && tRoi >= 0 ? '#16a34a' : '#dc2626'};">${tRoi != null ? (tRoi >= 0 ? '+' : '') + tRoi.toFixed(1) + '%' : '—'}</td>
+            <td style="color:#7c3aed;">${rp(Math.round(tot.live))}</td>
+            <td style="color:#7c3aed;">${rp(Math.round(tot.story))}</td>
+            <td style="color:#7c3aed;">${rp(Math.round(tot.feed))}</td>
+            <td style="color:#7c3aed;font-weight:800;">${rp(Math.round(tot.fp))}</td>
+            <td style="color:#dc2626;">${rp(Math.round(tot.meta))}</td>
+            <td style="color:#dc2626;">${rp(Math.round(tot.adu))}</td>
+            <td style="color:#dc2626;">${rp(Math.round(tot.terra))}</td>
+            <td style="color:#dc2626;font-weight:800;">${rp(Math.round(tot.iklan))}</td>
+            <td style="color:#10b981;font-weight:800;">${rp(Math.round(tot.kotor))}</td>
+          </tr>
+        </tfoot>
+      </table>`;
 
-    return mainRow + catRows + totalsRow;
+    wrap.querySelectorAll('.tgl-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const r = this._rows.find(x => x.tanggal === btn.dataset.tgl);
+        if (r) this._showModal(r);
+      });
+    });
   }
 
   async _showModal(r) {
-    const dt       = new Date(r.tanggal + 'T00:00:00');
-    const judulTgl = `${dt.getDate()} ${FULL_MONTHS[dt.getMonth()]} ${dt.getFullYear()}`;
+    const dt        = new Date(r.tanggal + 'T00:00:00');
+    const judulTgl  = `${dt.getDate()} ${FULL_MONTHS[dt.getMonth()]} ${dt.getFullYear()}`;
     const judulHari = FULL_DAYS[dt.getDay()];
     const laba  = Number(r.laba || 0);
     const spend = Number(r.spend_idr || 0);
@@ -371,8 +335,8 @@ export class LaporanHarian2Page {
     let topData   = null;
 
     const renderTabContent = (data, tab) => {
-      const lists = [data.top_komisi, data.top_penjualan, data.top_produk];
-      const rows  = lists[tab] || [];
+      const lists  = [data.top_komisi, data.top_penjualan, data.top_produk];
+      const rows   = lists[tab] || [];
       const noData = rows.length === 0 || (rows.length === 1 && rows[0].nama_produk === '—');
       const content = overlay.querySelector('#modal-tab-content');
       if (noData) {
@@ -389,7 +353,7 @@ export class LaporanHarian2Page {
         <tbody>${rows.map((p,i)=>`<tr>
           <td style="color:#9ca3af;font-weight:700;">${i+1}</td>
           <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${p.nama_produk}">${p.nama_produk}</td>
-          <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#6b7280;" title="${p.nama_toko||''}">${p.nama_toko||'—'}</td>
+          <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#6b7280;">${p.nama_toko||'—'}</td>
           <td style="text-align:right;">${num(p.qty)}</td>
           <td style="text-align:right;">${rp(p.penjualan)}</td>
           <td style="text-align:right;color:#10b981;font-weight:600;">${rp(p.komisi)}</td>
