@@ -165,44 +165,54 @@ export class IklanPage {
       { key:'off',          label:`Off (${counts.off})` },
     ];
 
+    const tPlus5   = tSpend * 1.05;
+    const tPctKlik = tClM > 0 ? tClS / tClM * 100 : null;
+
     const rowHtml = (r, i) => {
-      const laba  = Number(r.laba || 0);
-      const roi   = r.roi_persen != null ? Number(r.roi_persen) : null;
-      const epc   = Number(r.clicks_shopee) > 0 ? Number(r.komisi||0) / Number(r.clicks_shopee) : null;
+      const spend   = Number(r.spend_idr || 0);
+      const plus5   = spend * 1.05;
+      const profit  = Number(r.laba || 0);
+      const roi     = r.roi_persen != null ? Number(r.roi_persen) : null;
+      const clM     = Number(r.clicks_meta || 0);
+      const clS     = Number(r.clicks_shopee || 0);
+      const pctKlik = clM > 0 ? clS / clM * 100 : null;
+      const epc     = clS > 0 ? Number(r.komisi||0) / clS : null;
       const komisi0 = Number(r.komisi||0) === 0;
       return `<tr class="iklan-row" data-id="${r.id}" style="cursor:pointer;">
         <td style="color:var(--text-muted);font-size:12px;text-align:center;width:32px;">${i+1}</td>
-        <td style="min-width:220px;">
-          <div style="font-weight:600;font-size:13px;color:#2563eb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px;" title="${r.nama_campaign}">${r.nama_campaign}</div>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Meta
-            ${r.tag_link ? `· <span style="font-size:10.5px;padding:1px 6px;background:#f0fdf4;color:#16a34a;border-radius:4px;border:1px solid #bbf7d0;">${r.tag_link}</span>` : ''}
-          </div>
+        <td style="min-width:200px;">
+          <div style="font-weight:600;font-size:13px;color:#2563eb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px;" title="${r.nama_campaign}">${r.nama_campaign}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Meta</div>
         </td>
         <td>
           <span class="badge ${r.status==='ACTIVE'?'badge-green':'badge-gray'}" style="font-size:11px;">
             ${r.status==='ACTIVE'?'Aktif':'Off'}
           </span>
         </td>
-        <td style="min-width:140px;">
-          <div class="tahap-drop-wrap" style="position:relative;">
-            <button class="tahap-btn" data-id="${r.id}" data-tahap="${r.tahap||'pra_filter'}"
-              style="display:flex;align-items:center;justify-content:space-between;gap:6px;width:100%;padding:4px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-card);cursor:pointer;font-size:12px;font-weight:600;color:var(--text);">
-              <span>${TAHAP_LABELS[r.tahap]||'Pra Filter'}</span>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="10" height="10"><polyline points="6 9 12 15 18 9"/></svg>
-            </button>
-          </div>
+        <td style="min-width:130px;">
+          <button class="tahap-btn" data-id="${r.id}" data-tahap="${r.tahap||'pra_filter'}"
+            style="display:flex;align-items:center;justify-content:space-between;gap:6px;width:100%;padding:4px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-card);cursor:pointer;font-size:12px;font-weight:600;color:var(--text);">
+            <span>${TAHAP_LABELS[r.tahap]||'Pra Filter'}</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="10" height="10"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+        </td>
+        <td style="min-width:110px;">
+          ${r.tag_link
+            ? `<span style="font-size:11.5px;padding:2px 8px;background:#f0fdf4;color:#16a34a;border-radius:4px;border:1px solid #bbf7d0;white-space:nowrap;">${r.tag_link}</span>`
+            : '<span style="color:var(--text-muted);font-size:12px;">—</span>'}
         </td>
         <td style="text-align:center;">${r.hari||0}</td>
-        <td style="white-space:nowrap;">${rp(r.spend_idr)}</td>
-        <td style="white-space:nowrap;">${r.cpc!=null ? rp(Math.round(Number(r.cpc))) : '—'}</td>
-        <td style="color:var(--text-muted);">—</td>
-        <td style="white-space:nowrap;">${num(r.clicks_meta)}</td>
-        <td style="white-space:nowrap;">${num(r.clicks_shopee)}</td>
-        <td style="white-space:nowrap;">${num(r.orders)}</td>
+        <td style="white-space:nowrap;">${rp(spend)}</td>
+        <td style="white-space:nowrap;color:var(--text-muted);">${rp(Math.round(plus5))}</td>
+        <td style="text-align:center;">${num(r.orders)}</td>
         <td style="color:#10b981;font-weight:500;white-space:nowrap;">${komisi0?'<span style="color:var(--text-muted);">Rp 0</span>':rp(Math.round(Number(r.komisi)))}</td>
-        <td style="white-space:nowrap;">${epc!=null ? rp(Math.round(epc)) : '—'}</td>
-        <td style="font-weight:600;color:${laba>=0?'#16a34a':'#dc2626'};white-space:nowrap;">${laba>=0?'+':'-'}${rp(Math.abs(Math.round(laba)))}</td>
+        <td style="font-weight:600;color:${profit>=0?'#16a34a':'#dc2626'};white-space:nowrap;">${profit>=0?'+':'-'}${rp(Math.abs(Math.round(profit)))}</td>
         <td style="font-weight:600;color:${roi!=null&&roi>=0?'#16a34a':'#dc2626'};white-space:nowrap;">${roi!=null?pct(roi):'—'}</td>
+        <td style="white-space:nowrap;">${num(clM)}</td>
+        <td style="white-space:nowrap;">${num(clS)}</td>
+        <td style="white-space:nowrap;${pctKlik!=null&&pctKlik<10?'color:#dc2626;':''}">${pctKlik!=null?pctKlik.toFixed(1)+'%':'—'}</td>
+        <td style="white-space:nowrap;">${r.cpc!=null ? rp(Math.round(Number(r.cpc))) : '—'}</td>
+        <td style="white-space:nowrap;">${epc!=null ? rp(Math.round(epc)) : '—'}</td>
         <td style="padding:4px;width:36px;text-align:center;">
           <button class="btn btn-sm catatan-btn" data-catatan-id="${r.id}"
             style="padding:2px 6px;position:relative;" title="${r.catatan ? r.catatan : 'Tambah catatan'}">
@@ -216,17 +226,18 @@ export class IklanPage {
     const totalRow = `<tr style="font-weight:700;background:var(--bg-muted);border-top:2px solid var(--border);font-size:12px;">
       <td></td>
       <td style="font-weight:800;">TOTAL (${visible.length} iklan)</td>
-      <td></td><td></td><td></td>
+      <td></td><td></td><td></td><td></td>
       <td>${rp(Math.round(tSpend))}</td>
-      <td>${tCpc!=null?rp(Math.round(tCpc)):'—'}</td>
-      <td>—</td>
-      <td>${num(tClM)}</td>
-      <td>${num(tClS)}</td>
+      <td>${rp(Math.round(tPlus5))}</td>
       <td>${num(tOrd)}</td>
       <td style="color:#10b981;">${rp(Math.round(tKomisi))}</td>
-      <td>${tEpc!=null?rp(Math.round(tEpc)):'—'}</td>
       <td style="color:${tLaba>=0?'#16a34a':'#dc2626'};">${tLaba>=0?'+':'-'}${rp(Math.abs(Math.round(tLaba)))}</td>
       <td style="color:${tRoi!=null&&tRoi>=0?'#16a34a':'#dc2626'};">${tRoi!=null?pct(tRoi):'—'}</td>
+      <td>${num(tClM)}</td>
+      <td>${num(tClS)}</td>
+      <td>${tPctKlik!=null?tPctKlik.toFixed(1)+'%':'—'}</td>
+      <td>${tCpc!=null?rp(Math.round(tCpc)):'—'}</td>
+      <td>${tEpc!=null?rp(Math.round(tEpc)):'—'}</td>
       <td></td>
     </tr>`;
 
@@ -250,28 +261,30 @@ export class IklanPage {
 
       <div class="card" style="padding:0;overflow:hidden;">
         <div style="overflow-x:auto;">
-          <table class="data-table" style="font-size:12.5px;min-width:1050px;">
+          <table class="data-table" style="font-size:12.5px;min-width:1200px;">
             <thead><tr>
               <th style="width:32px;text-align:center;">#</th>
-              <th style="min-width:220px;">CAMPAIGN</th>
+              <th style="min-width:200px;">CAMPAIGN</th>
               <th>STATUS</th>
-              <th style="min-width:140px;">TAHAP</th>
+              <th style="min-width:130px;">TAHAP</th>
+              <th style="min-width:110px;">TAG LINK 2</th>
               <th style="text-align:center;">HARI</th>
-              <th>BIAYA</th>
-              <th>CPC</th>
-              <th>BUDGET</th>
-              <th style="white-space:nowrap;">KLIK META</th>
-              <th style="white-space:nowrap;">KLIK SHOPEE</th>
-              <th>ORDER</th>
+              <th>SPEND</th>
+              <th style="white-space:nowrap;">(+) 5%</th>
+              <th style="text-align:center;">#</th>
               <th>KOMISI</th>
-              <th>EPC</th>
-              <th>LABA</th>
-              <th>ROI</th>
-              <th style="width:32px;"></th>
+              <th>PROFIT</th>
+              <th style="white-space:nowrap;">(%) PROFIT</th>
+              <th style="white-space:nowrap;">KLIK FP</th>
+              <th style="white-space:nowrap;">KLIK SHOPEE</th>
+              <th style="white-space:nowrap;">(%) KLIK</th>
+              <th style="white-space:nowrap;">CPC FP</th>
+              <th style="white-space:nowrap;">KOMISI/KLIK SHP</th>
+              <th style="width:36px;"></th>
             </tr></thead>
             <tbody>
               ${visible.length===0
-                ? `<tr><td colspan="16" class="empty">Tidak ada data iklan.</td></tr>`
+                ? `<tr><td colspan="18" class="empty">Tidak ada data iklan.</td></tr>`
                 : visible.map(rowHtml).join('') + totalRow}
             </tbody>
           </table>
