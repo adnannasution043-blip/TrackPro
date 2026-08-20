@@ -471,11 +471,24 @@ async function _loadMetaStatus() {
       label.textContent = 'Meta Tidak Terhubung';
       const dot = el.querySelector('.dot');
       if (dot) dot.style.background = '#9ca3af';
+      _removeTokenBanner();
       return;
     }
-    const aktif = list.filter(m => m.has_token && m.status_koneksi === 'terhubung');
-    const expired = list.filter(m => m.has_token && m.status_koneksi === 'token_expired');
+
+    const now = Date.now();
+    const aktif   = list.filter(m => m.has_token && m.status_koneksi === 'terhubung');
+    const expired  = list.filter(m => m.has_token && m.status_koneksi === 'token_expired');
     const dot = el.querySelector('.dot');
+
+    // Hitung sisa hari token yang paling dekat expired
+    let minSisa = Infinity;
+    for (const m of list) {
+      if (m.token_expires_at) {
+        const sisa = Math.ceil((new Date(m.token_expires_at) - now) / 86400000);
+        if (sisa < minSisa) minSisa = sisa;
+      }
+    }
+
     if (aktif.length > 0) {
       el.style.opacity = '1';
       el.style.color = '';
@@ -492,7 +505,49 @@ async function _loadMetaStatus() {
       if (dot) dot.style.background = '#9ca3af';
       label.textContent = 'Belum Ada Token';
     }
+
+    // Banner warning
+    if (expired.length > 0) {
+      _showTokenBanner(
+        'error',
+        `⚠️ Token Meta <strong>sudah expired</strong> — data sync berhenti. ` +
+        `<a href="#/meta-account" style="color:#991b1b;font-weight:700;text-decoration:underline;">Hubungkan ulang sekarang →</a>`
+      );
+    } else if (minSisa !== Infinity && minSisa <= 7) {
+      _showTokenBanner(
+        'warning',
+        `⏰ Token Meta akan expired dalam <strong>${minSisa} hari</strong>. ` +
+        `<a href="#/meta-account" style="color:#92400e;font-weight:700;text-decoration:underline;">Hubungkan ulang →</a>`
+      );
+    } else {
+      _removeTokenBanner();
+    }
   } catch (_) {}
+}
+
+function _showTokenBanner(type, html) {
+  let banner = document.getElementById('token-warning-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'token-warning-banner';
+    const mainArea = document.getElementById('main-area');
+    const topbar   = document.getElementById('topbar');
+    if (mainArea && topbar) {
+      mainArea.insertBefore(banner, topbar.nextSibling);
+    }
+  }
+  const isError = type === 'error';
+  banner.style.cssText = `
+    padding:10px 20px;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px;
+    background:${isError ? '#fef2f2' : '#fffbeb'};
+    color:${isError ? '#991b1b' : '#92400e'};
+    border-bottom:1px solid ${isError ? '#fecaca' : '#fde68a'};
+  `;
+  banner.innerHTML = html;
+}
+
+function _removeTokenBanner() {
+  document.getElementById('token-warning-banner')?.remove();
 }
 
 // Re-load sidebar balance ketika balance diupdate dari halaman Saldo Iklan
