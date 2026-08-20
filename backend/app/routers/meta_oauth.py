@@ -6,9 +6,10 @@ GET  /api/meta-oauth/connect          → redirect ke Facebook OAuth dialog
 GET  /api/meta-oauth/callback         → tukar code → token, simpan ke MetaAccount
 """
 
+import asyncio
 import urllib.parse
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import httpx
 import sqlalchemy as sa
@@ -18,6 +19,7 @@ from pydantic import BaseModel
 
 from app.core.config import settings
 from app.core.deps import DB, CurrentUser
+from app.core.meta_sync_worker import sync_account
 from app.models.account import MetaAccount
 from app.models.meta_app_config import MetaAppConfig
 
@@ -201,4 +203,26 @@ async def oauth_callback(db: DB, code: str | None = None, state: str | None = No
             added += 1
 
     await db.commit()
+
+    # Kumpulkan ID akun yang baru/diupdate untuk di-sync background
+    saved_ids: list[uuid.UUID] = []
+    for acc in ad_accounts:
+        raw_id = acc.get("id", "").replace("act_", "")
+        result = await db.execute(
+            sa.select(MetaAccount.id).where(
+                MetaAccount.user_id == user_id,
+                MetaAccount.ad_account_id == raw_id,
+            )
+        )
+        acc_id = result.scalar_one_or_none()
+        if acc_id:
+            saved_ids.append(acc_id)
+
+    # Trigger background sync 30 hari terakhir untuk semua akun yang baru connect
+    if saved_ids:
+        sampai = date.today()
+        dari   = sampai - timedelta(days=30)
+        for acc_id in saved_ids:
+            asyncio.create_task(sync_account(acc_id, dari, sampai))
+
     return RedirectResponse(f"/#/pengaturan/meta?success=1&added={added}")

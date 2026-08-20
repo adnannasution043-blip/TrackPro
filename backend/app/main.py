@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -5,9 +6,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from app.core.scheduler import start_scheduler, stop_scheduler
 from app.routers import accounts, auth, balance, clicks, csv_upload, dashboard, export_excel, meta_oauth, meta_sync, orders, taglink
 
-app = FastAPI(title="AdCommTrack API", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    start_scheduler()
+    yield
+    stop_scheduler()
+
+
+app = FastAPI(title="AdCommTrack API", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
