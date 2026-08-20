@@ -1,49 +1,49 @@
 """
-scheduler.py — jadwal auto-sync harian Meta Ads.
-Jalan setiap hari jam 02.00 WIB (19.00 UTC) untuk sync data kemarin.
+scheduler.py — jadwal auto-sync harian Meta Ads (pure asyncio, no extra deps).
+Loop async yang tidur sampai jam 02.00 WIB (19.00 UTC) berikutnya lalu sync.
 """
 
+import asyncio
 import logging
-from datetime import date, timedelta
-
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
+from datetime import date, datetime, timedelta, timezone
 
 from app.core.meta_sync_worker import sync_all_active_accounts
 
 log = logging.getLogger(__name__)
 
-scheduler = AsyncIOScheduler(timezone="UTC")
-
-
-def _register_jobs():
-    # Setiap hari jam 19:00 UTC (= 02:00 WIB) — sync data kemarin
-    scheduler.add_job(
-        _daily_sync,
-        trigger=CronTrigger(hour=19, minute=0, timezone="UTC"),
-        id="daily_meta_sync",
-        replace_existing=True,
-        misfire_grace_time=3600,  # toleransi 1 jam kalau server sempat mati
-    )
-    log.info("Scheduler: job daily_meta_sync terdaftar (19:00 UTC setiap hari)")
-
-
-async def _daily_sync():
-    kemarin = date.today() - timedelta(days=1)
-    log.info("auto-sync harian dimulai untuk tanggal %s", kemarin)
-    try:
-        await sync_all_active_accounts(dari=kemarin, sampai=kemarin)
-    except Exception as e:
-        log.exception("auto-sync harian gagal: %s", e)
+_task: asyncio.Task | None = None
 
 
 def start_scheduler():
-    _register_jobs()
-    scheduler.start()
-    log.info("Scheduler dimulai")
+    global _task
+    _task = asyncio.create_task(_loop())
+    log.info("Scheduler dimulai (daily 19:00 UTC)")
 
 
 def stop_scheduler():
-    if scheduler.running:
-        scheduler.shutdown(wait=False)
+    global _task
+    if _task and not _task.done():
+        _task.cancel()
         log.info("Scheduler dihentikan")
+
+
+async def _loop():
+    while True:
+        delay = _seconds_until_next_run(hour=19, minute=0)
+        log.info("Scheduler: tidur %.0f detik hingga run berikutnya", delay)
+        await asyncio.sleep(delay)
+        kemarin = date.today() - timedelta(days=1)
+        log.info("auto-sync harian dimulai untuk tanggal %s", kemarin)
+        try:
+            await sync_all_active_accounts(dari=kemarin, sampai=kemarin)
+        except Exception as e:
+            log.exception("auto-sync harian gagal: %s", e)
+
+
+def _seconds_until_next_run(hour: int, minute: int) -> float:
+    """Hitung detik sampai jam HH:MM UTC berikutnya."""
+    now = datetime.now(tz=timezone.utc)
+    next_run = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if next_run <= now:
+        next_run += timedelta(days=1)
+    return (next_run - now).total_seconds()
