@@ -85,6 +85,7 @@ async def save_config(body: AppConfigIn, current_user: CurrentUser, db: DB):
 
 @router.get("/connect")
 async def connect_meta(current_user: CurrentUser, db: DB):
+    """Kembalikan URL Facebook OAuth sebagai JSON — frontend yang redirect."""
     cfg = (await db.execute(
         sa.select(MetaAppConfig).where(MetaAppConfig.user_id == current_user.id)
     )).scalar_one_or_none()
@@ -96,7 +97,7 @@ async def connect_meta(current_user: CurrentUser, db: DB):
         raise HTTPException(500, "APP_URL belum dikonfigurasi di environment server.")
 
     redirect_uri = _redirect_uri(app_url)
-    state = str(current_user.id)  # pakai user ID sebagai CSRF state sederhana
+    state = str(current_user.id)
 
     params = {
         "client_id": cfg.app_id,
@@ -106,7 +107,7 @@ async def connect_meta(current_user: CurrentUser, db: DB):
         "response_type": "code",
     }
     url = FACEBOOK_OAUTH_URL + "?" + urllib.parse.urlencode(params)
-    return RedirectResponse(url)
+    return {"url": url}
 
 
 @router.get("/callback")

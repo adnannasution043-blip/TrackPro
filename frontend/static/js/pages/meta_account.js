@@ -77,11 +77,9 @@ export class MetaAccountPage {
 
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
           <button class="btn btn-primary" id="btn-simpan-oauth">Simpan Konfigurasi</button>
-          <a id="btn-hubungkan-meta" href="/api/meta-oauth/connect" style="display:inline-block;">
-            <button class="btn" style="background:#1877f2;color:#fff;border-color:#1877f2;" id="btn-oauth-connect">
-              Hubungkan Meta
-            </button>
-          </a>
+          <button class="btn" style="background:#1877f2;color:#fff;border-color:#1877f2;" id="btn-oauth-connect">
+            Hubungkan Meta
+          </button>
           <span style="font-size:11px;color:var(--text-muted);">Simpan dulu sebelum klik Hubungkan</span>
         </div>
       </div>
@@ -183,6 +181,25 @@ export class MetaAccountPage {
         _showMsg(msgEl, e.message || 'Gagal menyimpan konfigurasi.', 'error');
       } finally {
         btn.disabled = false; btn.textContent = 'Simpan Konfigurasi';
+      }
+    });
+
+    // Hubungkan Meta — fetch URL dulu dengan token, lalu redirect
+    this.container.querySelector('#btn-oauth-connect')?.addEventListener('click', async () => {
+      const msgEl = this.container.querySelector('#oauth-msg');
+      const btn   = this.container.querySelector('#btn-oauth-connect');
+      btn.disabled = true; btn.textContent = 'Menghubungkan…';
+      try {
+        const res = await apiFetch('/meta-oauth/connect');
+        if (res?.url) {
+          window.location.href = res.url;
+        } else {
+          _showMsg(msgEl, 'Gagal mendapatkan URL koneksi.', 'error');
+          btn.disabled = false; btn.textContent = 'Hubungkan Meta';
+        }
+      } catch (e) {
+        _showMsg(msgEl, e.message || 'Gagal. Pastikan App ID dan App Secret sudah disimpan.', 'error');
+        btn.disabled = false; btn.textContent = 'Hubungkan Meta';
       }
     });
 
