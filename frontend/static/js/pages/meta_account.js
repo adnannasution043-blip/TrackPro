@@ -8,6 +8,13 @@ export class MetaAccountPage {
   }
 
   async render() {
+    // Cek pesan sukses/error dari OAuth callback (hash: #/pengaturan/meta?success=1)
+    const hashQuery = window.location.hash.includes('?') ? window.location.hash.split('?')[1] : '';
+    const urlParams = new URLSearchParams(hashQuery);
+    const oauthSuccess = urlParams.get('success');
+    const oauthError   = urlParams.get('error');
+    const oauthAdded   = urlParams.get('added');
+
     this.container.innerHTML = `
       <div class="page-header">
         <div class="page-header-left">
@@ -17,6 +24,65 @@ export class MetaAccountPage {
         <div class="page-header-right" style="display:flex;gap:8px;">
           <button class="btn btn-primary" id="btn-show-form-meta">+ Tambah Akun Meta</button>
           <button class="btn btn-primary" id="btn-show-form-shopee">+ Tambah Akun Shopee</button>
+        </div>
+      </div>
+
+      ${oauthSuccess ? `<div class="alert alert-success" style="margin-bottom:16px;">
+        Akun Meta berhasil dihubungkan! ${oauthAdded > 0 ? `${oauthAdded} Ad Account baru ditambahkan.` : 'Token diperbarui.'}
+      </div>` : ''}
+      ${oauthError ? `<div class="alert alert-error" style="margin-bottom:16px;">
+        Koneksi Meta gagal: ${decodeURIComponent(oauthError).replace(/_/g, ' ')}.
+        Pastikan App ID, App Secret, dan Redirect URI sudah benar.
+      </div>` : ''}
+
+      <!-- Kartu Koneksi Meta OAuth -->
+      <div class="card" style="margin-bottom:16px;border-left:4px solid #1877f2;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+          <div style="width:36px;height:36px;background:#e7f0fd;border-radius:8px;display:flex;align-items:center;justify-content:center;">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="#1877f2"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+          </div>
+          <div>
+            <div style="font-size:13.5px;font-weight:700;">Koneksi Meta via OAuth</div>
+            <div style="font-size:11.5px;color:var(--text-muted);">Input App ID dan App Secret dari Meta Developer App kamu, lalu klik Hubungkan.</div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+          <div>
+            <div class="form-label">APP ID</div>
+            <input id="oauth-app-id" type="text" class="form-input" placeholder="Contoh: 1234567890123456">
+            <div class="form-hint">Dari Meta Developer App → Settings → Basic</div>
+          </div>
+          <div>
+            <div class="form-label">APP SECRET</div>
+            <input id="oauth-app-secret" type="password" class="form-input" placeholder="Paste App Secret di sini">
+            <div class="form-hint">Jangan share App Secret ke siapapun</div>
+          </div>
+        </div>
+
+        <div style="margin-bottom:12px;">
+          <div class="form-label">REDIRECT URI (copy ke Meta App)</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input id="oauth-redirect-uri" type="text" class="form-input"
+              value="${window.location.origin}/api/meta-oauth/callback"
+              readonly style="flex:1;font-family:monospace;font-size:11.5px;background:var(--bg-muted);color:var(--text-muted);">
+            <button class="btn btn-sm" id="btn-copy-uri" style="white-space:nowrap;">Salin</button>
+          </div>
+          <div class="form-hint">
+            Tambahkan URL ini di Meta Developer → App → Facebook Login → Pengaturan → Valid OAuth Redirect URIs
+          </div>
+        </div>
+
+        <div id="oauth-msg" style="display:none;margin-bottom:10px;padding:8px 10px;border-radius:6px;font-size:12px;"></div>
+
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <button class="btn btn-primary" id="btn-simpan-oauth">Simpan Konfigurasi</button>
+          <a id="btn-hubungkan-meta" href="/api/meta-oauth/connect" style="display:inline-block;">
+            <button class="btn" style="background:#1877f2;color:#fff;border-color:#1877f2;" id="btn-oauth-connect">
+              Hubungkan Meta
+            </button>
+          </a>
+          <span style="font-size:11px;color:var(--text-muted);">Simpan dulu sebelum klik Hubungkan</span>
         </div>
       </div>
 
@@ -59,9 +125,67 @@ export class MetaAccountPage {
 
     this._bindFormEvents();
     await this._load();
+    await this._loadOAuthConfig();
+  }
+
+  async _loadOAuthConfig() {
+    try {
+      const cfg = await apiFetch('/meta-oauth/config');
+      if (cfg.app_id) {
+        const inpId = this.container.querySelector('#oauth-app-id');
+        if (inpId) inpId.value = cfg.app_id;
+      }
+      if (cfg.app_secret_hint) {
+        const inpSec = this.container.querySelector('#oauth-app-secret');
+        if (inpSec) {
+          inpSec.placeholder = `Tersimpan (${cfg.app_secret_hint}) — kosongkan untuk tidak mengubah`;
+        }
+      }
+    } catch (_) {}
   }
 
   _bindFormEvents() {
+    // Salin Redirect URI
+    this.container.querySelector('#btn-copy-uri')?.addEventListener('click', () => {
+      const val = this.container.querySelector('#oauth-redirect-uri')?.value || '';
+      navigator.clipboard.writeText(val).then(() => {
+        const btn = this.container.querySelector('#btn-copy-uri');
+        if (btn) { btn.textContent = 'Tersalin!'; setTimeout(() => { btn.textContent = 'Salin'; }, 2000); }
+      });
+    });
+
+    // Simpan konfigurasi OAuth
+    this.container.querySelector('#btn-simpan-oauth')?.addEventListener('click', async () => {
+      const appId  = this.container.querySelector('#oauth-app-id')?.value.trim();
+      const appSec = this.container.querySelector('#oauth-app-secret')?.value.trim();
+      const msgEl  = this.container.querySelector('#oauth-msg');
+      if (!appId) {
+        _showMsg(msgEl, 'App ID wajib diisi.', 'error');
+        return;
+      }
+      const btn = this.container.querySelector('#btn-simpan-oauth');
+      btn.disabled = true; btn.textContent = 'Menyimpan…';
+      try {
+        const body = { app_id: appId };
+        if (appSec) body.app_secret = appSec;
+        if (!appSec && !appId) { _showMsg(msgEl, 'Isi App ID minimal.', 'error'); return; }
+        // kalau app_secret kosong, kita tetap perlu kirim sesuatu — baca existing atau tidak perlu
+        if (!appSec) {
+          // ambil existing secret dari backend tidak mungkin (terenkripsi), jadi wajib isi ulang saat edit
+          _showMsg(msgEl, 'App Secret wajib diisi (atau isi ulang untuk mengupdate).', 'error');
+          btn.disabled = false; btn.textContent = 'Simpan Konfigurasi';
+          return;
+        }
+        await apiFetch('/meta-oauth/config', { method: 'PUT', body: JSON.stringify(body) });
+        _showMsg(msgEl, 'Konfigurasi tersimpan. Sekarang klik "Hubungkan Meta".', 'success');
+        await this._loadOAuthConfig();
+      } catch (e) {
+        _showMsg(msgEl, e.message || 'Gagal menyimpan konfigurasi.', 'error');
+      } finally {
+        btn.disabled = false; btn.textContent = 'Simpan Konfigurasi';
+      }
+    });
+
     this.container.querySelector('#btn-show-form-meta')?.addEventListener('click', () => {
       const f = this.container.querySelector('#form-meta');
       f.style.display = f.style.display === 'none' ? 'block' : 'none';
