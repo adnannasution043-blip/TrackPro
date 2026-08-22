@@ -295,7 +295,10 @@ async def upload_wd_payment(
         else:
             import csv
             text = raw.decode("utf-8-sig", errors="replace")
-            reader = csv.DictReader(io.StringIO(text))
+            # deteksi delimiter: jika baris pertama pakai ";" lebih banyak dari ","
+            first_line = text.split("\n")[0]
+            delim = ";" if first_line.count(";") > first_line.count(",") else ","
+            reader = csv.DictReader(io.StringIO(text), delimiter=delim)
             for r in reader:
                 rows_raw.append({k.strip(): v for k, v in r.items()})
     except Exception as exc:
@@ -356,6 +359,17 @@ async def upload_wd_payment(
         except Exception:
             return None
 
+    def _parse_idr(val) -> Decimal:
+        """Parse angka IDR: handle titik ribuan ganda mis. '1.452.045' → 1452.045"""
+        s = str(val or "0").strip()
+        # ganti koma desimal ke titik
+        s = s.replace(",", ".")
+        parts = s.split(".")
+        if len(parts) > 2:
+            # titik pertama(s) = ribuan, titik terakhir = desimal
+            s = "".join(parts[:-1]) + "." + parts[-1]
+        return Decimal(s) if s else Decimal("0")
+
     # Status yang dianggap valid (selesai)
     STATUS_SELESAI = {"selesai", "completed", "complete", "sukses"}
 
@@ -375,8 +389,8 @@ async def upload_wd_payment(
             fail += 1
             continue
         try:
-            k = Decimal(str(r.get(col_komisi) or 0).replace(",", "."))
-        except InvalidOperation:
+            k = _parse_idr(r.get(col_komisi))
+        except (InvalidOperation, Exception):
             fail += 1
             continue
         agg[tgl]["komisi"] += k
