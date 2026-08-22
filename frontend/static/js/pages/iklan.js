@@ -212,16 +212,11 @@ export class IklanPage {
       const pctKlik = clM > 0 ? clS / clM * 100 : null;
       const epc     = clS > 0 ? Number(r.komisi||0) / clS : null;
       const komisi0 = Number(r.komisi||0) === 0;
-      return `<tr class="iklan-row" data-id="${r.id}" style="cursor:pointer;">
+      return `<tr class="iklan-row" data-id="${r.id}">
         <td style="color:var(--text-muted);font-size:12px;text-align:center;width:32px;">${i+1}</td>
         <td style="min-width:200px;">
-          <div style="font-weight:600;font-size:13px;color:#2563eb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px;" title="${r.nama_campaign}">${r.nama_campaign}</div>
+          <div class="camp-name-link" data-id="${r.id}" style="font-weight:600;font-size:13px;color:#2563eb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px;cursor:pointer;" title="${r.nama_campaign}">${r.nama_campaign}</div>
           <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Meta</div>
-        </td>
-        <td>
-          <span class="badge ${r.status==='ACTIVE'?'badge-green':'badge-gray'}" style="font-size:11px;">
-            ${r.status==='ACTIVE'?'Aktif':'Off'}
-          </span>
         </td>
         <td style="min-width:130px;">
           <button class="tahap-btn" data-id="${r.id}" data-tahap="${r.tahap||'pra_filter'}"
@@ -260,7 +255,7 @@ export class IklanPage {
     const totalRow = `<tr style="font-weight:700;background:var(--bg-muted);border-top:2px solid var(--border);font-size:12px;">
       <td></td>
       <td style="font-weight:800;">TOTAL (${visible.length} iklan)</td>
-      <td></td><td></td><td></td><td></td>
+      <td></td><td></td><td></td>
       <td>${rp(Math.round(tSpend))}</td>
       <td>${rp(Math.round(tPlus5))}</td>
       <td>${num(tOrd)}</td>
@@ -299,7 +294,6 @@ export class IklanPage {
             <thead><tr>
               <th style="width:32px;text-align:center;">#</th>
               <th style="min-width:200px;">CAMPAIGN</th>
-              <th>STATUS</th>
               <th style="min-width:130px;">TAHAP</th>
               <th style="min-width:110px;">TAG LINK 2</th>
               <th style="text-align:center;">HARI</th>
@@ -318,7 +312,7 @@ export class IklanPage {
             </tr></thead>
             <tbody>
               ${visible.length===0
-                ? `<tr><td colspan="18" class="empty">Tidak ada data iklan.</td></tr>`
+                ? `<tr><td colspan="17" class="empty">Tidak ada data iklan.</td></tr>`
                 : visible.map(rowHtml).join('') + totalRow}
             </tbody>
           </table>
@@ -380,11 +374,11 @@ export class IklanPage {
       });
     });
 
-    // Klik baris → modal
-    el.querySelectorAll('.iklan-row').forEach(row => {
-      row.addEventListener('click', e => {
-        if (e.target.closest('button')) return;
-        const r = this._rows.find(x => x.id === row.dataset.id);
+    // Klik nama campaign → modal
+    el.querySelectorAll('.camp-name-link').forEach(link => {
+      link.addEventListener('click', e => {
+        e.stopPropagation();
+        const r = this._rows.find(x => x.id === link.dataset.id);
         if (r) this._showModal(r);
       });
     });
@@ -438,18 +432,20 @@ export class IklanPage {
     const rect = btn.getBoundingClientRect();
     const popup = document.createElement('div');
     popup.className = 'catatan-popup';
+    const maxH = Math.max(160, window.innerHeight - rect.bottom - 16);
     popup.style.cssText = `position:fixed;top:${rect.bottom+6}px;right:${window.innerWidth-rect.right}px;
       background:#ffffff;border:1px solid #e5e7eb;border-radius:10px;
-      box-shadow:0 6px 24px rgba(0,0,0,0.18);z-index:9999;width:320px;`;
+      box-shadow:0 6px 24px rgba(0,0,0,0.18);z-index:9999;width:320px;
+      max-height:${maxH}px;display:flex;flex-direction:column;overflow:hidden;`;
     popup.innerHTML = `
-      <div style="padding:12px 14px 10px;border-bottom:1px solid #f3f4f6;">
+      <div style="padding:12px 14px 10px;border-bottom:1px solid #f3f4f6;flex-shrink:0;">
         <div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px;">Catatan Iklan</div>
         <div style="font-size:12px;color:#374151;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.nama_campaign}</div>
       </div>
-      <div id="note-timeline" style="max-height:220px;overflow-y:auto;padding:8px 14px;">
+      <div id="note-timeline" style="flex:1;overflow-y:auto;padding:8px 14px;min-height:0;">
         <div style="text-align:center;padding:16px;color:#9ca3af;font-size:12px;">Memuat…</div>
       </div>
-      <div style="padding:10px 14px;border-top:1px solid #f3f4f6;">
+      <div style="padding:10px 14px;border-top:1px solid #f3f4f6;flex-shrink:0;">
         <textarea id="popup-catatan" placeholder="Tulis catatan baru…" rows="2"
           style="width:100%;box-sizing:border-box;padding:7px 9px;border:1px solid #d1d5db;border-radius:6px;
           font-size:12.5px;resize:none;background:#ffffff;color:#111827;font-family:inherit;outline:none;margin-bottom:8px;"></textarea>
@@ -688,18 +684,20 @@ export class IklanPage {
     const rect = anchorEl.getBoundingClientRect();
     const popup = document.createElement('div');
     popup.className = 'catatan-popup';
+    const maxH2 = Math.max(160, window.innerHeight - rect.bottom - 16);
     popup.style.cssText = `position:fixed;top:${rect.bottom+6}px;right:${window.innerWidth-rect.right}px;
       background:#ffffff;border:1px solid #e5e7eb;border-radius:10px;
-      box-shadow:0 6px 24px rgba(0,0,0,0.18);z-index:99999;width:300px;`;
+      box-shadow:0 6px 24px rgba(0,0,0,0.18);z-index:99999;width:300px;
+      max-height:${maxH2}px;display:flex;flex-direction:column;overflow:hidden;`;
     popup.innerHTML = `
-      <div style="padding:10px 14px 8px;border-bottom:1px solid #f3f4f6;">
+      <div style="padding:10px 14px 8px;border-bottom:1px solid #f3f4f6;flex-shrink:0;">
         <div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px;">Catatan</div>
         <div style="font-size:11.5px;color:#374151;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.nama_campaign}</div>
       </div>
-      <div id="ro-timeline" style="max-height:260px;overflow-y:auto;padding:8px 14px;">
+      <div id="ro-timeline" style="flex:1;overflow-y:auto;padding:8px 14px;min-height:0;">
         <div style="text-align:center;padding:16px;color:#9ca3af;font-size:12px;">Memuat…</div>
       </div>
-      <div style="padding:8px 14px;border-top:1px solid #f3f4f6;text-align:right;">
+      <div style="padding:8px 14px;border-top:1px solid #f3f4f6;text-align:right;flex-shrink:0;">
         <button id="ro-tutup" class="btn btn-sm" style="font-size:12px;">Tutup</button>
       </div>`;
     document.body.appendChild(popup);
