@@ -32,6 +32,8 @@ export class LaporanHarian2Page {
     this._rows     = [];   // dari /dashboard (metrics harian)
     this._bdMap    = {};   // dari /laporan-harian2 (breakdown kategori)
     this._filters  = new Set(); // kosong = semua
+    this._page     = 1;
+    this._perPage  = 31;
   }
 
   async render() {
@@ -68,6 +70,7 @@ export class LaporanHarian2Page {
           <div class="loading" style="padding:32px;text-align:center;">Memuat…</div>
         </div>
       </div>
+      <div id="pagination-wrap"></div>
     `;
 
     this.container.querySelector('#btn-terapkan').addEventListener('click', () => {
@@ -93,6 +96,7 @@ export class LaporanHarian2Page {
         b.style.color       = on ? '#fff' : 'var(--text)';
         b.style.borderColor = on ? '#dc2626' : 'var(--border)';
       });
+      this._page = 1;
       this._render();
     });
 
@@ -111,6 +115,7 @@ export class LaporanHarian2Page {
       this._rows  = dash?.harian || [];
       this._bdMap = {};
       for (const row of (bd || [])) this._bdMap[row.tanggal] = row;
+      this._page = 1;
       this._render();
     } catch (e) {
       wrap.innerHTML = `<div class="alert alert-error" style="margin:16px;">${e.message}</div>`;
@@ -130,15 +135,23 @@ export class LaporanHarian2Page {
   }
 
   _render() {
-    const wrap = this.container.querySelector('#tbl-wrap');
-    const rows = this._visible();
+    const wrap    = this.container.querySelector('#tbl-wrap');
+    const pgWrap  = this.container.querySelector('#pagination-wrap');
+    const rows    = this._visible();
 
     if (!rows.length) {
       wrap.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);">Tidak ada data untuk rentang tanggal ini.</div>';
+      if (pgWrap) pgWrap.innerHTML = '';
       return;
     }
 
-    // Aggregat totals
+    const totalPages = Math.ceil(rows.length / this._perPage);
+    if (this._page > totalPages) this._page = Math.max(1, totalPages);
+    const startIdx = (this._page - 1) * this._perPage;
+    const endIdx   = startIdx + this._perPage;
+    const pageRows = rows.slice(startIdx, endIdx);
+
+    // Aggregat totals (semua rows, bukan hanya halaman ini)
     const tot = { story:0, feed:0, fp:0, storyIg:0, feedIg:0, ig:0, meta:0, adu:0, terra:0, iklan:0, kotor:0 };
     rows.forEach(r => {
       const bd = this._bdMap[r.tanggal] || {};
@@ -160,7 +173,7 @@ export class LaporanHarian2Page {
     const thIG   = thBase + 'background:#eff6ff;color:#2563eb;';
     const thIklan= thBase + 'background:#fef2f2;color:#dc2626;';
 
-    const rowsHtml = rows.map((r, i) => {
+    const rowsHtml = pageRows.map((r, i) => {
       const bd       = this._bdMap[r.tanggal] || {};
       const story    = Number(bd.komisi_story    || 0);
       const feed     = Number(bd.komisi_feed     || 0);
@@ -244,6 +257,39 @@ export class LaporanHarian2Page {
         if (r) this._showModal(r);
       });
     });
+
+    if (pgWrap) {
+      if (totalPages > 1) {
+        pgWrap.innerHTML = `
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 4px;margin-top:8px;flex-wrap:wrap;gap:8px;">
+            <div style="font-size:12px;color:var(--text-muted);">
+              Menampilkan ${startIdx+1}–${Math.min(endIdx, rows.length)} dari ${rows.length} hari
+            </div>
+            <div style="display:flex;align-items:center;gap:4px;">
+              <button id="pg-first" class="btn btn-sm" style="font-size:12px;padding:5px 10px;" ${this._page===1?'disabled':''}>«</button>
+              <button id="pg-prev"  class="btn btn-sm" style="font-size:12px;padding:5px 10px;" ${this._page===1?'disabled':''}>‹</button>
+              ${Array.from({length: totalPages}, (_,i) => i+1)
+                .filter(p => p===1 || p===totalPages || Math.abs(p-this._page)<=2)
+                .reduce((acc,p,i,arr) => { if (i>0 && p-arr[i-1]>1) acc.push('…'); acc.push(p); return acc; }, [])
+                .map(p => p==='…'
+                  ? `<span style="padding:5px 8px;font-size:12px;color:var(--text-muted);">…</span>`
+                  : `<button class="btn btn-sm pg-num" data-pg="${p}" style="font-size:12px;padding:5px 10px;${p===this._page?'background:#dc2626;color:#fff;border-color:#dc2626;':''}">${p}</button>`
+                ).join('')}
+              <button id="pg-next" class="btn btn-sm" style="font-size:12px;padding:5px 10px;" ${this._page===totalPages?'disabled':''}>›</button>
+              <button id="pg-last" class="btn btn-sm" style="font-size:12px;padding:5px 10px;" ${this._page===totalPages?'disabled':''}>»</button>
+            </div>
+          </div>`;
+        pgWrap.querySelector('#pg-first')?.addEventListener('click', () => { this._page = 1; this._render(); });
+        pgWrap.querySelector('#pg-prev') ?.addEventListener('click', () => { this._page--; this._render(); });
+        pgWrap.querySelector('#pg-next') ?.addEventListener('click', () => { this._page++; this._render(); });
+        pgWrap.querySelector('#pg-last') ?.addEventListener('click', () => { this._page = totalPages; this._render(); });
+        pgWrap.querySelectorAll('.pg-num').forEach(btn => {
+          btn.addEventListener('click', () => { this._page = Number(btn.dataset.pg); this._render(); });
+        });
+      } else {
+        pgWrap.innerHTML = '';
+      }
+    }
   }
 
   async _showModal(r) {
