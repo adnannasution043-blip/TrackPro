@@ -60,6 +60,8 @@ export class KomisiBersihPage {
     this._dates    = [];
     this._wdRows   = [];
     this._tab      = 'komisi';
+    this._page     = 1;
+    this._perPage  = 31;
   }
 
   async render() {
@@ -92,6 +94,7 @@ export class KomisiBersihPage {
           <div class="loading" style="padding:32px;text-align:center;">Memuat…</div>
         </div>
       </div>
+      <div id="pagination-wrap"></div>
     `;
 
     this.container.querySelector('#btn-terapkan').addEventListener('click', () => {
@@ -103,7 +106,8 @@ export class KomisiBersihPage {
     this.container.querySelector('#tab-bar').addEventListener('click', e => {
       const btn = e.target.closest('.kb-tab');
       if (!btn) return;
-      this._tab = btn.dataset.tab;
+      this._tab  = btn.dataset.tab;
+      this._page = 1;
       this.container.querySelectorAll('.kb-tab').forEach(b => {
         const on = b.dataset.tab === this._tab;
         b.style.color        = on ? '#dc2626' : 'var(--text-muted)';
@@ -140,6 +144,7 @@ export class KomisiBersihPage {
       }
       this._dates  = [...dateSet].sort();
       this._wdRows = calcWdTax((wd || []).sort((a,b) => a.tanggal.localeCompare(b.tanggal)));
+      this._page   = 1;
       this._render();
     } catch (e) {
       wrap.innerHTML = `<div class="alert alert-error" style="margin:16px;">${e.message}</div>`;
@@ -151,10 +156,46 @@ export class KomisiBersihPage {
     this._renderKomisi();
   }
 
+  _pgHtml(total, pgWrap) {
+    const totalPages = Math.ceil(total / this._perPage);
+    if (!pgWrap) return totalPages;
+    if (totalPages <= 1) { pgWrap.innerHTML = ''; return totalPages; }
+    const startIdx = (this._page - 1) * this._perPage;
+    pgWrap.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 4px;margin-top:8px;flex-wrap:wrap;gap:8px;">
+        <div style="font-size:12px;color:var(--text-muted);">
+          Menampilkan ${startIdx+1}–${Math.min(startIdx+this._perPage, total)} dari ${total} baris
+        </div>
+        <div style="display:flex;align-items:center;gap:4px;">
+          <button id="pg-first" class="btn btn-sm" style="font-size:12px;padding:5px 10px;" ${this._page===1?'disabled':''}>«</button>
+          <button id="pg-prev"  class="btn btn-sm" style="font-size:12px;padding:5px 10px;" ${this._page===1?'disabled':''}>‹</button>
+          ${Array.from({length:totalPages},(_,i)=>i+1)
+            .filter(p=>p===1||p===totalPages||Math.abs(p-this._page)<=2)
+            .reduce((acc,p,i,arr)=>{if(i>0&&p-arr[i-1]>1)acc.push('…');acc.push(p);return acc;},[])
+            .map(p=>p==='…'
+              ?`<span style="padding:5px 8px;font-size:12px;color:var(--text-muted);">…</span>`
+              :`<button class="btn btn-sm pg-num" data-pg="${p}" style="font-size:12px;padding:5px 10px;${p===this._page?'background:#dc2626;color:#fff;border-color:#dc2626;':''}">${p}</button>`
+            ).join('')}
+          <button id="pg-next" class="btn btn-sm" style="font-size:12px;padding:5px 10px;" ${this._page===totalPages?'disabled':''}>›</button>
+          <button id="pg-last" class="btn btn-sm" style="font-size:12px;padding:5px 10px;" ${this._page===totalPages?'disabled':''}>»</button>
+        </div>
+      </div>`;
+    pgWrap.querySelector('#pg-first')?.addEventListener('click', ()=>{ this._page=1; this._render(); });
+    pgWrap.querySelector('#pg-prev') ?.addEventListener('click', ()=>{ this._page--; this._render(); });
+    pgWrap.querySelector('#pg-next') ?.addEventListener('click', ()=>{ this._page++; this._render(); });
+    pgWrap.querySelector('#pg-last') ?.addEventListener('click', ()=>{ this._page=totalPages; this._render(); });
+    pgWrap.querySelectorAll('.pg-num').forEach(btn=>{
+      btn.addEventListener('click', ()=>{ this._page=Number(btn.dataset.pg); this._render(); });
+    });
+    return totalPages;
+  }
+
   _renderKomisi() {
-    const wrap = this.container.querySelector('#tbl-wrap');
+    const wrap   = this.container.querySelector('#tbl-wrap');
+    const pgWrap = this.container.querySelector('#pagination-wrap');
     if (!this._dates.length) {
       wrap.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);">Tidak ada data untuk rentang tanggal ini.</div>';
+      if (pgWrap) pgWrap.innerHTML = '';
       return;
     }
 
@@ -197,6 +238,11 @@ export class KomisiBersihPage {
       pajak:        a.pajak       + r.pajak,
     }), { organik:0, iklan:0, totalMasuk:0, spend:0, profitIklan:0, totalBersih:0, pajak:0 });
 
+    const totalPages = Math.ceil(rows.length / this._perPage);
+    if (this._page > totalPages) this._page = Math.max(1, totalPages);
+    const startIdx = (this._page - 1) * this._perPage;
+    const pageRows = rows.slice(startIdx, startIdx + this._perPage);
+
     // ── styles ────────────────────────────────────────────────────────────────
     const thBase = 'padding:8px 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;text-align:right;';
     const tdBase = 'padding:7px 10px;text-align:right;white-space:nowrap;';
@@ -210,7 +256,7 @@ export class KomisiBersihPage {
     const grpHdr = (g, label, cols) =>
       `<th colspan="${cols}" style="${thBase}background:${g.bg};color:${g.color};border-bottom:2px solid ${g.border};text-align:center;">${label}</th>`;
 
-    const bodyRows = rows.map((r, i) => {
+    const bodyRows = pageRows.map((r, i) => {
       const stripe = i%2===1 ? 'background:var(--bg-muted);' : '';
       const pColor = r.profitIklan >= 0 ? '#16a34a' : '#dc2626';
       const tColor = r.totalBersih >= 0 ? '#16a34a' : '#dc2626';
@@ -279,16 +325,19 @@ export class KomisiBersihPage {
         ≤60 jt → 5% · 60–250 jt → 15% · 250–500 jt → 25% · 500 jt–5 M → 30% · >5 M → 35%
         &nbsp;·&nbsp; Total pajak periode ini: <strong>Rp ${rp(tot.pajak)}</strong>
       </div>`;
+    this._pgHtml(rows.length, pgWrap);
   }
 
   _renderPajak() {
-    const wrap = this.container.querySelector('#tbl-wrap');
+    const wrap   = this.container.querySelector('#tbl-wrap');
+    const pgWrap = this.container.querySelector('#pagination-wrap');
     if (!this._wdRows.length) {
       wrap.innerHTML = `
         <div style="padding:40px;text-align:center;color:var(--text-muted);">
           <p>Belum ada data Pembayaran WD.</p>
           <p style="font-size:12px;margin-top:6px;">Upload <strong>BillConversionReport</strong> di halaman <a href="#/upload" style="color:#dc2626;">Upload Data</a>.</p>
         </div>`;
+      if (pgWrap) pgWrap.innerHTML = '';
       return;
     }
 
@@ -298,8 +347,13 @@ export class KomisiBersihPage {
     const totPajak  = this._wdRows.reduce((s,r) => s+r.pajak,0);
     const totBersih = this._wdRows.reduce((s,r) => s+r.bersih,0);
 
+    const totalPages = Math.ceil(this._wdRows.length / this._perPage);
+    if (this._page > totalPages) this._page = Math.max(1, totalPages);
+    const startIdx = (this._page - 1) * this._perPage;
+    const pageWdRows = this._wdRows.slice(startIdx, startIdx + this._perPage);
+
     let prevBulan = '';
-    const bodyRows = this._wdRows.map((r,i) => {
+    const bodyRows = pageWdRows.map((r,i) => {
       const bulan = r.tanggal.slice(0,7);
       let header = '';
       if (bulan !== prevBulan) {
@@ -352,6 +406,7 @@ export class KomisiBersihPage {
         <strong>PPh 21 Progresif</strong> — DPP = Komisi × 50%, tarif kumulatif per bulan:
         ≤60 jt → 5% · 60–250 jt → 15% · 250–500 jt → 25% · 500 jt–5 M → 30% · >5 M → 35%
       </div>`;
+    this._pgHtml(this._wdRows.length, pgWrap);
   }
 
   destroy() {}
