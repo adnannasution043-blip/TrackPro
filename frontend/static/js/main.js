@@ -90,6 +90,33 @@ function renderBanner() {
 
 let expandedGroups = new Set();
 
+function _confirmLogout() {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal" style="max-width:360px;width:92vw;">
+      <div class="modal-body" style="padding:28px 24px 24px;text-align:center;">
+        <div style="width:48px;height:48px;border-radius:50%;background:#fef2f2;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2" width="22" height="22"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </div>
+        <h2 style="font-size:16px;font-weight:700;margin:0 0 8px;">Keluar dari TrackPro?</h2>
+        <p style="font-size:13px;color:var(--text-muted,#6b7280);margin:0 0 24px;">Sesi Anda akan diakhiri dan Anda perlu login kembali.</p>
+        <div style="display:flex;gap:10px;justify-content:center;">
+          <button id="logout-batal" class="btn" style="min-width:100px;padding:9px 20px;">Batal</button>
+          <button id="logout-ok" class="btn" style="min-width:100px;padding:9px 20px;background:#dc2626;color:#fff;border-color:#dc2626;">Ya, Keluar</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector('#logout-batal').addEventListener('click', close);
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  overlay.querySelector('#logout-ok').addEventListener('click', () => {
+    clearToken();
+    redirect('/login');
+  });
+}
+
 function renderSidebar(currentPath, user) {
   const userName = user?.nama || 'User';
 
@@ -240,8 +267,7 @@ function renderShell(path, user) {
   `;
 
   document.getElementById('btn-logout')?.addEventListener('click', () => {
-    clearToken();
-    redirect('/login');
+    _confirmLogout();
   });
 
   document.querySelectorAll('[data-group]').forEach(btn => {
@@ -614,8 +640,7 @@ function getContainer(path) {
     if (sidebarNav) {
       sidebarNav.innerHTML = renderSidebar(path, currentUser);
       document.getElementById('btn-logout')?.addEventListener('click', () => {
-        clearToken();
-        redirect('/login');
+        _confirmLogout();
       });
       document.querySelectorAll('[data-group]').forEach(btn => {
         btn.addEventListener('click', () => {
