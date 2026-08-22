@@ -41,6 +41,8 @@ export class IklanPage {
     this._search = '';
     this._tahap  = 'all';
     this._status = 'all';
+    this._page   = 1;
+    this._perPage = 50;
     this._boundClose = this._closePanels.bind(this);
   }
 
@@ -202,6 +204,12 @@ export class IklanPage {
     const tPlus5   = tSpend * 1.05;
     const tPctKlik = tClM > 0 ? tClS / tClM * 100 : null;
 
+    const totalPages = Math.ceil(visible.length / this._perPage);
+    if (this._page > totalPages) this._page = Math.max(1, totalPages);
+    const startIdx = (this._page - 1) * this._perPage;
+    const endIdx   = startIdx + this._perPage;
+    const pageRows = visible.slice(startIdx, endIdx);
+
     const rowHtml = (r, i) => {
       const spend   = Number(r.spend_idr || 0);
       const plus5   = spend * 1.05;
@@ -313,25 +321,57 @@ export class IklanPage {
             <tbody>
               ${visible.length===0
                 ? `<tr><td colspan="17" class="empty">Tidak ada data iklan.</td></tr>`
-                : visible.map(rowHtml).join('') + totalRow}
+                : pageRows.map((r,i) => rowHtml(r, startIdx + i)).join('') + totalRow}
             </tbody>
           </table>
         </div>
-      </div>`;
+      </div>
+      ${totalPages > 1 ? `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 4px;margin-top:8px;flex-wrap:wrap;gap:8px;">
+        <div style="font-size:12px;color:var(--text-muted);">
+          Menampilkan ${startIdx+1}–${Math.min(endIdx, visible.length)} dari ${visible.length} iklan
+        </div>
+        <div style="display:flex;align-items:center;gap:4px;">
+          <button id="pg-first" class="btn btn-sm" style="font-size:12px;padding:5px 10px;" ${this._page===1?'disabled':''}>«</button>
+          <button id="pg-prev"  class="btn btn-sm" style="font-size:12px;padding:5px 10px;" ${this._page===1?'disabled':''}>‹</button>
+          ${Array.from({length: totalPages}, (_,i) => i+1)
+            .filter(p => p===1 || p===totalPages || Math.abs(p-this._page)<=2)
+            .reduce((acc,p,i,arr) => {
+              if (i>0 && p-arr[i-1]>1) acc.push('…');
+              acc.push(p); return acc;
+            }, [])
+            .map(p => p==='…'
+              ? `<span style="padding:5px 8px;font-size:12px;color:var(--text-muted);">…</span>`
+              : `<button class="btn btn-sm pg-num" data-pg="${p}" style="font-size:12px;padding:5px 10px;${p===this._page?'background:#dc2626;color:#fff;border-color:#dc2626;':''}">${p}</button>`
+            ).join('')}
+          <button id="pg-next" class="btn btn-sm" style="font-size:12px;padding:5px 10px;" ${this._page===totalPages?'disabled':''}>›</button>
+          <button id="pg-last" class="btn btn-sm" style="font-size:12px;padding:5px 10px;" ${this._page===totalPages?'disabled':''}>»</button>
+        </div>
+      </div>` : ''}
+      `;
 
     // Search
     el.querySelector('#inp-search')?.addEventListener('input', e => {
-      this._search = e.target.value; this._renderContent(el);
+      this._search = e.target.value; this._page = 1; this._renderContent(el);
     });
 
     // Status tabs
     el.querySelectorAll('[data-st]').forEach(btn => {
-      btn.addEventListener('click', () => { this._status = btn.dataset.st; this._renderContent(el); });
+      btn.addEventListener('click', () => { this._status = btn.dataset.st; this._page = 1; this._renderContent(el); });
     });
 
     // Tahap tabs
     el.querySelectorAll('[data-t]').forEach(btn => {
-      btn.addEventListener('click', () => { this._tahap = btn.dataset.t; this._renderContent(el); });
+      btn.addEventListener('click', () => { this._tahap = btn.dataset.t; this._page = 1; this._renderContent(el); });
+    });
+
+    // Pagination
+    el.querySelector('#pg-first')?.addEventListener('click', () => { this._page = 1; this._renderContent(el); });
+    el.querySelector('#pg-prev') ?.addEventListener('click', () => { this._page--; this._renderContent(el); });
+    el.querySelector('#pg-next') ?.addEventListener('click', () => { this._page++; this._renderContent(el); });
+    el.querySelector('#pg-last') ?.addEventListener('click', () => { this._page = totalPages; this._renderContent(el); });
+    el.querySelectorAll('.pg-num').forEach(btn => {
+      btn.addEventListener('click', () => { this._page = Number(btn.dataset.pg); this._renderContent(el); });
     });
 
     // Tahap dropdown per baris
