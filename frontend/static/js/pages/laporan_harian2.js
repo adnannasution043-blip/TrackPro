@@ -32,7 +32,7 @@ export class LaporanHarian2Page {
     this.sampai    = todayStr();
     this._rows     = [];   // dari /dashboard (metrics harian)
     this._bdMap    = {};   // dari /laporan-harian2 (breakdown kategori)
-    this._filter   = 'semua';
+    this._filters  = new Set(); // kosong = semua
   }
 
   async render() {
@@ -50,15 +50,18 @@ export class LaporanHarian2Page {
         </div>
       </div>
 
-      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;" id="filter-pills">
-        ${FILTERS.map(f => `
-          <button class="pill-filter${f.key === this._filter ? ' active' : ''}" data-filter="${f.key}"
-            style="padding:6px 16px;border-radius:20px;border:1.5px solid ${f.key === this._filter ? 'var(--primary)' : 'var(--border)'};
-                   background:${f.key === this._filter ? 'var(--primary)' : 'var(--bg-card)'};
-                   color:${f.key === this._filter ? '#fff' : 'var(--text)'};
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;" id="filter-pills">
+        ${FILTERS.map(f => {
+          const isAll = f.key === 'semua';
+          const on    = isAll ? this._filters.size === 0 : this._filters.has(f.key);
+          return `<button data-filter="${f.key}"
+            style="padding:6px 16px;border-radius:20px;border:1.5px solid ${on ? 'var(--primary)' : 'var(--border)'};
+                   background:${on ? 'var(--primary)' : 'var(--bg-card)'};
+                   color:${on ? '#fff' : 'var(--text)'};
                    font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;">
             ${f.label}
-          </button>`).join('')}
+          </button>`;
+        }).join('')}
       </div>
 
       <div class="card" style="padding:0;overflow:hidden;">
@@ -77,9 +80,16 @@ export class LaporanHarian2Page {
     this.container.querySelector('#filter-pills').addEventListener('click', e => {
       const btn = e.target.closest('[data-filter]');
       if (!btn) return;
-      this._filter = btn.dataset.filter;
+      const key = btn.dataset.filter;
+      if (key === 'semua') {
+        this._filters.clear();
+      } else {
+        if (this._filters.has(key)) this._filters.delete(key);
+        else this._filters.add(key);
+      }
       this.container.querySelectorAll('[data-filter]').forEach(b => {
-        const on = b.dataset.filter === this._filter;
+        const k  = b.dataset.filter;
+        const on = k === 'semua' ? this._filters.size === 0 : this._filters.has(k);
         b.style.background  = on ? 'var(--primary)' : 'var(--bg-card)';
         b.style.color       = on ? '#fff' : 'var(--text)';
         b.style.borderColor = on ? 'var(--primary)' : 'var(--border)';
@@ -109,11 +119,12 @@ export class LaporanHarian2Page {
   }
 
   _visible() {
-    const f = this._filter;
-    if (f === 'semua') return this._rows;
+    if (this._filters.size === 0) return this._rows;
     const keyMap = { fp:'total_fp', ig:'total_ig', meta:'komisi_meta', adu:'komisi_adu', terra:'komisi_terra' };
-    const key = keyMap[f];
-    return this._rows.filter(r => Number((this._bdMap[r.tanggal] || {})[key] || 0) > 0);
+    return this._rows.filter(r => {
+      const bd = this._bdMap[r.tanggal] || {};
+      return [...this._filters].some(f => Number(bd[keyMap[f]] || 0) > 0);
+    });
   }
 
   _render() {
