@@ -259,6 +259,168 @@ async def upload_shopee_click(
 
 
 # ===========================================================================
+# WD Payment — BillConversionReport Shopee
+# ===========================================================================
+
+@router.post("/wd-payment", response_model=UploadResponse, status_code=status.HTTP_201_CREATED)
+async def upload_wd_payment(
+    file: UploadFile,
+    current_user: CurrentUser,
+    db: DB,
+    shopee_account_id: UUID = Query(...),
+):
+    """Upload BillConversionReport (.csv atau .xlsx) dari Shopee Affiliate."""
+    from collections import defaultdict
+    from datetime import timedelta, date as date_type
+    from decimal import Decimal, InvalidOperation
+    import io
+
+    await _assert_shopee_account_owned(shopee_account_id, current_user.id, db)
+    raw = await file.read()
+    fname = (file.filename or "").lower()
+
+    import_log = _start_import(current_user.id, "wd_payment", file.filename, db)
+
+    # ── Parse file ────────────────────────────────────────────────────────────
+    rows_raw: list[dict] = []
+    try:
+        if fname.endswith(".xlsx") or raw[:4] == b"PK\x03\x04":
+            import openpyxl
+            wb = openpyxl.load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
+            ws = wb.active
+            headers = [str(c.value or "").strip() for c in next(ws.iter_rows(min_row=1, max_row=1))]
+            for row in ws.iter_rows(min_row=2, values_only=True):
+                rows_raw.append(dict(zip(headers, row)))
+            wb.close()
+        else:
+            import csv
+            text = raw.decode("utf-8-sig", errors="replace")
+            reader = csv.DictReader(io.StringIO(text))
+            for r in reader:
+                rows_raw.append({k.strip(): v for k, v in r.items()})
+    except Exception as exc:
+        return await _fail_import(import_log, db, f"Gagal membaca file: {exc}")
+
+    if not rows_raw:
+        return await _fail_import(import_log, db, "File kosong atau tidak terbaca.")
+
+    # ── Identifikasi kolom ────────────────────────────────────────────────────
+    def _find_col(row: dict, *candidates):
+        for c in candidates:
+            if c in row:
+                return c
+        return None
+
+    sample = rows_raw[0]
+    col_status   = _find_col(sample, "Status Pesanan", "Status Pemebelian")
+    col_tgl      = _find_col(sample, "Waktu Terselesaikan", "Waktu Pemesanan")
+    col_komisi   = _find_col(sample, "Komisi Bersih Affiliate (Rp)", "Total Komisi per Pesanan(Rp)")
+
+    if not all([col_status, col_tgl, col_komisi]):
+        return await _fail_import(import_log, db,
+            f"Kolom tidak ditemukan. Pastikan file adalah BillConversionReport Shopee. "
+            f"Header: {list(sample.keys())[:8]}")
+
+    # ── Konversi tanggal Excel serial ─────────────────────────────────────────
+    EXCEL_EPOCH = date_type(1899, 12, 30)
+
+    def _parse_date(val) -> date_type | None:
+        if val is None:
+            return None
+        if isinstance(val, (int, float)):
+            try:
+                return EXCEL_EPOCH + timedelta(days=float(val))
+            except Exception:
+                return None
+        s = str(val).strip()
+        for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y"):
+            try:
+                return datetime.strptime(s, fmt).date()
+            except ValueError:
+                continue
+        try:
+            return EXCEL_EPOCH + timedelta(days=float(s))
+        except Exception:
+            return None
+
+    # ── Agregasi per tanggal ──────────────────────────────────────────────────
+    agg: dict[date_type, dict] = defaultdict(lambda: {"komisi": Decimal("0"), "n": 0})
+
+    ok, fail = 0, 0
+    for r in rows_raw:
+        status_val = str(r.get(col_status) or "").strip()
+        if status_val != "Selesai":
+            continue
+        tgl = _parse_date(r.get(col_tgl))
+        if tgl is None:
+            fail += 1
+            continue
+        try:
+            k = Decimal(str(r.get(col_komisi) or 0).replace(",", "."))
+        except InvalidOperation:
+            fail += 1
+            continue
+        agg[tgl]["komisi"] += k
+        agg[tgl]["n"] += 1
+        ok += 1
+
+    if not agg:
+        return await _fail_import(import_log, db, "Tidak ada baris dengan status Selesai yang valid.")
+
+    # ── Upsert ke wd_payments ─────────────────────────────────────────────────
+    from app.models.wd_payment import WdPayment
+    import uuid as uuid_mod
+
+    for tgl, val in agg.items():
+        stmt = sa_pg.insert(WdPayment).values(
+            id=uuid_mod.uuid4(),
+            shopee_account_id=shopee_account_id,
+            user_id=current_user.id,
+            tanggal=tgl,
+            total_komisi=val["komisi"],
+            jumlah_orders=val["n"],
+        ).on_conflict_do_update(
+            constraint="uq_wd_payments_account_tanggal",
+            set_={"total_komisi": val["komisi"], "jumlah_orders": val["n"],
+                  "updated_at": sa.text("now()")},
+        )
+        await db.execute(stmt)
+
+    await db.commit()
+    return await _finish_import(import_log, ok, fail, db)
+
+
+@router.get("/wd-payment")
+async def get_wd_payments(
+    current_user: CurrentUser,
+    db: DB,
+    tanggal_dari: date = Query(...),
+    tanggal_sampai: date = Query(...),
+    shopee_account_id: UUID | None = Query(None),
+):
+    """Ambil data WD payment per tanggal untuk Komisi Bersih."""
+    from app.models.wd_payment import WdPayment
+
+    q = (
+        sa.select(WdPayment.tanggal, sa.func.sum(WdPayment.total_komisi).label("total_komisi"),
+                  sa.func.sum(WdPayment.jumlah_orders).label("jumlah_orders"))
+        .join(ShopeeAccount, WdPayment.shopee_account_id == ShopeeAccount.id)
+        .where(
+            ShopeeAccount.user_id == current_user.id,
+            WdPayment.tanggal.between(tanggal_dari, tanggal_sampai),
+        )
+        .group_by(WdPayment.tanggal)
+        .order_by(WdPayment.tanggal)
+    )
+    if shopee_account_id:
+        q = q.where(WdPayment.shopee_account_id == shopee_account_id)
+
+    rows = (await db.execute(q)).all()
+    return [{"tanggal": str(r.tanggal), "total_komisi": float(r.total_komisi),
+             "jumlah_orders": r.jumlah_orders} for r in rows]
+
+
+# ===========================================================================
 # Upsert helpers — masing-masing hanya update kolom miliknya
 # ===========================================================================
 

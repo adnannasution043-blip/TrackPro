@@ -185,6 +185,37 @@ export class UploadPage {
           </button>
         </div>
       </div>
+
+      <div class="card" style="margin-bottom:16px;">
+        <div style="font-size:13px;font-weight:700;margin-bottom:4px;">Pembayaran WD Shopee</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px;">
+          Upload <strong>BillConversionReport</strong> dari Shopee Affiliate (format .csv atau .xlsx).
+          Data akan ditampilkan di Komisi Bersih dengan kalkulasi pajak progresif.
+        </div>
+
+        <div class="form-group" style="margin-bottom:12px;">
+          <div class="form-label">AKUN SHOPEE</div>
+          <select class="form-select" id="sel-shopee-wd">
+            <option value="">Pilih Akun Shopee</option>
+            ${shopeeOptions || '<option disabled>Belum ada akun Shopee terdaftar</option>'}
+          </select>
+        </div>
+
+        <div class="upload-zone" id="zone-wd" style="max-width:480px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <p><strong>Pilih file CSV / XLSX</strong> atau drag & drop</p>
+          <p style="font-size:12px;margin-top:4px;">BillConversionReport dari Shopee Affiliate</p>
+        </div>
+        <input type="file" id="file-wd" accept=".csv,.xlsx" style="display:none">
+        <div id="name-wd" style="font-size:12px;color:#6b7280;margin-top:4px;"></div>
+
+        <div id="wd-error"   class="alert alert-error"   style="display:none;margin-top:10px;"></div>
+        <div id="wd-success" class="alert alert-success" style="display:none;margin-top:10px;"></div>
+
+        <div style="margin-top:12px;display:flex;justify-content:flex-end;">
+          <button class="btn btn-primary" id="btn-upload-wd" style="padding:9px 32px;">Upload WD</button>
+        </div>
+      </div>
     `;
 
     this._bindUploadZone('zone-commission', 'file-commission', 'name-commission');
@@ -193,8 +224,10 @@ export class UploadPage {
     this._bindUploadZone('zone-breakdown-placement', 'file-breakdown-placement', 'name-breakdown-placement');
     this._bindUploadZone('zone-breakdown-platform', 'file-breakdown-platform', 'name-breakdown-platform');
     this._bindUploadZone('zone-breakdown-age', 'file-breakdown-age', 'name-breakdown-age');
+    this._bindUploadZone('zone-wd', 'file-wd', 'name-wd');
 
     el.querySelector('#btn-upload').addEventListener('click', () => this._submit());
+    el.querySelector('#btn-upload-wd').addEventListener('click', () => this._submitWd());
   }
 
   _bindUploadZone(zoneId, fileId, nameId) {
@@ -322,6 +355,45 @@ export class UploadPage {
     } finally {
       btn.disabled = false;
       btn.textContent = 'Upload & Proses';
+    }
+  }
+
+  async _submitWd() {
+    const errEl = this.container.querySelector('#wd-error');
+    const successEl = this.container.querySelector('#wd-success');
+    const btn = this.container.querySelector('#btn-upload-wd');
+    errEl.style.display = 'none';
+    successEl.style.display = 'none';
+
+    const shopeeId = this.container.querySelector('#sel-shopee-wd').value;
+    const file = this.container.querySelector('#file-wd').files[0];
+
+    if (!shopeeId) {
+      errEl.textContent = 'Pilih akun Shopee terlebih dahulu.';
+      errEl.style.display = 'block';
+      return;
+    }
+    if (!file) {
+      errEl.textContent = 'Pilih file BillConversionReport terlebih dahulu.';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Memproses…';
+
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await apiUpload(`/upload/wd-payment?shopee_account_id=${shopeeId}`, fd);
+      successEl.textContent = `Upload berhasil! ${res?.baris_diproses ?? 0} hari data WD tersimpan.`;
+      successEl.style.display = 'block';
+    } catch (err) {
+      errEl.textContent = err.message;
+      errEl.style.display = 'block';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Upload WD';
     }
   }
 
