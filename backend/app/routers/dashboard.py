@@ -473,6 +473,42 @@ async def get_laporan_harian2(
 ):
     """Laporan harian komisi dikelompokkan per keyword tag link."""
 
+    def _sum_excl(keyword: str, exclude: str):
+        """Sum komisi dari tag yang mengandung keyword tapi TIDAK mengandung exclude."""
+        return sa.func.coalesce(
+            sa.func.sum(
+                sa.case(
+                    (
+                        sa.and_(
+                            TagLink.tag.ilike(f"%{keyword}%"),
+                            ~TagLink.tag.ilike(f"%{exclude}%"),
+                        ),
+                        DailyMetric.commission_idr,
+                    ),
+                    else_=sa.literal(Decimal("0")),
+                )
+            ),
+            Decimal("0"),
+        )
+
+    def _sum_and(kw1: str, kw2: str):
+        """Sum komisi dari tag yang mengandung KEDUA keyword."""
+        return sa.func.coalesce(
+            sa.func.sum(
+                sa.case(
+                    (
+                        sa.and_(
+                            TagLink.tag.ilike(f"%{kw1}%"),
+                            TagLink.tag.ilike(f"%{kw2}%"),
+                        ),
+                        DailyMetric.commission_idr,
+                    ),
+                    else_=sa.literal(Decimal("0")),
+                )
+            ),
+            Decimal("0"),
+        )
+
     def _sum_if(keyword: str):
         return sa.func.coalesce(
             sa.func.sum(
@@ -487,9 +523,10 @@ async def get_laporan_harian2(
     q = (
         sa.select(
             DailyMetric.tanggal,
-            _sum_if("live").label("komisi_live"),
-            _sum_if("story").label("komisi_story"),
-            _sum_if("feed").label("komisi_feed"),
+            _sum_excl("story", "ig").label("komisi_story"),
+            _sum_excl("feed",  "ig").label("komisi_feed"),
+            _sum_and("story", "ig").label("komisi_story_ig"),
+            _sum_and("feed",  "ig").label("komisi_feed_ig"),
             _sum_if("meta").label("komisi_meta"),
             _sum_if("adu").label("komisi_adu"),
             _sum_if("terra").label("komisi_terra"),
@@ -511,25 +548,29 @@ async def get_laporan_harian2(
 
     result = []
     for r in rows:
-        live  = r.komisi_live  or _ZERO
-        story = r.komisi_story or _ZERO
-        feed  = r.komisi_feed  or _ZERO
-        meta  = r.komisi_meta  or _ZERO
-        adu   = r.komisi_adu   or _ZERO
-        terra = r.komisi_terra or _ZERO
-        total_fp    = live + story + feed
+        story    = r.komisi_story    or _ZERO
+        feed     = r.komisi_feed     or _ZERO
+        story_ig = r.komisi_story_ig or _ZERO
+        feed_ig  = r.komisi_feed_ig  or _ZERO
+        meta     = r.komisi_meta     or _ZERO
+        adu      = r.komisi_adu      or _ZERO
+        terra    = r.komisi_terra    or _ZERO
+        total_fp    = story + feed
+        total_ig    = story_ig + feed_ig
         total_iklan = meta + adu + terra
         result.append({
-            "tanggal":      str(r.tanggal),
-            "komisi_live":  float(live),
-            "komisi_story": float(story),
-            "komisi_feed":  float(feed),
-            "total_fp":     float(total_fp),
-            "komisi_meta":  float(meta),
-            "komisi_adu":   float(adu),
-            "komisi_terra": float(terra),
-            "total_iklan":  float(total_iklan),
-            "total_kotor":  float(total_fp + total_iklan),
+            "tanggal":         str(r.tanggal),
+            "komisi_story":    float(story),
+            "komisi_feed":     float(feed),
+            "total_fp":        float(total_fp),
+            "komisi_story_ig": float(story_ig),
+            "komisi_feed_ig":  float(feed_ig),
+            "total_ig":        float(total_ig),
+            "komisi_meta":     float(meta),
+            "komisi_adu":      float(adu),
+            "komisi_terra":    float(terra),
+            "total_iklan":     float(total_iklan),
+            "total_kotor":     float(total_fp + total_ig + total_iklan),
         })
     return result
 

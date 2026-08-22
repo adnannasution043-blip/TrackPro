@@ -18,7 +18,8 @@ function firstOfMonth(){ const n = new Date(); return new Date(n.getFullYear(), 
 
 const FILTERS = [
   { key: 'semua', label: 'Semua' },
-  { key: 'live',  label: 'Shopee Live' },
+  { key: 'fp',    label: 'Shopee FP' },
+  { key: 'ig',    label: 'IG' },
   { key: 'meta',  label: 'Meta' },
   { key: 'adu',   label: 'Adu' },
   { key: 'terra', label: 'Terra' },
@@ -110,7 +111,8 @@ export class LaporanHarian2Page {
   _visible() {
     const f = this._filter;
     if (f === 'semua') return this._rows;
-    const key = { live:'komisi_live', meta:'komisi_meta', adu:'komisi_adu', terra:'komisi_terra' }[f];
+    const keyMap = { fp:'total_fp', ig:'total_ig', meta:'komisi_meta', adu:'komisi_adu', terra:'komisi_terra' };
+    const key = keyMap[f];
     return this._rows.filter(r => Number((this._bdMap[r.tanggal] || {})[key] || 0) > 0);
   }
 
@@ -124,61 +126,41 @@ export class LaporanHarian2Page {
     }
 
     // Aggregat totals
-    const tot = {
-      spend: 0, clM: 0, clS: 0, ord: 0, komisi: 0, laba: 0,
-      live: 0, story: 0, feed: 0, fp: 0,
-      meta: 0, adu: 0, terra: 0, iklan: 0, kotor: 0,
-    };
+    const tot = { story:0, feed:0, fp:0, storyIg:0, feedIg:0, ig:0, meta:0, adu:0, terra:0, iklan:0, kotor:0 };
     rows.forEach(r => {
-      tot.spend  += Number(r.spend_idr    || 0);
-      tot.clM    += Number(r.clicks_meta  || 0);
-      tot.clS    += Number(r.clicks_shopee|| 0);
-      tot.ord    += Number(r.orders_selesai||0) + Number(r.orders_tertunda||0);
-      tot.komisi += Number(r.komisi       || 0);
-      tot.laba   += Number(r.laba         || 0);
       const bd = this._bdMap[r.tanggal] || {};
-      tot.live  += Number(bd.komisi_live  || 0);
-      tot.story += Number(bd.komisi_story || 0);
-      tot.feed  += Number(bd.komisi_feed  || 0);
-      tot.fp    += Number(bd.total_fp     || 0);
-      tot.meta  += Number(bd.komisi_meta  || 0);
-      tot.adu   += Number(bd.komisi_adu   || 0);
-      tot.terra += Number(bd.komisi_terra || 0);
-      tot.iklan += Number(bd.total_iklan  || 0);
-      tot.kotor += Number(bd.total_kotor  || 0);
+      tot.story   += Number(bd.komisi_story    || 0);
+      tot.feed    += Number(bd.komisi_feed     || 0);
+      tot.fp      += Number(bd.total_fp        || 0);
+      tot.storyIg += Number(bd.komisi_story_ig || 0);
+      tot.feedIg  += Number(bd.komisi_feed_ig  || 0);
+      tot.ig      += Number(bd.total_ig        || 0);
+      tot.meta    += Number(bd.komisi_meta     || 0);
+      tot.adu     += Number(bd.komisi_adu      || 0);
+      tot.terra   += Number(bd.komisi_terra    || 0);
+      tot.iklan   += Number(bd.total_iklan     || 0);
+      tot.kotor   += Number(bd.total_kotor     || 0);
     });
-    const tPlus5   = tot.spend * 1.05;
-    const tEpc     = tot.clS   > 0 ? tot.komisi / tot.clS    : null;
-    const tRoi     = tot.spend > 0 ? tot.laba   / tot.spend * 100 : null;
-    const tPctKlik = tot.clM   > 0 ? tot.clS    / tot.clM    * 100 : null;
-    const tCpcFp   = tot.clM   > 0 ? tot.spend  / tot.clM    : null;
 
     const thBase = 'padding:8px 10px;font-size:11px;font-weight:700;white-space:nowrap;text-transform:uppercase;letter-spacing:.4px;background:#f1f5f9;border-bottom:2px solid var(--border);';
     const thFP   = thBase + 'background:#f5f3ff;color:#7c3aed;';
+    const thIG   = thBase + 'background:#eff6ff;color:#2563eb;';
     const thIklan= thBase + 'background:#fef2f2;color:#dc2626;';
 
     const rowsHtml = rows.map((r, i) => {
-      const spend  = Number(r.spend_idr    || 0);
-      const clM    = Number(r.clicks_meta  || 0);
-      const clS    = Number(r.clicks_shopee|| 0);
-      const ord    = Number(r.orders_selesai||0) + Number(r.orders_tertunda||0);
-      const tertunda = Number(r.orders_tertunda || 0);
-      const laba   = Number(r.laba         || 0);
-      const roi    = spend > 0 ? laba / spend * 100 : null;
-      const epc    = clS > 0 ? Number(r.komisi||0) / clS : null;
-      const plus5  = spend * 1.05;
-      const pctKlik = clM > 0 ? clS / clM * 100 : null;
-      const bd = this._bdMap[r.tanggal] || {};
-      const live  = Number(bd.komisi_live  || 0);
-      const story = Number(bd.komisi_story || 0);
-      const feed  = Number(bd.komisi_feed  || 0);
-      const fp    = Number(bd.total_fp     || 0);
-      const meta  = Number(bd.komisi_meta  || 0);
-      const adu   = Number(bd.komisi_adu   || 0);
-      const terra = Number(bd.komisi_terra || 0);
-      const iklan = Number(bd.total_iklan  || 0);
-      const kotor = Number(bd.total_kotor  || 0);
-      const bgRow = i % 2 === 0 ? '' : 'background:var(--bg-muted);';
+      const bd       = this._bdMap[r.tanggal] || {};
+      const story    = Number(bd.komisi_story    || 0);
+      const feed     = Number(bd.komisi_feed     || 0);
+      const fp       = Number(bd.total_fp        || 0);
+      const storyIg  = Number(bd.komisi_story_ig || 0);
+      const feedIg   = Number(bd.komisi_feed_ig  || 0);
+      const ig       = Number(bd.total_ig        || 0);
+      const meta     = Number(bd.komisi_meta     || 0);
+      const adu      = Number(bd.komisi_adu      || 0);
+      const terra    = Number(bd.komisi_terra    || 0);
+      const iklan    = Number(bd.total_iklan     || 0);
+      const kotor    = Number(bd.total_kotor     || 0);
+      const bgRow    = i % 2 === 0 ? '' : 'background:var(--bg-muted);';
 
       return `<tr style="${bgRow}font-size:12.5px;">
         <td style="white-space:nowrap;padding:7px 10px;">
@@ -187,50 +169,37 @@ export class LaporanHarian2Page {
             ${fmtDate(r.tanggal)}
           </button>
         </td>
-        <td style="white-space:nowrap;">${rp(spend)}</td>
-        <td style="white-space:nowrap;color:var(--text-muted);">${rp(Math.round(plus5))}</td>
-        <td>${num(clM)}</td>
-        <td>${num(clS)}</td>
-        <td style="${pctKlik != null && pctKlik < 10 ? 'color:#dc2626;' : ''}">${pctKlik != null ? pctKlik.toFixed(1) + '%' : '—'}</td>
-        <td style="white-space:nowrap;">${epc != null ? rp(Math.round(epc)) : '—'}</td>
-        <td>
-          ${num(ord)}${tertunda > 0 ? `<span style="font-size:10px;padding:1px 5px;background:#fef3c7;color:#d97706;border-radius:3px;margin-left:4px;">+${tertunda}</span>` : ''}
-        </td>
-        <td style="font-weight:500;color:${roi != null && roi >= 0 ? '#16a34a' : '#dc2626'};">${roi != null ? (roi >= 0 ? '+' : '') + roi.toFixed(1) + '%' : '—'}</td>
-        <td style="color:#7c3aed;">${rp(Math.round(live))}</td>
-        <td style="color:#7c3aed;">${rp(Math.round(story))}</td>
-        <td style="color:#7c3aed;">${rp(Math.round(feed))}</td>
+        <td style="white-space:nowrap;color:#7c3aed;">${rp(Math.round(story))}</td>
+        <td style="white-space:nowrap;color:#7c3aed;">${rp(Math.round(feed))}</td>
         <td style="font-weight:700;color:#7c3aed;background:#f5f3ff;">${rp(Math.round(fp))}</td>
-        <td style="color:#dc2626;">${rp(Math.round(meta))}</td>
-        <td style="color:#dc2626;">${rp(Math.round(adu))}</td>
-        <td style="color:#dc2626;">${rp(Math.round(terra))}</td>
+        <td style="white-space:nowrap;color:#2563eb;border-left:2px solid #bfdbfe;">${rp(Math.round(storyIg))}</td>
+        <td style="white-space:nowrap;color:#2563eb;">${rp(Math.round(feedIg))}</td>
+        <td style="font-weight:700;color:#2563eb;background:#eff6ff;">${rp(Math.round(ig))}</td>
+        <td style="white-space:nowrap;color:#dc2626;border-left:2px solid #fecaca;">${rp(Math.round(meta))}</td>
+        <td style="white-space:nowrap;color:#dc2626;">${rp(Math.round(adu))}</td>
+        <td style="white-space:nowrap;color:#dc2626;">${rp(Math.round(terra))}</td>
         <td style="font-weight:700;color:#dc2626;background:#fef2f2;">${rp(Math.round(iklan))}</td>
-        <td style="font-weight:700;color:#10b981;">${rp(Math.round(kotor))}</td>
+        <td style="font-weight:700;color:#10b981;border-left:2px solid #bbf7d0;">${rp(Math.round(kotor))}</td>
       </tr>`;
     }).join('');
 
     wrap.innerHTML = `
-      <table class="data-table" style="font-size:12.5px;min-width:1400px;border-collapse:collapse;">
+      <table class="data-table" style="font-size:12.5px;min-width:900px;border-collapse:collapse;">
         <thead>
           <tr style="background:#f8fafc;">
             <th rowspan="2" style="${thBase}min-width:80px;">TGL</th>
-            <th rowspan="2" style="${thBase}">SPEND</th>
-            <th rowspan="2" style="${thBase}white-space:nowrap;">(+) 5%</th>
-            <th rowspan="2" style="${thBase}white-space:nowrap;">KLIK FP</th>
-            <th rowspan="2" style="${thBase}white-space:nowrap;">KLIK SHOPEE</th>
-            <th rowspan="2" style="${thBase}white-space:nowrap;">(%) KLIK</th>
-            <th rowspan="2" style="${thBase}white-space:nowrap;">CPC FP</th>
-            <th rowspan="2" style="${thBase}"># ORDER</th>
-            <th rowspan="2" style="${thBase}white-space:nowrap;">(%) PROFIT</th>
-            <th colspan="4" style="${thFP}text-align:center;border-left:2px solid #ede9fe;">KOMISI FP</th>
+            <th colspan="3" style="${thFP}text-align:center;">KOMISI FP</th>
+            <th colspan="3" style="${thIG}text-align:center;border-left:2px solid #bfdbfe;">KOMISI IG</th>
             <th colspan="4" style="${thIklan}text-align:center;border-left:2px solid #fecaca;">KOMISI IKLAN</th>
             <th rowspan="2" style="${thBase}background:#f0fdf4;color:#15803d;white-space:nowrap;border-left:2px solid #bbf7d0;">TOTAL KOTOR</th>
           </tr>
           <tr>
-            <th style="${thFP}border-left:2px solid #ede9fe;">LIVE</th>
             <th style="${thFP}">STORY</th>
             <th style="${thFP}">FEW FEED</th>
             <th style="${thFP}font-weight:800;">TOTAL FP</th>
+            <th style="${thIG}border-left:2px solid #bfdbfe;">STORY IG</th>
+            <th style="${thIG}">FEED IG</th>
+            <th style="${thIG}font-weight:800;">TOTAL IG</th>
             <th style="${thIklan}border-left:2px solid #fecaca;">META</th>
             <th style="${thIklan}">ADU</th>
             <th style="${thIklan}">TERRA</th>
@@ -241,18 +210,12 @@ export class LaporanHarian2Page {
         <tfoot>
           <tr style="font-weight:700;background:var(--bg-muted);border-top:2px solid var(--border);font-size:12px;">
             <td style="font-weight:800;white-space:nowrap;padding:8px 10px;">TOTAL (${rows.length} hari)</td>
-            <td>${rp(Math.round(tot.spend))}</td>
-            <td>${rp(Math.round(tPlus5))}</td>
-            <td>${num(tot.clM)}</td>
-            <td>${num(tot.clS)}</td>
-            <td>${tPctKlik != null ? tPctKlik.toFixed(1) + '%' : '—'}</td>
-            <td>${tCpcFp != null ? rp(Math.round(tCpcFp)) : '—'}</td>
-            <td>${num(tot.ord)}</td>
-            <td style="color:${tRoi != null && tRoi >= 0 ? '#16a34a' : '#dc2626'};">${tRoi != null ? (tRoi >= 0 ? '+' : '') + tRoi.toFixed(1) + '%' : '—'}</td>
-            <td style="color:#7c3aed;">${rp(Math.round(tot.live))}</td>
             <td style="color:#7c3aed;">${rp(Math.round(tot.story))}</td>
             <td style="color:#7c3aed;">${rp(Math.round(tot.feed))}</td>
             <td style="color:#7c3aed;font-weight:800;">${rp(Math.round(tot.fp))}</td>
+            <td style="color:#2563eb;">${rp(Math.round(tot.storyIg))}</td>
+            <td style="color:#2563eb;">${rp(Math.round(tot.feedIg))}</td>
+            <td style="color:#2563eb;font-weight:800;">${rp(Math.round(tot.ig))}</td>
             <td style="color:#dc2626;">${rp(Math.round(tot.meta))}</td>
             <td style="color:#dc2626;">${rp(Math.round(tot.adu))}</td>
             <td style="color:#dc2626;">${rp(Math.round(tot.terra))}</td>
