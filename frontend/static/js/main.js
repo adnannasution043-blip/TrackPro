@@ -43,7 +43,7 @@ const NAV_ITEMS = [
   { path: '/balance', label: 'Saldo Iklan', icon: 'wallet' },
   { group: 'Pengaturan', icon: 'gear', children: [
     { path: '/account', label: 'Akun', icon: 'user' },
-    { path: '/subscription', label: 'Langganan', icon: 'card' },
+    // { path: '/subscription', label: 'Langganan', icon: 'card' },
     { path: '/meta-account', label: 'Akun Meta', icon: 'shield' },
   ]},
   { section: 'LAINNYA' },
@@ -178,7 +178,7 @@ function renderSidebar(currentPath, user) {
 
   html += `
     <div class="sidebar-bottom">
-      <div class="sidebar-subscription" id="sidebar-sub-info">
+      <div class="sidebar-subscription" id="sidebar-sub-info" style="display:none;">
         ${icon('timer')}
         <div>
           <div style="font-weight:600;color:#dc2626;" id="sub-days-label">Langganan</div>

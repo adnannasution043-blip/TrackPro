@@ -42,12 +42,15 @@ export class UploadPage {
       .join('');
 
     el.innerHTML = `
-      <div class="card" style="margin-bottom:16px;padding:16px 20px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <div class="card" style="margin-bottom:16px;padding:0;">
+        <button id="btn-toggle-template" style="width:100%;display:flex;align-items:center;justify-content:space-between;padding:14px 20px;background:none;border:none;cursor:pointer;text-align:left;">
           <div>
             <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:2px;">Template CSV</div>
             <div style="font-size:12px;color:var(--text-muted);">Download template, isi dengan data asli Anda, lalu upload di bawah.</div>
           </div>
+          <svg id="toggle-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16" style="flex-shrink:0;color:var(--text-muted);transition:transform .2s;transform:rotate(0deg);"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div id="template-body" style="display:none;padding:0 20px 16px;flex-wrap:wrap;gap:8px;">
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             ${[
               ['template-meta-ads.csv',                    'Meta Ads'],
@@ -226,6 +229,16 @@ export class UploadPage {
 
     el.querySelector('#btn-upload').addEventListener('click', () => this._submit());
     el.querySelector('#btn-upload-wd').addEventListener('click', () => this._submitWd());
+
+    el.querySelector('#btn-toggle-template').addEventListener('click', () => {
+      const body = el.querySelector('#template-body');
+      const chevron = el.querySelector('#toggle-chevron');
+      const open = body.style.display === 'none' || body.style.display === '';
+      body.style.display = open ? 'flex' : 'none';
+      body.style.flexWrap = 'wrap';
+      body.style.gap = '8px';
+      chevron.style.transform = open ? 'rotate(180deg)' : 'rotate(0deg)';
+    });
 
     el.querySelector('#btn-toggle-meta').addEventListener('click', () => {
       const sec = el.querySelector('#meta-section');
