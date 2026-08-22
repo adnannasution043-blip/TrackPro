@@ -7,7 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
 
-TipeImport = Enum("meta_ads", "shopee_commission", "shopee_click", "meta_breakdown", name="tipe_import")
+TipeImport = Enum("meta_ads", "shopee_commission", "shopee_click", "meta_breakdown", "wd_payment", name="tipe_import")
 
 
 class CsvImport(Base):
