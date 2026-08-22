@@ -38,7 +38,7 @@ export class LaporanHarian2Page {
     this.container.innerHTML = `
       <div class="page-header">
         <div class="page-header-left">
-          <h1>Laporan Harian 2</h1>
+          <h1>Laporan Harian</h1>
           <p>Rekapan komisi harian per kategori. Klik tanggal untuk detail produk.</p>
         </div>
         <div class="page-header-right" style="display:flex;gap:8px;align-items:center;">
