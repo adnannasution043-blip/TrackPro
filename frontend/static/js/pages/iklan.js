@@ -517,7 +517,6 @@ export class IklanPage {
             <p style="font-size:11px;color:var(--text-muted);">
               ${r.tag_link ? `Tag: <strong>${r.tag_link}</strong> · ` : ''}
               ${TAHAP_LABELS[r.tahap]||'Pra Filter'}
-              ${r.catatan ? `· <span style="color:#2563eb;">📝 ${r.catatan.slice(0,40)}${r.catatan.length>40?'…':''}</span>` : ''}
             </p>
           </div>
           <button class="modal-close" id="modal-close">×</button>
