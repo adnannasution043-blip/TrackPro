@@ -19,8 +19,6 @@ function firstOfMonth(){ const n = new Date(); return new Date(n.getFullYear(), 
 const FILTERS = [
   { key: 'semua',   label: 'Semua' },
   { key: 'organic', label: 'Organic' },
-  { key: 'fp',      label: 'Shopee FP' },
-  { key: 'ig',      label: 'IG' },
   { key: 'meta',    label: 'Meta' },
   { key: 'adu',     label: 'Adu' },
   { key: 'terra',   label: 'Terra' },
@@ -56,8 +54,8 @@ export class LaporanHarian2Page {
           const isAll = f.key === 'semua';
           const on    = isAll ? this._filters.size === 0 : this._filters.has(f.key);
           return `<button data-filter="${f.key}"
-            style="padding:6px 16px;border-radius:20px;border:1.5px solid ${on ? 'var(--primary)' : 'var(--border)'};
-                   background:${on ? 'var(--primary)' : 'var(--bg-card)'};
+            style="padding:6px 16px;border-radius:20px;border:1.5px solid ${on ? '#dc2626' : 'var(--border)'};
+                   background:${on ? '#dc2626' : 'var(--bg-card)'};
                    color:${on ? '#fff' : 'var(--text)'};
                    font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;">
             ${f.label}
@@ -91,9 +89,9 @@ export class LaporanHarian2Page {
       this.container.querySelectorAll('[data-filter]').forEach(b => {
         const k  = b.dataset.filter;
         const on = k === 'semua' ? this._filters.size === 0 : this._filters.has(k);
-        b.style.background  = on ? 'var(--primary)' : 'var(--bg-card)';
+        b.style.background  = on ? '#dc2626' : 'var(--bg-card)';
         b.style.color       = on ? '#fff' : 'var(--text)';
-        b.style.borderColor = on ? 'var(--primary)' : 'var(--border)';
+        b.style.borderColor = on ? '#dc2626' : 'var(--border)';
       });
       this._render();
     });
