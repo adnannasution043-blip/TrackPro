@@ -226,8 +226,6 @@ function renderShell(path, user) {
             ${icon('group')}
             Gabung Grup
           </button>
-          <div class="topbar-locale">🇮🇩 Indonesia ▾</div>
-          <button class="topbar-icon-btn">${icon('moon')}</button>
           <div class="topbar-user">
             <div class="topbar-user-avatar">${(user?.nama || 'U').slice(0, 2).toUpperCase()}</div>
             <div class="topbar-user-info">
