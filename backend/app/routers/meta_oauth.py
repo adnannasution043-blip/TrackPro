@@ -158,14 +158,24 @@ async def oauth_callback(db: DB, code: str | None = None, state: str | None = No
         long_token = data2.get("access_token")
         expires_in = data2.get("expires_in", 5184000)  # default 60 hari
 
-        # 3. Ambil daftar Ad Account
-        r3 = await client.get(FACEBOOK_ACCOUNTS_URL, params={
+        # 3. Ambil daftar Ad Account (semua halaman)
+        ad_accounts: list[dict] = []
+        next_url: str | None = FACEBOOK_ACCOUNTS_URL
+        params_page: dict = {
             "access_token": long_token,
             "fields": "id,name,account_status",
-        })
-        if r3.status_code != 200:
-            return RedirectResponse("/#/pengaturan/meta?error=akun_gagal")
-        ad_accounts = r3.json().get("data", [])
+            "limit": 200,
+        }
+        while next_url:
+            r3 = await client.get(next_url, params=params_page if next_url == FACEBOOK_ACCOUNTS_URL else {})
+            if r3.status_code != 200:
+                return RedirectResponse("/#/pengaturan/meta?error=akun_gagal")
+            body3 = r3.json()
+            ad_accounts.extend(body3.get("data", []))
+            next_url = body3.get("paging", {}).get("next")  # None kalau halaman terakhir
+
+    # Hanya simpan akun aktif (account_status=1) atau yang status-nya tidak diketahui
+    ad_accounts = [a for a in ad_accounts if a.get("account_status") in (1, None)]
 
     if not ad_accounts:
         return RedirectResponse("/#/pengaturan/meta?error=tidak_ada_ad_account")
@@ -226,4 +236,5 @@ async def oauth_callback(db: DB, code: str | None = None, state: str | None = No
         for acc_id in saved_ids:
             asyncio.create_task(sync_account(acc_id, dari, sampai))
 
-    return RedirectResponse(f"/#/pengaturan/meta?success=1&added={added}")
+    total = len(ad_accounts)
+    return RedirectResponse(f"/#/pengaturan/meta?success=1&added={added}&total={total}")
