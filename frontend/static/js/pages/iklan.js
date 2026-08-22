@@ -546,7 +546,7 @@ export class IklanPage {
           try { harianData = await apiFetch(`/dashboard/campaigns/${r.id}/harian`); }
           catch(e) { content.innerHTML=`<div class="alert alert-error">${e.message}</div>`; return; }
         }
-        this._renderHarianTab(content, harianData);
+        this._renderHarianTab(content, harianData, r);
       } else {
         this._renderBreakdownTab(content, tab, r);
       }
@@ -566,16 +566,19 @@ export class IklanPage {
     renderTab(0);
   }
 
-  _renderHarianTab(el, data) {
-    const laba = Number(data.total_laba||0);
-    const roi  = Number(data.roi_persen||0);
+  _renderHarianTab(el, data, r) {
+    const totalLaba = Number(data.total_laba||0);
+    const totalRoi  = Number(data.roi_persen||0);
+    const thS = 'padding:7px 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;white-space:nowrap;';
+    const tdS = 'padding:6px 10px;white-space:nowrap;';
+
     el.innerHTML = `
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;">
         ${[
           ['TOTAL BIAYA',  rp(data.total_biaya),  ''],
           ['TOTAL KOMISI', rp(data.total_komisi), '#10b981'],
-          ['LABA',         (laba>=0?'+':'')+rp(Math.abs(Math.round(laba))), laba>=0?'#16a34a':'#dc2626'],
-          ['ROI',          (roi>=0?'+':'')+roi.toFixed(1)+'%', roi>=0?'#16a34a':'#dc2626'],
+          ['LABA', (totalLaba>=0?'+':'')+rp(Math.abs(Math.round(totalLaba))), totalLaba>=0?'#16a34a':'#dc2626'],
+          ['ROI',  (totalRoi>=0?'+':'')+totalRoi.toFixed(1)+'%', totalRoi>=0?'#16a34a':'#dc2626'],
         ].map(([label,val,color])=>`
           <div style="padding:12px 16px;border:1px solid var(--border);border-radius:8px;">
             <div style="font-size:10px;font-weight:700;color:${color||'var(--text-muted)'};text-transform:uppercase;margin-bottom:6px;">${label}</div>
@@ -583,33 +586,122 @@ export class IklanPage {
           </div>`).join('')}
       </div>
       <div style="overflow-x:auto;">
-        <table class="data-table" style="font-size:12px;">
+        <table class="data-table" style="font-size:12px;min-width:900px;">
           <thead><tr>
-            <th>TANGGAL</th><th>BIAYA</th><th>CPC</th><th>KLIK META</th><th>KLIK SHOPEE</th><th>ORDER</th><th>KOMISI</th><th>EPC</th><th>LABA</th><th>ROI</th>
+            <th style="${thS}min-width:80px;">TGL</th>
+            <th style="${thS}">SPEND</th>
+            <th style="${thS}color:#6b7280;">(+)5%</th>
+            <th style="${thS}color:#10b981;">KOMISI</th>
+            <th style="${thS}">PROFIT</th>
+            <th style="${thS}">(%)PROFIT</th>
+            <th style="${thS}color:#7c3aed;">KLIK FP</th>
+            <th style="${thS}color:#7c3aed;">KLIK SHOPEE</th>
+            <th style="${thS}color:#7c3aed;">(%)KLIK</th>
+            <th style="${thS}">CPC FP</th>
+            <th style="${thS}">CPC SHP</th>
+            <th style="${thS}width:32px;"></th>
           </tr></thead>
-          <tbody>
+          <tbody id="harian-tbody">
             ${(data.harian||[]).length===0
-              ? `<tr><td colspan="10" class="empty">Belum ada data.</td></tr>`
-              : (data.harian||[]).map(h => {
-                  const labah = h.laba!=null?Number(h.laba):null;
-                  const roih  = h.roi_persen!=null?Number(h.roi_persen):null;
-                  const epch  = h.clicks_shopee&&h.clicks_shopee>0&&h.komisi!=null ? Number(h.komisi)/Number(h.clicks_shopee) : null;
-                  return `<tr>
-                    <td style="font-weight:600;color:#2563eb;white-space:nowrap;">${fmtDate(h.tanggal)}</td>
-                    <td>${rp(h.spend_idr)}</td>
-                    <td>${h.cpc!=null?rp(Math.round(h.cpc)):'—'}</td>
-                    <td>${num(h.clicks_meta)}</td>
-                    <td>${h.clicks_shopee!=null?num(h.clicks_shopee):'—'}</td>
-                    <td>${h.orders!=null?num(h.orders):'0'}</td>
-                    <td style="color:${h.komisi!=null?'#10b981':'var(--text-muted)'};">${h.komisi!=null?rp(Math.round(h.komisi)):'menunggu'}</td>
-                    <td>${epch!=null?rp(Math.round(epch)):'—'}</td>
-                    <td style="font-weight:600;color:${labah!=null?(labah>=0?'#16a34a':'#dc2626'):'var(--text-muted)'};">${labah!=null?(labah>=0?'+':'-')+rp(Math.abs(Math.round(labah))):'—'}</td>
-                    <td style="font-weight:600;color:${roih!=null?(roih>=0?'#16a34a':'#dc2626'):'var(--text-muted)'};">${roih!=null?pct(roih):'—'}</td>
+              ? `<tr><td colspan="12" class="empty">Belum ada data.</td></tr>`
+              : (data.harian||[]).map((h,i) => {
+                  const spend  = Number(h.spend_idr||0);
+                  const komisi = h.komisi!=null ? Number(h.komisi) : null;
+                  const profit = komisi!=null ? komisi - spend : null;
+                  const plus5  = spend * 1.05;
+                  const pctP   = profit!=null && spend>0 ? profit/spend*100 : null;
+                  const klikFP = h.clicks_meta||0;
+                  const klikSH = h.clicks_shopee!=null ? h.clicks_shopee : null;
+                  const pctK   = klikFP>0 && klikSH!=null ? klikSH/klikFP*100 : null;
+                  const cpcFP  = klikFP>0 ? spend/klikFP : null;
+                  const cpcSH  = klikSH&&klikSH>0 ? spend/klikSH : null;
+                  const bg     = i%2===1 ? 'background:var(--bg-muted);' : '';
+                  return `<tr style="${bg}" data-harian-idx="${i}">
+                    <td style="${tdS}font-weight:600;color:#2563eb;">${fmtDate(h.tanggal)}</td>
+                    <td style="${tdS}">${rp(Math.round(spend))}</td>
+                    <td style="${tdS}color:#6b7280;">${rp(Math.round(plus5))}</td>
+                    <td style="${tdS}color:${komisi!=null?'#10b981':'var(--text-muted)'};">${komisi!=null?rp(Math.round(komisi)):'menunggu'}</td>
+                    <td style="${tdS}font-weight:600;color:${profit!=null?(profit>=0?'#16a34a':'#dc2626'):'var(--text-muted)'};">${profit!=null?(profit>=0?'+':'-')+rp(Math.abs(Math.round(profit))):'—'}</td>
+                    <td style="${tdS}color:${pctP!=null?(pctP>=0?'#16a34a':'#dc2626'):'var(--text-muted)'};">${pctP!=null?pctP.toFixed(1)+'%':'—'}</td>
+                    <td style="${tdS}color:#7c3aed;">${num(klikFP)}</td>
+                    <td style="${tdS}color:#7c3aed;">${klikSH!=null?num(klikSH):'—'}</td>
+                    <td style="${tdS}color:${pctK!=null&&pctK<10?'#dc2626':'#7c3aed'};">${pctK!=null?pctK.toFixed(1)+'%':'—'}</td>
+                    <td style="${tdS}">${cpcFP!=null?rp(Math.round(cpcFP)):'—'}</td>
+                    <td style="${tdS}">${cpcSH!=null?rp(Math.round(cpcSH)):'—'}</td>
+                    <td style="${tdS}padding:4px 6px;">
+                      <button class="btn btn-sm btn-note-harian" style="padding:2px 5px;font-size:10px;color:#6b7280;" title="Lihat catatan">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                      </button>
+                    </td>
                   </tr>`;
                 }).join('')}
           </tbody>
         </table>
       </div>`;
+
+    if (r) {
+      el.querySelectorAll('.btn-note-harian').forEach(btn => {
+        btn.addEventListener('click', e => {
+          e.stopPropagation();
+          this._showNotesReadonly(r, btn);
+        });
+      });
+    }
+  }
+
+  async _showNotesReadonly(r, anchorEl) {
+    document.querySelectorAll('.catatan-popup').forEach(p => p.remove());
+    const rect = anchorEl.getBoundingClientRect();
+    const popup = document.createElement('div');
+    popup.className = 'catatan-popup';
+    popup.style.cssText = `position:fixed;top:${rect.bottom+6}px;right:${window.innerWidth-rect.right}px;
+      background:#ffffff;border:1px solid #e5e7eb;border-radius:10px;
+      box-shadow:0 6px 24px rgba(0,0,0,0.18);z-index:99999;width:300px;`;
+    popup.innerHTML = `
+      <div style="padding:10px 14px 8px;border-bottom:1px solid #f3f4f6;">
+        <div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px;">Catatan</div>
+        <div style="font-size:11.5px;color:#374151;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.nama_campaign}</div>
+      </div>
+      <div id="ro-timeline" style="max-height:260px;overflow-y:auto;padding:8px 14px;">
+        <div style="text-align:center;padding:16px;color:#9ca3af;font-size:12px;">Memuat…</div>
+      </div>
+      <div style="padding:8px 14px;border-top:1px solid #f3f4f6;text-align:right;">
+        <button id="ro-tutup" class="btn btn-sm" style="font-size:12px;">Tutup</button>
+      </div>`;
+    document.body.appendChild(popup);
+    popup.addEventListener('click', e => e.stopPropagation());
+    popup.querySelector('#ro-tutup').addEventListener('click', () => popup.remove());
+
+    const tl = popup.querySelector('#ro-timeline');
+    try {
+      const notes = await apiFetch(`/dashboard/campaigns/${r.id}/notes`);
+      if (!notes || notes.length === 0) {
+        tl.innerHTML = '<div style="text-align:center;padding:16px;color:#9ca3af;font-size:12px;">Belum ada catatan.</div>';
+      } else {
+        tl.innerHTML = notes.map(n => {
+          const isPindah = n.tipe === 'pindah_tahap';
+          const d = new Date(n.created_at);
+          const tgl = `${d.getDate()}/${d.getMonth()+1}/${d.getFullYear().toString().slice(2)} ${String(d.getHours()).padStart(2,'0')}.${String(d.getMinutes()).padStart(2,'0')}`;
+          return `
+            <div style="display:flex;gap:8px;padding:7px 0;border-bottom:1px solid #f9fafb;">
+              <div style="margin-top:4px;flex-shrink:0;">
+                <div style="width:7px;height:7px;border-radius:50%;background:${isPindah?'#f59e0b':'#3b82f6'};"></div>
+              </div>
+              <div>
+                <div style="font-size:12.5px;color:#111827;line-height:1.4;">${n.teks}</div>
+                <div style="font-size:10.5px;color:#9ca3af;margin-top:2px;">${tgl}</div>
+              </div>
+            </div>`;
+        }).join('');
+      }
+    } catch(e) {
+      tl.innerHTML = `<div style="color:#dc2626;font-size:12px;padding:12px;">${e.message}</div>`;
+    }
+
+    const outsideClick = e => {
+      if (!popup.contains(e.target)) { popup.remove(); document.removeEventListener('click', outsideClick); }
+    };
+    setTimeout(() => document.addEventListener('click', outsideClick), 10);
   }
 
   async _renderBreakdownTab(el, tab, r) {
