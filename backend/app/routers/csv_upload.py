@@ -312,28 +312,41 @@ async def upload_wd_payment(
         return None
 
     sample = rows_raw[0]
-    col_status   = _find_col(sample, "Status Pesanan", "Status Pemebelian")
-    col_tgl      = _find_col(sample, "Waktu Terselesaikan", "Waktu Pemesanan")
-    col_komisi   = _find_col(sample, "Komisi Bersih Affiliate (Rp)", "Total Komisi per Pesanan(Rp)")
+    col_status   = _find_col(sample,
+        "Status Pesanan", "Status Pembelian", "Status Pemebelian", "Status")
+    col_tgl      = _find_col(sample,
+        "Waktu Terselesaikan", "Waktu Penyelesaian", "Tanggal Penyelesaian",
+        "Waktu Pemesanan", "Tanggal Pesanan")
+    col_komisi   = _find_col(sample,
+        "Komisi Bersih Affiliate (Rp)", "Komisi Anda (Rp)",
+        "Total Komisi per Pesanan(Rp)", "Komisi (Rp)")
 
+    all_headers = list(sample.keys())
     if not all([col_status, col_tgl, col_komisi]):
         return await _fail_import(import_log, db,
-            f"Kolom tidak ditemukan. Pastikan file adalah BillConversionReport Shopee. "
-            f"Header: {list(sample.keys())[:8]}")
+            f"Kolom tidak ditemukan (status={col_status}, tgl={col_tgl}, komisi={col_komisi}). "
+            f"Header file: {all_headers[:12]}")
 
-    # ── Konversi tanggal Excel serial ─────────────────────────────────────────
+    # ── Konversi tanggal (openpyxl bisa kembalikan datetime object) ───────────
     EXCEL_EPOCH = date_type(1899, 12, 30)
 
     def _parse_date(val) -> date_type | None:
         if val is None:
             return None
+        # openpyxl mengembalikan datetime / date langsung
+        if isinstance(val, datetime):
+            return val.date()
+        if isinstance(val, date_type):
+            return val
         if isinstance(val, (int, float)):
             try:
                 return EXCEL_EPOCH + timedelta(days=float(val))
             except Exception:
                 return None
         s = str(val).strip()
-        for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y"):
+        # coba berbagai format string, termasuk yang ada komponen waktu
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%d/%m/%Y %H:%M:%S",
+                    "%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y"):
             try:
                 return datetime.strptime(s, fmt).date()
             except ValueError:
@@ -343,13 +356,19 @@ async def upload_wd_payment(
         except Exception:
             return None
 
+    # Status yang dianggap valid (selesai)
+    STATUS_SELESAI = {"selesai", "completed", "complete", "sukses"}
+
     # ── Agregasi per tanggal ──────────────────────────────────────────────────
     agg: dict[date_type, dict] = defaultdict(lambda: {"komisi": Decimal("0"), "n": 0})
+    status_sample: list[str] = []
 
     ok, fail = 0, 0
     for r in rows_raw:
         status_val = str(r.get(col_status) or "").strip()
-        if status_val != "Selesai":
+        if len(status_sample) < 5 and status_val:
+            status_sample.append(status_val)
+        if status_val.lower() not in STATUS_SELESAI:
             continue
         tgl = _parse_date(r.get(col_tgl))
         if tgl is None:
@@ -365,7 +384,9 @@ async def upload_wd_payment(
         ok += 1
 
     if not agg:
-        return await _fail_import(import_log, db, "Tidak ada baris dengan status Selesai yang valid.")
+        sample_info = f" Nilai status ditemukan: {list(set(status_sample))}" if status_sample else ""
+        return await _fail_import(import_log, db,
+            f"Tidak ada baris dengan status Selesai yang valid.{sample_info}")
 
     # ── Upsert ke wd_payments ─────────────────────────────────────────────────
     from app.models.wd_payment import WdPayment
