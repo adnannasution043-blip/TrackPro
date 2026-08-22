@@ -236,11 +236,6 @@ export class KomisiBersihPage {
     const tTotColor = tot.totalBersih >= 0 ? '#16a34a' : '#dc2626';
 
     wrap.innerHTML = `
-      <div style="padding:8px 14px;background:#fffbeb;border-bottom:1px solid var(--border);font-size:12px;color:#92400e;">
-        <strong>PPh 21 Progresif</strong> — DPP = Komisi × 50%, kumulatif per bulan:
-        ≤60 jt → 5% · 60–250 jt → 15% · 250–500 jt → 25% · 500 jt–5 M → 30% · >5 M → 35%
-        &nbsp;·&nbsp; Total pajak periode ini: <strong>Rp ${rp(tot.pajak)}</strong>
-      </div>
       <table class="data-table" style="min-width:900px;border-collapse:collapse;">
         <thead>
           <tr style="border-bottom:none;">
@@ -278,7 +273,12 @@ export class KomisiBersihPage {
             <td style="${tdBase}font-weight:800;color:${tTotColor};background:#f0fdf4;">${rpParen(tot.totalBersih)}</td>
           </tr>
         </tfoot>
-      </table>`;
+      </table>
+      <div style="padding:8px 14px;background:#fffbeb;border-top:1px solid var(--border);font-size:12px;color:#92400e;">
+        <strong>PPh 21 Progresif</strong> — DPP = Komisi × 50%, kumulatif per bulan:
+        ≤60 jt → 5% · 60–250 jt → 15% · 250–500 jt → 25% · 500 jt–5 M → 30% · >5 M → 35%
+        &nbsp;·&nbsp; Total pajak periode ini: <strong>Rp ${rp(tot.pajak)}</strong>
+      </div>`;
   }
 
   _renderPajak() {
@@ -324,10 +324,6 @@ export class KomisiBersihPage {
     }).join('');
 
     wrap.innerHTML = `
-      <div style="padding:10px 16px;background:#fffbeb;border-bottom:1px solid var(--border);font-size:12px;color:#92400e;">
-        <strong>PPh 21 Progresif</strong> — DPP = Komisi × 50%, tarif kumulatif per bulan:
-        ≤60 jt → 5% · 60–250 jt → 15% · 250–500 jt → 25% · 500 jt–5 M → 30% · >5 M → 35%
-      </div>
       <table class="data-table" style="min-width:680px;">
         <thead>
           <tr>
@@ -351,7 +347,11 @@ export class KomisiBersihPage {
             <td style="text-align:right;color:#10b981;background:#f0fdf4;">${rp(totBersih)}</td>
           </tr>
         </tfoot>
-      </table>`;
+      </table>
+      <div style="padding:8px 14px;background:#fffbeb;border-top:1px solid var(--border);font-size:12px;color:#92400e;">
+        <strong>PPh 21 Progresif</strong> — DPP = Komisi × 50%, tarif kumulatif per bulan:
+        ≤60 jt → 5% · 60–250 jt → 15% · 250–500 jt → 25% · 500 jt–5 M → 30% · >5 M → 35%
+      </div>`;
   }
 
   destroy() {}
