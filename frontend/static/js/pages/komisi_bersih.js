@@ -1,8 +1,6 @@
 import { apiFetch } from '../api.js';
 import { filterQS } from '../filter-state.js';
 
-const TAX  = 0.025;
-const net  = n => Number(n || 0) * (1 - TAX);
 const rp   = n => Math.round(Number(n || 0)).toLocaleString('id-ID');
 const rpParen = n => {
   const v = Math.round(Number(n || 0));
@@ -160,17 +158,33 @@ export class KomisiBersihPage {
       return;
     }
 
+    // Hitung pajak progresif kumulatif per bulan dari data harian
+    const cumByMonth = {};
     const rows = this._dates.map(tgl => {
       const bd    = this._bdMap[tgl]    || {};
       const spend = this._spendMap[tgl] || 0;
 
-      const organik = net(Number(bd.komisi_live||0) + Number(bd.komisi_story||0) + Number(bd.komisi_feed||0));
-      const iklan   = net(Number(bd.komisi_meta||0) + Number(bd.komisi_adu||0) + Number(bd.komisi_terra||0));
-      const totalMasuk   = organik + iklan;
-      const profitIklan  = iklan - spend;
-      const totalBersih  = organik + profitIklan;
+      const grossOrganik = Number(bd.komisi_live||0) + Number(bd.komisi_story||0) + Number(bd.komisi_feed||0);
+      const grossIklan   = Number(bd.komisi_meta||0) + Number(bd.komisi_adu||0) + Number(bd.komisi_terra||0);
+      const grossTotal   = grossOrganik + grossIklan;
 
-      return { tgl, organik, iklan, totalMasuk, spend, profitIklan, totalBersih };
+      const bulan  = tgl.slice(0, 7);
+      const dpp    = grossTotal * 0.5;
+      const prevCum = cumByMonth[bulan] || 0;
+      const currCum = prevCum + dpp;
+      cumByMonth[bulan] = currCum;
+      const pajak  = progressiveTax(currCum) - progressiveTax(prevCum);
+
+      // distribusi pajak proporsional ke organik & iklan
+      const ratio   = grossTotal > 0 ? grossOrganik / grossTotal : 0.5;
+      const organik = grossOrganik - pajak * ratio;
+      const iklan   = grossIklan   - pajak * (1 - ratio);
+
+      const totalMasuk  = organik + iklan;
+      const profitIklan = iklan - spend;
+      const totalBersih = organik + profitIklan;
+
+      return { tgl, organik, iklan, totalMasuk, spend, profitIklan, totalBersih, pajak };
     });
 
     const tot = rows.reduce((a, r) => ({
@@ -180,7 +194,8 @@ export class KomisiBersihPage {
       spend:        a.spend       + r.spend,
       profitIklan:  a.profitIklan + r.profitIklan,
       totalBersih:  a.totalBersih + r.totalBersih,
-    }), { organik:0, iklan:0, totalMasuk:0, spend:0, profitIklan:0, totalBersih:0 });
+      pajak:        a.pajak       + r.pajak,
+    }), { organik:0, iklan:0, totalMasuk:0, spend:0, profitIklan:0, totalBersih:0, pajak:0 });
 
     // ── styles ────────────────────────────────────────────────────────────────
     const thBase = 'padding:8px 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;text-align:right;';
@@ -188,6 +203,10 @@ export class KomisiBersihPage {
     const GRP1   = { bg:'#f5f3ff', border:'#7c3aed', color:'#7c3aed' }; // organik – ungu
     const GRP2   = { bg:'#fef2f2', border:'#dc2626', color:'#dc2626' }; // profit iklan – merah
     const GRP3   = { bg:'#f0fdf4', border:'#16a34a', color:'#16a34a' }; // bersih – hijau
+    // label tarif per baris
+    const tarifRow = r => tarifLabel(
+      (() => { const b = r.tgl.slice(0,7); return cumByMonth[b] || 0; })()
+    );
     const grpHdr = (g, label, cols) =>
       `<th colspan="${cols}" style="${thBase}background:${g.bg};color:${g.color};border-bottom:2px solid ${g.border};text-align:center;">${label}</th>`;
 
@@ -195,8 +214,12 @@ export class KomisiBersihPage {
       const stripe = i%2===1 ? 'background:var(--bg-muted);' : '';
       const pColor = r.profitIklan >= 0 ? '#16a34a' : '#dc2626';
       const tColor = r.totalBersih >= 0 ? '#16a34a' : '#dc2626';
+      const tarif  = tarifLabel(cumByMonth[r.tgl.slice(0,7)] || 0);
       return `<tr style="${stripe}">
         <td style="padding:7px 10px;font-weight:600;white-space:nowrap;">${fmtDate(r.tgl)}</td>
+        <td style="text-align:center;padding:7px 8px;">
+          <span style="display:inline-block;padding:2px 7px;border-radius:9999px;font-size:11px;font-weight:700;background:#fef3c7;color:#92400e;">${tarif}</span>
+        </td>
         <td style="${tdBase}color:#7c3aed;">${rp(r.organik)}</td>
         <td style="${tdBase}color:#7c3aed;">${rp(r.iklan)}</td>
         <td style="${tdBase}font-weight:700;color:#7c3aed;">${rp(r.totalMasuk)}</td>
@@ -213,11 +236,17 @@ export class KomisiBersihPage {
     const tTotColor = tot.totalBersih >= 0 ? '#16a34a' : '#dc2626';
 
     wrap.innerHTML = `
-      <table class="data-table" style="min-width:860px;border-collapse:collapse;">
+      <div style="padding:8px 14px;background:#fffbeb;border-bottom:1px solid var(--border);font-size:12px;color:#92400e;">
+        <strong>PPh 21 Progresif</strong> — DPP = Komisi × 50%, kumulatif per bulan:
+        ≤60 jt → 5% · 60–250 jt → 15% · 250–500 jt → 25% · 500 jt–5 M → 30% · >5 M → 35%
+        &nbsp;·&nbsp; Total pajak periode ini: <strong>Rp ${rp(tot.pajak)}</strong>
+      </div>
+      <table class="data-table" style="min-width:900px;border-collapse:collapse;">
         <thead>
           <tr style="border-bottom:none;">
             <th rowspan="2" style="${thBase}text-align:left;vertical-align:bottom;min-width:80px;">TGL</th>
-            ${grpHdr(GRP1, 'Komisi Bersih after Tax', 3)}
+            <th rowspan="2" style="${thBase}vertical-align:bottom;text-align:center;background:#fffbeb;color:#92400e;">TARIF</th>
+            ${grpHdr(GRP1, 'Komisi Bersih after Tax (PPh 21)', 3)}
             ${grpHdr(GRP2, 'Profit Iklan', 3)}
             ${grpHdr(GRP3, 'Komisi Bersih', 3)}
           </tr>
@@ -237,6 +266,7 @@ export class KomisiBersihPage {
         <tfoot>
           <tr style="font-weight:800;background:var(--bg-muted);border-top:2px solid var(--border);">
             <td style="padding:8px 10px;font-weight:800;">TOTAL</td>
+            <td></td>
             <td style="${tdBase}color:#7c3aed;">${rp(tot.organik)}</td>
             <td style="${tdBase}color:#7c3aed;">${rp(tot.iklan)}</td>
             <td style="${tdBase}font-weight:800;color:#7c3aed;">${rp(tot.totalMasuk)}</td>
