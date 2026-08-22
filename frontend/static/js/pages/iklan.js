@@ -74,6 +74,10 @@ export class IklanPage {
               ).join('')}
             </div>
           </div>
+          <button id="btn-auto-link" class="btn btn-sm" style="font-size:12px;display:flex;align-items:center;gap:5px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            Auto Link
+          </button>
           <div style="display:flex;gap:6px;align-items:center;">
             <input type="date" id="inp-dari"   class="form-input" style="width:135px;font-size:12px;" value="${this.dari}">
             <span style="color:var(--text-muted);">–</span>
@@ -112,8 +116,38 @@ export class IklanPage {
     });
     exportMenu.addEventListener('click', e => e.stopPropagation());
 
+    this.container.querySelector('#btn-auto-link').addEventListener('click', () => this._autoLink());
+
     document.addEventListener('click', this._boundClose);
     await this._load();
+  }
+
+  async _autoLink() {
+    const btn = this.container.querySelector('#btn-auto-link');
+    btn.disabled = true;
+    btn.textContent = 'Memproses…';
+    try {
+      const res = await apiFetch('/dashboard/campaigns/auto-link', { method: 'POST' });
+      const msg = res.linked > 0
+        ? `${res.linked} campaign berhasil di-link otomatis.`
+        : 'Tidak ada campaign baru yang cocok.';
+      this._showToast(msg, res.linked > 0 ? 'success' : 'info');
+      if (res.linked > 0) await this._load();
+    } catch (e) {
+      this._showToast(e.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> Auto Link`;
+    }
+  }
+
+  _showToast(msg, type = 'info') {
+    const colors = { success: '#16a34a', error: '#dc2626', info: '#2563eb' };
+    const el = document.createElement('div');
+    el.style.cssText = `position:fixed;bottom:24px;right:24px;z-index:99999;background:${colors[type]};color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;box-shadow:0 4px 16px rgba(0,0,0,0.18);max-width:320px;`;
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 3500);
   }
 
   async _load() {

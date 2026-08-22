@@ -655,6 +655,50 @@ async def delete_campaign_note(campaign_id: UUID, note_id: UUID, current_user: C
     await db.commit()
 
 
+@router.post("/campaigns/auto-link")
+async def auto_link_campaigns(current_user: CurrentUser, db: DB):
+    """Auto-link campaign ke tag link jika nama_campaign == tag (case-insensitive)."""
+    camp_rows = (await db.execute(
+        sa.select(Campaign.id, sa.func.lower(Campaign.nama_campaign).label("nama"))
+        .join(MetaAccount, Campaign.meta_account_id == MetaAccount.id)
+        .where(MetaAccount.user_id == current_user.id)
+    )).all()
+
+    if not camp_rows:
+        return {"linked": 0, "skipped": 0}
+
+    tag_rows = (await db.execute(
+        sa.select(TagLink.id, sa.func.lower(TagLink.tag).label("tag"))
+        .join(ShopeeAccount, TagLink.shopee_account_id == ShopeeAccount.id)
+        .where(ShopeeAccount.user_id == current_user.id)
+    )).all()
+
+    tag_lookup = {r.tag: r.id for r in tag_rows}
+
+    camp_ids = [r.id for r in camp_rows]
+    existing = set(
+        (r.campaign_id, r.tag_link_id)
+        for r in (await db.execute(
+            sa.select(CampaignTagMap.campaign_id, CampaignTagMap.tag_link_id)
+            .where(CampaignTagMap.campaign_id.in_(camp_ids))
+        )).all()
+    )
+
+    linked = 0
+    skipped = 0
+    for camp in camp_rows:
+        tag_id = tag_lookup.get(camp.nama)
+        if tag_id is None or (camp.id, tag_id) in existing:
+            skipped += 1
+            continue
+        db.add(CampaignTagMap(campaign_id=camp.id, tag_link_id=tag_id, sumber="auto"))
+        linked += 1
+
+    if linked:
+        await db.commit()
+    return {"linked": linked, "skipped": skipped}
+
+
 _VALID_JENIS = {"GAMBAR", "VIDEO", None}
 
 
