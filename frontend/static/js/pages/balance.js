@@ -35,6 +35,8 @@ export class BalancePage {
   constructor(container) {
     this.container = container;
     this._data = null;
+    this._page = 1;
+    this._perPage = 10;
     this._showEditModal = this._showEditModal.bind(this);
   }
 
@@ -157,23 +159,69 @@ export class BalancePage {
                 <th style="width:44px;"></th>
               </tr>
             </thead>
-            <tbody>
-              ${accounts.length === 0
-                ? `<tr><td colspan="6" class="empty" style="padding:32px;text-align:center;">Belum ada data saldo.<br><span style="font-size:12px;color:var(--text-muted,#9ca3af);">Klik tombol ✎ untuk input saldo manual.</span></td></tr>`
-                : accounts.map(a => this._rowHtml(a)).join('')}
+            <tbody id="balance-tbody">
             </tbody>
           </table>
         </div>
       </div>
+      <div id="pagination-wrap"></div>
     `;
 
-    el.querySelectorAll('[data-edit-id]').forEach(btn => {
+    this._renderTable(el, accounts);
+  }
+
+  _renderTable(el, accounts) {
+    const totalPages = Math.ceil(accounts.length / this._perPage);
+    if (this._page > totalPages) this._page = Math.max(1, totalPages);
+    const startIdx = (this._page - 1) * this._perPage;
+    const pageRows = accounts.length === 0 ? [] : accounts.slice(startIdx, startIdx + this._perPage);
+
+    const tbody = el.querySelector('#balance-tbody');
+    tbody.innerHTML = accounts.length === 0
+      ? `<tr><td colspan="6" class="empty" style="padding:32px;text-align:center;">Belum ada data saldo.<br><span style="font-size:12px;color:var(--text-muted,#9ca3af);">Klik tombol ✎ untuk input saldo manual.</span></td></tr>`
+      : pageRows.map(a => this._rowHtml(a)).join('');
+
+    tbody.querySelectorAll('[data-edit-id]').forEach(btn => {
       btn.addEventListener('click', () => {
         const id = btn.dataset.editId;
         const row = accounts.find(a => a.meta_account_id === id);
         if (row) this._showEditModal(row);
       });
     });
+
+    const pgWrap = el.querySelector('#pagination-wrap');
+    if (!pgWrap) return;
+    const pp = this._perPage;
+    const pageNums = totalPages > 1
+      ? Array.from({length:totalPages},(_,i)=>i+1)
+          .filter(p=>p===1||p===totalPages||Math.abs(p-this._page)<=2)
+          .reduce((acc,p,i,arr)=>{if(i>0&&p-arr[i-1]>1)acc.push('…');acc.push(p);return acc;},[])
+      : [];
+    pgWrap.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 4px;margin-top:8px;flex-wrap:wrap;gap:8px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <select id="pg-size" style="padding:4px 8px;border:1px solid var(--border,#e5e7eb);border-radius:6px;font-size:12px;background:var(--bg-card,#fff);color:var(--text,#374151);cursor:pointer;">
+            ${[10,20,30,50].map(n=>`<option value="${n}"${pp===n?' selected':''}>${n}</option>`).join('')}
+          </select>
+          <span style="font-size:12px;color:var(--text-muted,#9ca3af);">per halaman &nbsp;·&nbsp; ${accounts.length===0?'0':startIdx+1}–${Math.min(startIdx+pp, accounts.length)} dari ${accounts.length}</span>
+        </div>
+        ${totalPages > 1 ? `<div style="display:flex;align-items:center;gap:4px;">
+          <button id="pg-first" class="btn btn-sm" style="font-size:12px;padding:5px 10px;" ${this._page===1?'disabled':''}>«</button>
+          <button id="pg-prev"  class="btn btn-sm" style="font-size:12px;padding:5px 10px;" ${this._page===1?'disabled':''}>‹</button>
+          ${pageNums.map(p=>p==='…'
+            ?`<span style="padding:5px 8px;font-size:12px;color:var(--text-muted,#9ca3af);">…</span>`
+            :`<button class="btn btn-sm pg-num" data-pg="${p}" style="font-size:12px;padding:5px 10px;${p===this._page?'background:#dc2626;color:#fff;border-color:#dc2626;':''}">${p}</button>`
+          ).join('')}
+          <button id="pg-next" class="btn btn-sm" style="font-size:12px;padding:5px 10px;" ${this._page===totalPages?'disabled':''}>›</button>
+          <button id="pg-last" class="btn btn-sm" style="font-size:12px;padding:5px 10px;" ${this._page===totalPages?'disabled':''}>»</button>
+        </div>` : ''}
+      </div>`;
+    pgWrap.querySelector('#pg-size')?.addEventListener('change', e=>{ this._perPage=Number(e.target.value); this._page=1; this._renderTable(el, accounts); });
+    pgWrap.querySelector('#pg-first')?.addEventListener('click', ()=>{ this._page=1; this._renderTable(el, accounts); });
+    pgWrap.querySelector('#pg-prev') ?.addEventListener('click', ()=>{ this._page--; this._renderTable(el, accounts); });
+    pgWrap.querySelector('#pg-next') ?.addEventListener('click', ()=>{ this._page++; this._renderTable(el, accounts); });
+    pgWrap.querySelector('#pg-last') ?.addEventListener('click', ()=>{ this._page=totalPages; this._renderTable(el, accounts); });
+    pgWrap.querySelectorAll('.pg-num').forEach(btn=>{ btn.addEventListener('click',()=>{ this._page=Number(btn.dataset.pg); this._renderTable(el, accounts); }); });
   }
 
   _rowHtml(a) {

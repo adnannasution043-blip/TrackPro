@@ -44,7 +44,7 @@ export class ClicksPage {
     this._allSources = [];
     this._summary = null;
     this._page = 1;
-    this._perPage = 50;
+    this._perPage = 10;
   }
 
   async render() {

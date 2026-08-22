@@ -61,7 +61,7 @@ export class KomisiBersihPage {
     this._wdRows   = [];
     this._tab      = 'komisi';
     this._page     = 1;
-    this._perPage  = 50;
+    this._perPage  = 10;
   }
 
   async render() {

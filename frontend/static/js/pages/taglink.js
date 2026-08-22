@@ -46,7 +46,7 @@ export class TaglinkPage {
     this._tags = [];
     this._shopeeAccounts = [];
     this._page = 1;
-    this._perPage = 50;
+    this._perPage = 10;
     this._onDocClick = this._onDocClick.bind(this);
     this._onKeyDown = this._onKeyDown.bind(this);
   }

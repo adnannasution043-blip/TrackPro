@@ -42,7 +42,7 @@ export class IklanPage {
     this._tahap  = 'all';
     this._status = 'all';
     this._page   = 1;
-    this._perPage = 50;
+    this._perPage = 10;
     this._boundClose = this._closePanels.bind(this);
   }
 

@@ -33,7 +33,7 @@ export class LaporanHarian2Page {
     this._bdMap    = {};   // dari /laporan-harian2 (breakdown kategori)
     this._filters  = new Set(); // kosong = semua
     this._page     = 1;
-    this._perPage  = 50;
+    this._perPage  = 10;
   }
 
   async render() {
