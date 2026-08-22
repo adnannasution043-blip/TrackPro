@@ -45,6 +45,8 @@ export class TaglinkPage {
     this._campaigns = [];
     this._tags = [];
     this._shopeeAccounts = [];
+    this._page = 1;
+    this._perPage = 50;
     this._onDocClick = this._onDocClick.bind(this);
     this._onKeyDown = this._onKeyDown.bind(this);
   }
@@ -194,6 +196,7 @@ export class TaglinkPage {
         }));
 
       this._allRows = [...mappedRows, ...unmappedRows];
+      this._page = 1;
       this._renderContent(el);
     } catch (e) {
       el.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
@@ -286,18 +289,21 @@ export class TaglinkPage {
         </div>
         <div class="table-wrap" style="overflow-x:auto;" id="tl-table"></div>
       </div>
+      <div id="pagination-wrap"></div>
     `;
 
     this._renderTable(el.querySelector('#tl-table'));
 
     el.querySelector('#inp-search').addEventListener('input', e => {
       this._search = e.target.value;
+      this._page = 1;
       this._renderTable(el.querySelector('#tl-table'));
     });
 
     el.querySelectorAll('[data-f]').forEach(btn => {
       btn.addEventListener('click', () => {
         this._filter = btn.dataset.f;
+        this._page = 1;
         el.querySelectorAll('[data-f]').forEach(b => b.classList.toggle('active', b.dataset.f === this._filter));
         this._renderTable(el.querySelector('#tl-table'));
       });
@@ -320,15 +326,22 @@ export class TaglinkPage {
   }
 
   _renderTable(el) {
-    const rows = this._getFilteredRows();
+    const allRows = this._getFilteredRows();
+    const pgWrap  = this.container.querySelector('#pagination-wrap');
 
-    if (rows.length === 0) {
+    if (allRows.length === 0) {
       el.innerHTML = `<div class="empty" style="padding:32px;text-align:center;">
         Tidak ada data.<br><span style="font-size:12px;color:var(--text-muted,#9ca3af);">Coba ubah filter atau upload data Meta Ads terlebih dahulu.</span>
       </div>`;
+      if (pgWrap) pgWrap.innerHTML = '';
       this._bindSort(el);
       return;
     }
+
+    const totalPages = Math.ceil(allRows.length / this._perPage);
+    if (this._page > totalPages) this._page = Math.max(1, totalPages);
+    const startIdx = (this._page - 1) * this._perPage;
+    const pageRows = allRows.slice(startIdx, startIdx + this._perPage);
 
     el.innerHTML = `
       <table class="data-table" style="font-size:12.5px;">
@@ -344,13 +357,46 @@ export class TaglinkPage {
           </tr>
         </thead>
         <tbody>
-          ${rows.map(r => this._renderRow(r)).join('')}
+          ${pageRows.map(r => this._renderRow(r)).join('')}
         </tbody>
       </table>
     `;
 
     this._bindSort(el);
-    this._bindActions(el, rows);
+    this._bindActions(el, allRows);
+
+    if (pgWrap) {
+      if (totalPages > 1) {
+        pgWrap.innerHTML = `
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 4px;margin-top:8px;flex-wrap:wrap;gap:8px;">
+            <div style="font-size:12px;color:var(--text-muted,#9ca3af);">
+              Menampilkan ${startIdx+1}–${Math.min(startIdx+this._perPage, allRows.length)} dari ${allRows.length} baris
+            </div>
+            <div style="display:flex;align-items:center;gap:4px;">
+              <button id="pg-first" class="btn btn-sm" style="font-size:12px;padding:5px 10px;" ${this._page===1?'disabled':''}>«</button>
+              <button id="pg-prev"  class="btn btn-sm" style="font-size:12px;padding:5px 10px;" ${this._page===1?'disabled':''}>‹</button>
+              ${Array.from({length:totalPages},(_,i)=>i+1)
+                .filter(p=>p===1||p===totalPages||Math.abs(p-this._page)<=2)
+                .reduce((acc,p,i,arr)=>{if(i>0&&p-arr[i-1]>1)acc.push('…');acc.push(p);return acc;},[])
+                .map(p=>p==='…'
+                  ?`<span style="padding:5px 8px;font-size:12px;color:var(--text-muted,#9ca3af);">…</span>`
+                  :`<button class="btn btn-sm pg-num" data-pg="${p}" style="font-size:12px;padding:5px 10px;${p===this._page?'background:#dc2626;color:#fff;border-color:#dc2626;':''}">${p}</button>`
+                ).join('')}
+              <button id="pg-next" class="btn btn-sm" style="font-size:12px;padding:5px 10px;" ${this._page===totalPages?'disabled':''}>›</button>
+              <button id="pg-last" class="btn btn-sm" style="font-size:12px;padding:5px 10px;" ${this._page===totalPages?'disabled':''}>»</button>
+            </div>
+          </div>`;
+        pgWrap.querySelector('#pg-first')?.addEventListener('click', ()=>{ this._page=1; this._renderTable(el); });
+        pgWrap.querySelector('#pg-prev') ?.addEventListener('click', ()=>{ this._page--; this._renderTable(el); });
+        pgWrap.querySelector('#pg-next') ?.addEventListener('click', ()=>{ this._page++; this._renderTable(el); });
+        pgWrap.querySelector('#pg-last') ?.addEventListener('click', ()=>{ this._page=totalPages; this._renderTable(el); });
+        pgWrap.querySelectorAll('.pg-num').forEach(btn=>{
+          btn.addEventListener('click', ()=>{ this._page=Number(btn.dataset.pg); this._renderTable(el); });
+        });
+      } else {
+        pgWrap.innerHTML = '';
+      }
+    }
   }
 
   _renderRow(r) {
@@ -392,6 +438,7 @@ export class TaglinkPage {
           this._sortCol = col;
           this._sortDir = 'asc';
         }
+        this._page = 1;
         this._renderTable(el);
       });
     });
