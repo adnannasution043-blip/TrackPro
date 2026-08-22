@@ -221,35 +221,40 @@ export class ClicksPage {
     const pgWrap = this.container.querySelector('#pagination-wrap');
     if (!pgWrap) return;
     const totalPages = Math.ceil(total / this._perPage);
-    if (totalPages <= 1) { pgWrap.innerHTML = ''; return; }
+    const tblEl = this.container.querySelector('#click-table');
+    const pp = this._perPage;
+    if (total === 0) { pgWrap.innerHTML = ''; return; }
     const startIdx = (this._page - 1) * this._perPage;
+    const pageNums = totalPages > 1
+      ? Array.from({length:totalPages},(_,i)=>i+1)
+          .filter(p=>p===1||p===totalPages||Math.abs(p-this._page)<=2)
+          .reduce((acc,p,i,arr)=>{if(i>0&&p-arr[i-1]>1)acc.push('…');acc.push(p);return acc;},[])
+      : [];
     pgWrap.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 4px;margin-top:8px;flex-wrap:wrap;gap:8px;">
-        <div style="font-size:12px;color:var(--text-muted,#9ca3af);">
-          Menampilkan ${startIdx+1}–${Math.min(startIdx+this._perPage, total)} dari ${total} baris
+        <div style="display:flex;align-items:center;gap:8px;">
+          <select id="pg-size" style="padding:4px 8px;border:1px solid var(--border,#e5e7eb);border-radius:6px;font-size:12px;background:var(--bg-card,#fff);color:var(--text,#374151);cursor:pointer;">
+            ${[10,20,30,50].map(n=>`<option value="${n}"${pp===n?' selected':''}>${n}</option>`).join('')}
+          </select>
+          <span style="font-size:12px;color:var(--text-muted,#9ca3af);">per halaman &nbsp;·&nbsp; ${startIdx+1}–${Math.min(startIdx+pp, total)} dari ${total}</span>
         </div>
-        <div style="display:flex;align-items:center;gap:4px;">
+        ${totalPages > 1 ? `<div style="display:flex;align-items:center;gap:4px;">
           <button id="pg-first" class="btn btn-sm" style="font-size:12px;padding:5px 10px;" ${this._page===1?'disabled':''}>«</button>
           <button id="pg-prev"  class="btn btn-sm" style="font-size:12px;padding:5px 10px;" ${this._page===1?'disabled':''}>‹</button>
-          ${Array.from({length:totalPages},(_,i)=>i+1)
-            .filter(p=>p===1||p===totalPages||Math.abs(p-this._page)<=2)
-            .reduce((acc,p,i,arr)=>{if(i>0&&p-arr[i-1]>1)acc.push('…');acc.push(p);return acc;},[])
-            .map(p=>p==='…'
-              ?`<span style="padding:5px 8px;font-size:12px;color:var(--text-muted,#9ca3af);">…</span>`
-              :`<button class="btn btn-sm pg-num" data-pg="${p}" style="font-size:12px;padding:5px 10px;${p===this._page?'background:#dc2626;color:#fff;border-color:#dc2626;':''}">${p}</button>`
-            ).join('')}
+          ${pageNums.map(p=>p==='…'
+            ?`<span style="padding:5px 8px;font-size:12px;color:var(--text-muted,#9ca3af);">…</span>`
+            :`<button class="btn btn-sm pg-num" data-pg="${p}" style="font-size:12px;padding:5px 10px;${p===this._page?'background:#dc2626;color:#fff;border-color:#dc2626;':''}">${p}</button>`
+          ).join('')}
           <button id="pg-next" class="btn btn-sm" style="font-size:12px;padding:5px 10px;" ${this._page===totalPages?'disabled':''}>›</button>
           <button id="pg-last" class="btn btn-sm" style="font-size:12px;padding:5px 10px;" ${this._page===totalPages?'disabled':''}>»</button>
-        </div>
+        </div>` : ''}
       </div>`;
-    const tblEl = this.container.querySelector('#click-table');
+    pgWrap.querySelector('#pg-size')?.addEventListener('change', e=>{ this._perPage=Number(e.target.value); this._page=1; this._renderTable(tblEl); });
     pgWrap.querySelector('#pg-first')?.addEventListener('click', ()=>{ this._page=1; this._renderTable(tblEl); });
     pgWrap.querySelector('#pg-prev') ?.addEventListener('click', ()=>{ this._page--; this._renderTable(tblEl); });
     pgWrap.querySelector('#pg-next') ?.addEventListener('click', ()=>{ this._page++; this._renderTable(tblEl); });
     pgWrap.querySelector('#pg-last') ?.addEventListener('click', ()=>{ this._page=totalPages; this._renderTable(tblEl); });
-    pgWrap.querySelectorAll('.pg-num').forEach(btn=>{
-      btn.addEventListener('click', ()=>{ this._page=Number(btn.dataset.pg); this._renderTable(tblEl); });
-    });
+    pgWrap.querySelectorAll('.pg-num').forEach(btn=>{ btn.addEventListener('click',()=>{ this._page=Number(btn.dataset.pg); this._renderTable(tblEl); }); });
   }
 
   _renderTable(el) {

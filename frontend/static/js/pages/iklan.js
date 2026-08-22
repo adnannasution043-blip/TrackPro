@@ -326,12 +326,14 @@ export class IklanPage {
           </table>
         </div>
       </div>
-      ${totalPages > 1 ? `
       <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 4px;margin-top:8px;flex-wrap:wrap;gap:8px;">
-        <div style="font-size:12px;color:var(--text-muted);">
-          Menampilkan ${startIdx+1}–${Math.min(endIdx, visible.length)} dari ${visible.length} iklan
+        <div style="display:flex;align-items:center;gap:8px;">
+          <select id="pg-size" style="padding:4px 8px;border:1px solid var(--border,#e5e7eb);border-radius:6px;font-size:12px;background:var(--bg-card,#fff);color:var(--text,#374151);cursor:pointer;">
+            ${[10,20,30,50].map(n=>`<option value="${n}"${this._perPage===n?' selected':''}>${n}</option>`).join('')}
+          </select>
+          <span style="font-size:12px;color:var(--text-muted);">per halaman &nbsp;·&nbsp; ${startIdx+1}–${Math.min(endIdx, visible.length)} dari ${visible.length}</span>
         </div>
-        <div style="display:flex;align-items:center;gap:4px;">
+        ${totalPages > 1 ? `<div style="display:flex;align-items:center;gap:4px;">
           <button id="pg-first" class="btn btn-sm" style="font-size:12px;padding:5px 10px;" ${this._page===1?'disabled':''}>«</button>
           <button id="pg-prev"  class="btn btn-sm" style="font-size:12px;padding:5px 10px;" ${this._page===1?'disabled':''}>‹</button>
           ${Array.from({length: totalPages}, (_,i) => i+1)
@@ -346,8 +348,8 @@ export class IklanPage {
             ).join('')}
           <button id="pg-next" class="btn btn-sm" style="font-size:12px;padding:5px 10px;" ${this._page===totalPages?'disabled':''}>›</button>
           <button id="pg-last" class="btn btn-sm" style="font-size:12px;padding:5px 10px;" ${this._page===totalPages?'disabled':''}>»</button>
-        </div>
-      </div>` : ''}
+        </div>` : ''}
+      </div>
       `;
 
     // Search
@@ -366,6 +368,7 @@ export class IklanPage {
     });
 
     // Pagination
+    el.querySelector('#pg-size') ?.addEventListener('change', e => { this._perPage = Number(e.target.value); this._page = 1; this._renderContent(el); });
     el.querySelector('#pg-first')?.addEventListener('click', () => { this._page = 1; this._renderContent(el); });
     el.querySelector('#pg-prev') ?.addEventListener('click', () => { this._page--; this._renderContent(el); });
     el.querySelector('#pg-next') ?.addEventListener('click', () => { this._page++; this._renderContent(el); });
