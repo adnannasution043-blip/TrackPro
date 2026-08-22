@@ -17,12 +17,13 @@ function todayStr()    { return new Date().toISOString().split('T')[0]; }
 function firstOfMonth(){ const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), 1).toISOString().split('T')[0]; }
 
 const FILTERS = [
-  { key: 'semua', label: 'Semua' },
-  { key: 'fp',    label: 'Shopee FP' },
-  { key: 'ig',    label: 'IG' },
-  { key: 'meta',  label: 'Meta' },
-  { key: 'adu',   label: 'Adu' },
-  { key: 'terra', label: 'Terra' },
+  { key: 'semua',   label: 'Semua' },
+  { key: 'organic', label: 'Organic' },
+  { key: 'fp',      label: 'Shopee FP' },
+  { key: 'ig',      label: 'IG' },
+  { key: 'meta',    label: 'Meta' },
+  { key: 'adu',     label: 'Adu' },
+  { key: 'terra',   label: 'Terra' },
 ];
 
 export class LaporanHarian2Page {
@@ -123,7 +124,10 @@ export class LaporanHarian2Page {
     const keyMap = { fp:'total_fp', ig:'total_ig', meta:'komisi_meta', adu:'komisi_adu', terra:'komisi_terra' };
     return this._rows.filter(r => {
       const bd = this._bdMap[r.tanggal] || {};
-      return [...this._filters].some(f => Number(bd[keyMap[f]] || 0) > 0);
+      return [...this._filters].some(f => {
+        if (f === 'organic') return Number(bd.total_fp || 0) > 0 || Number(bd.total_ig || 0) > 0;
+        return Number(bd[keyMap[f]] || 0) > 0;
+      });
     });
   }
 
