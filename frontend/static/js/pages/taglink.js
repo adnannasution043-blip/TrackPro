@@ -364,8 +364,8 @@ export class TaglinkPage {
     const dibuat = r.created_at ? fmtDate(r.created_at) : '<span style="color:var(--text-muted,#9ca3af);">—</span>';
 
     const mapId = r.id || null;
-    const editBtn = `<button class="btn-icon" data-action="edit" data-map-id="${mapId || ''}" data-campaign-id="${r.campaign_id}" data-campaign-name="${(r.campaign_name || r.nama_campaign || '').replace(/"/g, '&quot;')}" title="Edit" style="color:#374151;padding:4px;">${SVG_EDIT}</button>`;
-    const deleteBtn = mapId ? `<button class="btn-icon" data-action="delete" data-map-id="${mapId}" style="color:#dc2626;padding:4px;" title="Hapus">${SVG_TRASH}</button>` : '';
+    const editBtn = `<button data-action="edit" data-map-id="${mapId || ''}" data-campaign-id="${r.campaign_id}" data-campaign-name="${(r.campaign_name || r.nama_campaign || '').replace(/"/g, '&quot;')}" title="Edit" style="background:none;border:none;cursor:pointer;color:#6b7280;padding:4px;line-height:0;" onmouseover="this.style.color='#2563eb'" onmouseout="this.style.color='#6b7280'">${SVG_EDIT}</button>`;
+    const deleteBtn = mapId ? `<button data-action="delete" data-map-id="${mapId}" title="Hapus" style="background:none;border:none;cursor:pointer;color:#6b7280;padding:4px;line-height:0;" onmouseover="this.style.color='#dc2626'" onmouseout="this.style.color='#6b7280'">${SVG_TRASH}</button>` : '';
 
     return `<tr>
       <td style="font-weight:500;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${name}">${name}</td>
