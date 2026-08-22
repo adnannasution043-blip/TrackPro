@@ -66,29 +66,6 @@ export class UploadPage {
       </div>
 
       <div class="card" style="margin-bottom:16px;">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
-          <div>
-            <div class="form-label">SLOT TAG LINK</div>
-            <select class="form-select" id="sel-slot">
-              <option value="1">Slot 1 (default)</option>
-              <option value="2">Slot 2 / Tag_link2</option>
-              <option value="3">Slot 3 / Tag_link3</option>
-              <option value="4">Slot 4 / Tag_link4</option>
-              <option value="5">Slot 5 / Tag_link5</option>
-            </select>
-            <div class="form-hint">Pilih kolom Sub_id / Tag_link di Shopee CSV yang berisi tag iklan.</div>
-          </div>
-          <div>
-            <div class="form-label">PEMBEDA TAG</div>
-            <select class="form-select" id="sel-pembeda">
-              <option value="campaign">Nama Campaign</option>
-              <option value="adset">Nama Ad Set</option>
-              <option value="ad">Nama Ad</option>
-            </select>
-            <div class="form-hint">Berlaku per-akun & tersimpan ke setelan akun ini.</div>
-          </div>
-        </div>
-
         <div class="form-group">
           <div class="form-label">AKUN SHOPEE</div>
           <select class="form-select" id="sel-shopee">
@@ -97,7 +74,7 @@ export class UploadPage {
           </select>
         </div>
 
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;">
           <div>
             <div class="form-label" style="margin-bottom:8px;">Shopee Commission CSV</div>
             <div class="upload-zone" id="zone-commission">
@@ -123,58 +100,79 @@ export class UploadPage {
           </div>
         </div>
 
-        <div style="margin-top:16px;">
-          <div class="form-label" style="margin-bottom:8px;">Meta Ads CSV (Opsional)</div>
-          <div class="upload-zone" id="zone-meta">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            <p><strong>Pilih file CSV</strong> atau drag & drop</p>
-            <p style="font-size:12px;margin-top:4px;">Data performa iklan dari Meta Ads Manager</p>
+        <!-- Meta Ads — collapsible -->
+        <div style="margin-top:20px;border-top:1px solid var(--border);padding-top:14px;">
+          <button id="btn-toggle-meta" type="button"
+            style="display:flex;align-items:center;gap:6px;background:none;border:none;cursor:pointer;font-size:12px;font-weight:600;color:var(--text-muted);padding:0;">
+            <svg id="ico-toggle-meta" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              width="14" height="14" style="transition:transform .2s;transform:rotate(-90deg);">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+            META ADS (Opsional)
+          </button>
+          <div id="meta-section" style="display:none;margin-top:14px;">
+            <div style="margin-bottom:16px;">
+              <div class="form-label" style="margin-bottom:8px;">Meta Ads CSV</div>
+              <div class="upload-zone" id="zone-meta">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <p><strong>Pilih file CSV</strong> atau drag & drop</p>
+                <p style="font-size:12px;margin-top:4px;">Data performa iklan dari Meta Ads Manager</p>
+              </div>
+              <input type="file" id="file-meta" accept=".csv" style="display:none">
+              <div id="name-meta" style="font-size:12px;color:#6b7280;margin-top:4px;"></div>
+            </div>
+
+            <div>
+              <div class="form-label" style="margin-bottom:4px;">
+                Meta Breakdown CSV
+                <span class="badge badge-yellow" style="margin-left:6px;">Opsional</span>
+              </div>
+              <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">
+                Upload 1–3 file breakdown (Penempatan, Platform, atau Usia &amp; Gender). Tipe otomatis terdeteksi.
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
+                <div>
+                  <div style="font-size:11px;font-weight:600;color:#6b7280;margin-bottom:6px;">PENEMPATAN</div>
+                  <div class="upload-zone" id="zone-breakdown-placement" style="padding:16px;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:24px;height:24px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    <p style="font-size:12px;margin-top:6px;"><strong>Pilih file</strong></p>
+                    <p style="font-size:11px;color:#9ca3af;">kolom: Placement</p>
+                  </div>
+                  <input type="file" id="file-breakdown-placement" accept=".csv" style="display:none">
+                  <div id="name-breakdown-placement" style="font-size:11px;color:#6b7280;margin-top:4px;"></div>
+                </div>
+                <div>
+                  <div style="font-size:11px;font-weight:600;color:#6b7280;margin-bottom:6px;">PLATFORM</div>
+                  <div class="upload-zone" id="zone-breakdown-platform" style="padding:16px;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:24px;height:24px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    <p style="font-size:12px;margin-top:6px;"><strong>Pilih file</strong></p>
+                    <p style="font-size:11px;color:#9ca3af;">kolom: Platform</p>
+                  </div>
+                  <input type="file" id="file-breakdown-platform" accept=".csv" style="display:none">
+                  <div id="name-breakdown-platform" style="font-size:11px;color:#6b7280;margin-top:4px;"></div>
+                </div>
+                <div>
+                  <div style="font-size:11px;font-weight:600;color:#6b7280;margin-bottom:6px;">USIA & GENDER</div>
+                  <div class="upload-zone" id="zone-breakdown-age" style="padding:16px;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:24px;height:24px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    <p style="font-size:12px;margin-top:6px;"><strong>Pilih file</strong></p>
+                    <p style="font-size:11px;color:#9ca3af;">kolom: Age + Gender</p>
+                  </div>
+                  <input type="file" id="file-breakdown-age" accept=".csv" style="display:none">
+                  <div id="name-breakdown-age" style="font-size:11px;color:#6b7280;margin-top:4px;"></div>
+                </div>
+              </div>
+            </div>
           </div>
-          <input type="file" id="file-meta" accept=".csv" style="display:none">
-          <div id="name-meta" style="font-size:12px;color:#6b7280;margin-top:4px;"></div>
         </div>
 
-        <div style="margin-top:16px;">
-          <div class="form-label" style="margin-bottom:8px;">
-            Meta Breakdown CSV
-            <span class="badge badge-yellow" style="margin-left:6px;">Opsional</span>
-          </div>
-          <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">
-            Upload 1–3 file breakdown Meta Ads (Penempatan, Platform, atau Usia &amp; Gender). Tipe otomatis terdeteksi dari kolom CSV.
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
-            <div>
-              <div style="font-size:11px;font-weight:600;color:#6b7280;margin-bottom:6px;">PENEMPATAN</div>
-              <div class="upload-zone" id="zone-breakdown-placement" style="padding:16px;">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:24px;height:24px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                <p style="font-size:12px;margin-top:6px;"><strong>Pilih file</strong></p>
-                <p style="font-size:11px;color:#9ca3af;">kolom: Placement</p>
-              </div>
-              <input type="file" id="file-breakdown-placement" accept=".csv" style="display:none">
-              <div id="name-breakdown-placement" style="font-size:11px;color:#6b7280;margin-top:4px;"></div>
-            </div>
-            <div>
-              <div style="font-size:11px;font-weight:600;color:#6b7280;margin-bottom:6px;">PLATFORM</div>
-              <div class="upload-zone" id="zone-breakdown-platform" style="padding:16px;">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:24px;height:24px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                <p style="font-size:12px;margin-top:6px;"><strong>Pilih file</strong></p>
-                <p style="font-size:11px;color:#9ca3af;">kolom: Platform</p>
-              </div>
-              <input type="file" id="file-breakdown-platform" accept=".csv" style="display:none">
-              <div id="name-breakdown-platform" style="font-size:11px;color:#6b7280;margin-top:4px;"></div>
-            </div>
-            <div>
-              <div style="font-size:11px;font-weight:600;color:#6b7280;margin-bottom:6px;">USIA & GENDER</div>
-              <div class="upload-zone" id="zone-breakdown-age" style="padding:16px;">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:24px;height:24px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                <p style="font-size:12px;margin-top:6px;"><strong>Pilih file</strong></p>
-                <p style="font-size:11px;color:#9ca3af;">kolom: Age + Gender</p>
-              </div>
-              <input type="file" id="file-breakdown-age" accept=".csv" style="display:none">
-              <div id="name-breakdown-age" style="font-size:11px;color:#6b7280;margin-top:4px;"></div>
-            </div>
-          </div>
-        </div>
+        <!-- input tersembunyi untuk slot & pembeda (tetap fungsional) -->
+        <select id="sel-slot" style="display:none">
+          <option value="2" selected>Slot 2 / Tag_link2</option>
+        </select>
+        <select id="sel-pembeda" style="display:none">
+          <option value="campaign" selected>Nama Campaign</option>
+        </select>
 
         <div id="upload-error" class="alert alert-error" style="display:none;margin-top:12px;"></div>
         <div id="upload-success" class="alert alert-success" style="display:none;margin-top:12px;"></div>
@@ -228,6 +226,14 @@ export class UploadPage {
 
     el.querySelector('#btn-upload').addEventListener('click', () => this._submit());
     el.querySelector('#btn-upload-wd').addEventListener('click', () => this._submitWd());
+
+    el.querySelector('#btn-toggle-meta').addEventListener('click', () => {
+      const sec = el.querySelector('#meta-section');
+      const ico = el.querySelector('#ico-toggle-meta');
+      const open = sec.style.display === 'none';
+      sec.style.display = open ? 'block' : 'none';
+      ico.style.transform = open ? 'rotate(0deg)' : 'rotate(-90deg)';
+    });
   }
 
   _bindUploadZone(zoneId, fileId, nameId) {
