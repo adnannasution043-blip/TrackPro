@@ -203,6 +203,13 @@ function renderShell(path, user) {
       </aside>
       <div id="main-area">
         <header id="topbar">
+          <button id="btn-sidebar-toggle" title="Sembunyikan/tampilkan sidebar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+              <line x1="3" y1="6"  x2="21" y2="6"/>
+              <line x1="3" y1="12" x2="21" y2="12"/>
+              <line x1="3" y1="18" x2="21" y2="18"/>
+            </svg>
+          </button>
           <div class="topbar-logo">
             <div class="topbar-logo-icon">TP</div>
             <div class="topbar-logo-text">
@@ -304,6 +311,28 @@ function updateSidebarLive() {
 
   // Load live balance untuk sidebar widget
   _loadSidebarBalance();
+
+  // Sidebar toggle
+  _initSidebarToggle();
+}
+
+function _initSidebarToggle() {
+  const btn      = document.getElementById('btn-sidebar-toggle');
+  const sidebar  = document.getElementById('sidebar');
+  const mainArea = document.getElementById('main-area');
+  if (!btn || !sidebar || !mainArea) return;
+
+  const collapsed = localStorage.getItem('sidebar-collapsed') === '1';
+  if (collapsed) {
+    sidebar.classList.add('collapsed');
+    mainArea.classList.add('sidebar-hidden');
+  }
+
+  btn.addEventListener('click', () => {
+    const isNowCollapsed = sidebar.classList.toggle('collapsed');
+    mainArea.classList.toggle('sidebar-hidden', isNowCollapsed);
+    localStorage.setItem('sidebar-collapsed', isNowCollapsed ? '1' : '0');
+  });
 }
 
 async function _initSidebarFilter() {

@@ -241,6 +241,34 @@ button { font-family: inherit; cursor: pointer; }
 .sidebar-logout:hover { color: var(--red); }
 .sidebar-logout svg { width: 14px; height: 14px; }
 
+/* ============================================================ Sidebar collapse */
+
+#sidebar {
+  transition: transform 0.22s ease, width 0.22s ease, min-width 0.22s ease;
+}
+#sidebar.collapsed {
+  transform: translateX(calc(-1 * var(--sidebar-width)));
+}
+#main-area {
+  transition: margin-left 0.22s ease;
+}
+#main-area.sidebar-hidden {
+  margin-left: 0;
+}
+
+#btn-sidebar-toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px 8px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+#btn-sidebar-toggle:hover { background: var(--bg-muted); color: var(--text); }
+
 /* ============================================================ Main Area */
 
 #main-area {
