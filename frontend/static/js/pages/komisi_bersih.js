@@ -66,7 +66,7 @@ export class KomisiBersihPage {
     this.container.innerHTML = `
       <div class="page-header">
         <div class="page-header-left">
-          <h1>Komisi Bersih</h1>
+          <h1>Pembayaran WD</h1>
           <p>Komisi after tax 2,5% — Organik, Iklan, dan Profit per hari.</p>
         </div>
         <div class="page-header-right" style="display:flex;gap:8px;align-items:center;">
