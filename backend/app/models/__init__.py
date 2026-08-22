@@ -1,4 +1,5 @@
 from app.models.account import AccountLink, MetaAccount, ShopeeAccount
+from app.models.campaign_note import CampaignNote
 from app.models.meta_app_config import MetaAppConfig
 from app.models.balance import AccountBalance
 from app.models.campaign import Campaign, CampaignTagMap, TagLink
@@ -22,4 +23,5 @@ __all__ = [
     "CsvImport",
     "MetaSyncLog",
     "MetaAppConfig",
+    "CampaignNote",
 ]

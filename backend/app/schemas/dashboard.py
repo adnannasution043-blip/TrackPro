@@ -60,6 +60,7 @@ class CampaignRow(BaseModel):
     cpc: Decimal | None
     hari: int
     catatan: str | None = None
+    has_notes: bool = False
 
 
 class CampaignsResponse(BaseModel):

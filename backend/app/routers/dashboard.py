@@ -16,11 +16,13 @@ from uuid import UUID
 
 import sqlalchemy as sa
 from fastapi import APIRouter, Query
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import DB, CurrentUser
 from app.models.account import MetaAccount, ShopeeAccount
 from app.models.campaign import Campaign, CampaignTagMap, TagLink
+from app.models.campaign_note import CampaignNote
 from app.models.metrics import DailyMetric, MetaBreakdown, OrderSnapshot
 from app.schemas.dashboard import (
     CampaignHarianResponse, CampaignHarianRow, CampaignRow, CampaignsResponse,
@@ -260,6 +262,14 @@ async def get_campaigns(
         if r.campaign_id not in tag_map:
             tag_map[r.campaign_id] = (r.tag_link_id, r.tag)
 
+    # Has notes
+    notes_q = (
+        sa.select(CampaignNote.campaign_id)
+        .where(CampaignNote.campaign_id.in_(camp_ids))
+        .distinct()
+    )
+    has_notes_set = {r.campaign_id for r in (await db.execute(notes_q)).all()}
+
     campaigns = []
     for r in camp_rows:
         spend = r.spend_idr or _ZERO
@@ -291,6 +301,7 @@ async def get_campaigns(
             cpc=cpc,
             hari=r.hari or 0,
             catatan=r.catatan,
+            has_notes=r.id in has_notes_set,
         ))
 
     return CampaignsResponse(campaigns=campaigns)
@@ -566,6 +577,81 @@ async def update_campaign_catatan(
         raise HTTPException(404, "Campaign tidak ditemukan.")
 
     camp.catatan = body.catatan or None
+    await db.commit()
+
+
+@router.get("/campaigns/{campaign_id}/notes")
+async def get_campaign_notes(campaign_id: UUID, current_user: CurrentUser, db: DB):
+    from fastapi import HTTPException
+    camp = (await db.execute(
+        sa.select(Campaign)
+        .join(MetaAccount, Campaign.meta_account_id == MetaAccount.id)
+        .where(Campaign.id == campaign_id, MetaAccount.user_id == current_user.id)
+    )).scalar_one_or_none()
+    if not camp:
+        raise HTTPException(404, "Campaign tidak ditemukan.")
+
+    notes = (await db.execute(
+        sa.select(CampaignNote)
+        .where(CampaignNote.campaign_id == campaign_id)
+        .order_by(CampaignNote.created_at.desc())
+    )).scalars().all()
+
+    return [
+        {"id": str(n.id), "teks": n.teks, "tipe": n.tipe,
+         "created_at": n.created_at.isoformat()}
+        for n in notes
+    ]
+
+
+class NoteCreate(BaseModel):
+    teks: str
+    tipe: str = "manual"
+
+
+@router.post("/campaigns/{campaign_id}/notes", status_code=201)
+async def add_campaign_note(campaign_id: UUID, body: NoteCreate, current_user: CurrentUser, db: DB):
+    from fastapi import HTTPException
+    if not body.teks.strip():
+        raise HTTPException(422, "Catatan tidak boleh kosong.")
+
+    camp = (await db.execute(
+        sa.select(Campaign)
+        .join(MetaAccount, Campaign.meta_account_id == MetaAccount.id)
+        .where(Campaign.id == campaign_id, MetaAccount.user_id == current_user.id)
+    )).scalar_one_or_none()
+    if not camp:
+        raise HTTPException(404, "Campaign tidak ditemukan.")
+
+    note = CampaignNote(
+        campaign_id=campaign_id,
+        user_id=current_user.id,
+        teks=body.teks.strip(),
+        tipe=body.tipe,
+    )
+    db.add(note)
+    await db.commit()
+    await db.refresh(note)
+    return {"id": str(note.id), "teks": note.teks, "tipe": note.tipe,
+            "created_at": note.created_at.isoformat()}
+
+
+@router.delete("/campaigns/{campaign_id}/notes/{note_id}", status_code=204)
+async def delete_campaign_note(campaign_id: UUID, note_id: UUID, current_user: CurrentUser, db: DB):
+    from fastapi import HTTPException
+    note = (await db.execute(
+        sa.select(CampaignNote)
+        .join(Campaign, CampaignNote.campaign_id == Campaign.id)
+        .join(MetaAccount, Campaign.meta_account_id == MetaAccount.id)
+        .where(
+            CampaignNote.id == note_id,
+            CampaignNote.campaign_id == campaign_id,
+            MetaAccount.user_id == current_user.id,
+        )
+    )).scalar_one_or_none()
+    if not note:
+        raise HTTPException(404, "Catatan tidak ditemukan.")
+    await db.delete(note)
     await db.commit()
 
 

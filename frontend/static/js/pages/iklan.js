@@ -215,9 +215,9 @@ export class IklanPage {
         <td style="white-space:nowrap;">${epc!=null ? rp(Math.round(epc)) : '—'}</td>
         <td style="padding:4px;width:36px;text-align:center;">
           <button class="btn btn-sm catatan-btn" data-catatan-id="${r.id}"
-            style="padding:2px 6px;position:relative;" title="${r.catatan ? r.catatan : 'Tambah catatan'}">
-            <svg viewBox="0 0 24 24" fill="none" stroke="${r.catatan?'#2563eb':'currentColor'}" stroke-width="2" width="13" height="13"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-            ${r.catatan ? '<span style="position:absolute;top:1px;right:1px;width:6px;height:6px;border-radius:50%;background:#2563eb;"></span>' : ''}
+            style="padding:2px 6px;position:relative;" title="Lihat / tambah catatan">
+            <svg viewBox="0 0 24 24" fill="none" stroke="${r.has_notes?'#2563eb':'currentColor'}" stroke-width="2" width="13" height="13"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            ${r.has_notes ? '<span style="position:absolute;top:1px;right:1px;width:6px;height:6px;border-radius:50%;background:#2563eb;"></span>' : ''}
           </button>
         </td>
       </tr>`;
@@ -383,59 +383,120 @@ export class IklanPage {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ tahap: newTahap }),
         });
+        // Catat perpindahan tahap ke timeline
+        const fromLabel = TAHAP_LABELS[r.tahap] || 'Pra Filter';
+        const toLabel   = TAHAP_LABELS[newTahap] || newTahap;
+        await apiFetch(`/dashboard/campaigns/${r.id}/notes`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ teks: `Dipindah dari ${fromLabel} → ${toLabel}`, tipe: 'pindah_tahap' }),
+        }).catch(() => {});
         const row = this._rows.find(x => x.id === r.id);
-        if (row) row.tahap = newTahap;
+        if (row) { row.tahap = newTahap; row.has_notes = true; }
         const el = this.container.querySelector('#content');
         this._renderContent(el);
       } catch(e) { alert(e.message || 'Gagal mengubah tahap.'); }
     });
   }
 
-  _showCatatanPopup(r, btn, tableEl) {
+  async _showCatatanPopup(r, btn, tableEl) {
     document.querySelectorAll('.catatan-popup').forEach(p => p.remove());
     const rect = btn.getBoundingClientRect();
     const popup = document.createElement('div');
     popup.className = 'catatan-popup';
-    popup.style.cssText = `position:fixed;top:${rect.bottom+6}px;right:${window.innerWidth-rect.right}px;background:#ffffff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,0.18);z-index:9999;width:300px;padding:14px;`;
+    popup.style.cssText = `position:fixed;top:${rect.bottom+6}px;right:${window.innerWidth-rect.right}px;
+      background:#ffffff;border:1px solid #e5e7eb;border-radius:10px;
+      box-shadow:0 6px 24px rgba(0,0,0,0.18);z-index:9999;width:320px;`;
     popup.innerHTML = `
-      <div style="font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">Catatan Iklan</div>
-      <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.nama_campaign}</div>
-      <textarea id="popup-catatan" placeholder="Tulis catatan…" rows="4"
-        style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;resize:vertical;background:var(--bg-muted);color:var(--text);font-family:inherit;outline:none;">${r.catatan||''}</textarea>
-      <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:10px;">
-        <button id="popup-hapus" class="btn btn-sm" style="font-size:12px;color:#dc2626;border-color:#fca5a5;">Hapus</button>
-        <button id="popup-batal" class="btn btn-sm" style="font-size:12px;">Batal</button>
-        <button id="popup-simpan" class="btn btn-primary btn-sm" style="font-size:12px;">Simpan</button>
+      <div style="padding:12px 14px 10px;border-bottom:1px solid #f3f4f6;">
+        <div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px;">Catatan Iklan</div>
+        <div style="font-size:12px;color:#374151;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.nama_campaign}</div>
+      </div>
+      <div id="note-timeline" style="max-height:220px;overflow-y:auto;padding:8px 14px;">
+        <div style="text-align:center;padding:16px;color:#9ca3af;font-size:12px;">Memuat…</div>
+      </div>
+      <div style="padding:10px 14px;border-top:1px solid #f3f4f6;">
+        <textarea id="popup-catatan" placeholder="Tulis catatan baru…" rows="2"
+          style="width:100%;box-sizing:border-box;padding:7px 9px;border:1px solid #d1d5db;border-radius:6px;
+          font-size:12.5px;resize:none;background:#ffffff;color:#111827;font-family:inherit;outline:none;margin-bottom:8px;"></textarea>
+        <div style="display:flex;justify-content:flex-end;gap:6px;">
+          <button id="popup-batal" class="btn btn-sm" style="font-size:12px;">Tutup</button>
+          <button id="popup-simpan" class="btn btn-primary btn-sm" style="font-size:12px;">Tambah</button>
+        </div>
       </div>`;
     document.body.appendChild(popup);
     popup.addEventListener('click', e => e.stopPropagation());
 
+    const timelineEl = popup.querySelector('#note-timeline');
+
+    const loadNotes = async () => {
+      timelineEl.innerHTML = '<div style="text-align:center;padding:16px;color:#9ca3af;font-size:12px;">Memuat…</div>';
+      try {
+        const notes = await apiFetch(`/dashboard/campaigns/${r.id}/notes`);
+        if (!notes || notes.length === 0) {
+          timelineEl.innerHTML = '<div style="text-align:center;padding:16px;color:#9ca3af;font-size:12px;">Belum ada catatan.</div>';
+          return;
+        }
+        timelineEl.innerHTML = notes.map(n => {
+          const isPindah = n.tipe === 'pindah_tahap';
+          const d = new Date(n.created_at);
+          const tgl = `${d.getDate()}/${d.getMonth()+1}/${d.getFullYear().toString().slice(2)} ${String(d.getHours()).padStart(2,'0')}.${String(d.getMinutes()).padStart(2,'0')}`;
+          return `
+            <div style="display:flex;gap:8px;padding:7px 0;border-bottom:1px solid #f9fafb;" data-note-id="${n.id}">
+              <div style="margin-top:3px;flex-shrink:0;">
+                <div style="width:7px;height:7px;border-radius:50%;background:${isPindah?'#f59e0b':'#3b82f6'};margin-top:1px;"></div>
+              </div>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:12.5px;color:#111827;line-height:1.4;">${n.teks}</div>
+                <div style="font-size:10.5px;color:#9ca3af;margin-top:2px;">${tgl}</div>
+              </div>
+              ${!isPindah ? `<button class="btn-del-note" data-id="${n.id}" style="background:none;border:none;cursor:pointer;padding:2px 4px;color:#d1d5db;font-size:14px;flex-shrink:0;line-height:1;" title="Hapus">×</button>` : ''}
+            </div>`;
+        }).join('');
+
+        timelineEl.querySelectorAll('.btn-del-note').forEach(delBtn => {
+          delBtn.addEventListener('click', async () => {
+            const noteId = delBtn.dataset.id;
+            delBtn.disabled = true;
+            try {
+              await apiFetch(`/dashboard/campaigns/${r.id}/notes/${noteId}`, { method: 'DELETE' });
+              await loadNotes();
+              const row = this._rows.find(x => x.id === r.id);
+              const remaining = await apiFetch(`/dashboard/campaigns/${r.id}/notes`);
+              if (row) row.has_notes = remaining.length > 0;
+              this._renderContent(tableEl);
+            } catch(e) { alert(e.message || 'Gagal menghapus.'); delBtn.disabled = false; }
+          });
+        });
+      } catch(e) {
+        timelineEl.innerHTML = `<div style="color:#dc2626;font-size:12px;padding:12px;">${e.message}</div>`;
+      }
+    };
+
+    await loadNotes();
+
     const close = () => popup.remove();
     popup.querySelector('#popup-batal').addEventListener('click', close);
-    popup.querySelector('#popup-hapus').addEventListener('click', async () => {
-      close();
-      try {
-        await apiFetch(`/dashboard/campaigns/${r.id}/catatan`, {
-          method: 'PATCH', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ catatan: null }),
-        });
-        const row = this._rows.find(x => x.id === r.id);
-        if (row) row.catatan = null;
-        this._renderContent(tableEl);
-      } catch(e) { alert(e.message || 'Gagal menghapus catatan.'); }
-    });
     popup.querySelector('#popup-simpan').addEventListener('click', async () => {
       const val = popup.querySelector('#popup-catatan').value.trim();
-      close();
+      if (!val) return;
+      const simpanBtn = popup.querySelector('#popup-simpan');
+      simpanBtn.disabled = true; simpanBtn.textContent = '…';
       try {
-        await apiFetch(`/dashboard/campaigns/${r.id}/catatan`, {
-          method: 'PATCH', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ catatan: val || null }),
+        await apiFetch(`/dashboard/campaigns/${r.id}/notes`, {
+          method: 'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ teks: val, tipe: 'manual' }),
         });
+        popup.querySelector('#popup-catatan').value = '';
         const row = this._rows.find(x => x.id === r.id);
-        if (row) row.catatan = val || null;
+        if (row) row.has_notes = true;
+        await loadNotes();
         this._renderContent(tableEl);
-      } catch(e) { alert(e.message || 'Gagal menyimpan catatan.'); }
+      } catch(e) { alert(e.message || 'Gagal menyimpan.'); }
+      finally { simpanBtn.disabled = false; simpanBtn.textContent = 'Tambah'; }
+    });
+    popup.querySelector('#popup-catatan').addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); popup.querySelector('#popup-simpan').click(); }
     });
 
     const outsideClick = e => {
