@@ -43,6 +43,8 @@ export class ClicksPage {
     this._allTaglinks = [];
     this._allSources = [];
     this._summary = null;
+    this._page = 1;
+    this._perPage = 50;
   }
 
   async render() {
@@ -149,6 +151,7 @@ export class ClicksPage {
       this._allTaglinks = tlData?.taglinks || [];
       this._allSources = srcData?.sources || [];
       this._srcCount = srcData?.source_count || 0;
+      this._page = 1;
 
       this._renderContent(el);
     } catch (e) {
@@ -192,24 +195,61 @@ export class ClicksPage {
           <span style="font-size:11px;color:var(--text-muted,#9ca3af);background:var(--surface-alt,#f9fafb);padding:2px 7px;border-radius:4px;border:1px solid var(--border,#e5e7eb);">Ctrl + K</span>
         </div>
         <div class="table-wrap" style="overflow-x:auto;" id="click-table"></div>
-      </div>`;
+      </div>
+      <div id="pagination-wrap"></div>`;
 
     this._renderTable(el.querySelector('#click-table'));
 
     el.querySelectorAll('[data-t]').forEach(btn => {
       btn.addEventListener('click', () => {
         this._tab = btn.dataset.t;
+        this._page = 1;
         el.querySelectorAll('[data-t]').forEach(b => b.classList.toggle('active', b.dataset.t === this._tab));
         this._renderTable(el.querySelector('#click-table'));
       });
     });
 
     const inp = el.querySelector('#inp-search');
-    inp?.addEventListener('input', () => { this._search = inp.value; this._renderTable(el.querySelector('#click-table')); });
+    inp?.addEventListener('input', () => { this._search = inp.value; this._page = 1; this._renderTable(el.querySelector('#click-table')); });
 
     document.addEventListener('keydown', (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); inp?.focus(); }
     }, { once: true });
+  }
+
+  _renderPagination(total) {
+    const pgWrap = this.container.querySelector('#pagination-wrap');
+    if (!pgWrap) return;
+    const totalPages = Math.ceil(total / this._perPage);
+    if (totalPages <= 1) { pgWrap.innerHTML = ''; return; }
+    const startIdx = (this._page - 1) * this._perPage;
+    pgWrap.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 4px;margin-top:8px;flex-wrap:wrap;gap:8px;">
+        <div style="font-size:12px;color:var(--text-muted,#9ca3af);">
+          Menampilkan ${startIdx+1}–${Math.min(startIdx+this._perPage, total)} dari ${total} baris
+        </div>
+        <div style="display:flex;align-items:center;gap:4px;">
+          <button id="pg-first" class="btn btn-sm" style="font-size:12px;padding:5px 10px;" ${this._page===1?'disabled':''}>«</button>
+          <button id="pg-prev"  class="btn btn-sm" style="font-size:12px;padding:5px 10px;" ${this._page===1?'disabled':''}>‹</button>
+          ${Array.from({length:totalPages},(_,i)=>i+1)
+            .filter(p=>p===1||p===totalPages||Math.abs(p-this._page)<=2)
+            .reduce((acc,p,i,arr)=>{if(i>0&&p-arr[i-1]>1)acc.push('…');acc.push(p);return acc;},[])
+            .map(p=>p==='…'
+              ?`<span style="padding:5px 8px;font-size:12px;color:var(--text-muted,#9ca3af);">…</span>`
+              :`<button class="btn btn-sm pg-num" data-pg="${p}" style="font-size:12px;padding:5px 10px;${p===this._page?'background:#dc2626;color:#fff;border-color:#dc2626;':''}">${p}</button>`
+            ).join('')}
+          <button id="pg-next" class="btn btn-sm" style="font-size:12px;padding:5px 10px;" ${this._page===totalPages?'disabled':''}>›</button>
+          <button id="pg-last" class="btn btn-sm" style="font-size:12px;padding:5px 10px;" ${this._page===totalPages?'disabled':''}>»</button>
+        </div>
+      </div>`;
+    const tblEl = this.container.querySelector('#click-table');
+    pgWrap.querySelector('#pg-first')?.addEventListener('click', ()=>{ this._page=1; this._renderTable(tblEl); });
+    pgWrap.querySelector('#pg-prev') ?.addEventListener('click', ()=>{ this._page--; this._renderTable(tblEl); });
+    pgWrap.querySelector('#pg-next') ?.addEventListener('click', ()=>{ this._page++; this._renderTable(tblEl); });
+    pgWrap.querySelector('#pg-last') ?.addEventListener('click', ()=>{ this._page=totalPages; this._renderTable(tblEl); });
+    pgWrap.querySelectorAll('.pg-num').forEach(btn=>{
+      btn.addEventListener('click', ()=>{ this._page=Number(btn.dataset.pg); this._renderTable(tblEl); });
+    });
   }
 
   _renderTable(el) {
@@ -217,8 +257,12 @@ export class ClicksPage {
       const rows = this._allSources;
       if (rows.length === 0) {
         el.innerHTML = `<div class="empty" style="padding:32px;text-align:center;">Belum ada data sumber.<br><span style="font-size:12px;">Upload ulang Shopee Click CSV untuk mengisi data per channel.</span></div>`;
+        this._renderPagination(0);
         return;
       }
+      const totalPages = Math.ceil(rows.length / this._perPage);
+      if (this._page > totalPages) this._page = Math.max(1, totalPages);
+      const pageRows = rows.slice((this._page-1)*this._perPage, this._page*this._perPage);
       el.innerHTML = `
         <table class="data-table" style="font-size:12.5px;">
           <thead><tr>
@@ -228,7 +272,7 @@ export class ClicksPage {
             <th style="text-align:right;">KOMISI</th>
           </tr></thead>
           <tbody>
-            ${rows.map(r => `
+            ${pageRows.map(r => `
               <tr>
                 <td><span style="font-weight:600;color:${channelColor(r.sumber)};">${r.sumber}</span></td>
                 <td style="text-align:right;">${num(r.click)}</td>
@@ -237,6 +281,7 @@ export class ClicksPage {
               </tr>`).join('')}
           </tbody>
         </table>`;
+      this._renderPagination(rows.length);
     } else {
       const s = this._search.toLowerCase();
       const filtered = s
@@ -245,8 +290,13 @@ export class ClicksPage {
 
       if (filtered.length === 0) {
         el.innerHTML = `<div class="empty" style="padding:32px;text-align:center;">Belum ada data klik.<br><span style="font-size:12px;">Upload data Shopee Click untuk melihat laporan per tag link.</span></div>`;
+        this._renderPagination(0);
         return;
       }
+
+      const totalPages = Math.ceil(filtered.length / this._perPage);
+      if (this._page > totalPages) this._page = Math.max(1, totalPages);
+      const pageRows = filtered.slice((this._page-1)*this._perPage, this._page*this._perPage);
 
       el.innerHTML = `
         <table class="data-table" style="font-size:12.5px;">
@@ -259,7 +309,7 @@ export class ClicksPage {
             <th style="width:32px;"></th>
           </tr></thead>
           <tbody>
-            ${filtered.map(r => `
+            ${pageRows.map(r => `
               <tr class="taglink-row" data-id="${r.tag_link_id}" style="cursor:pointer;">
                 <td><a style="color:#2563eb;font-weight:500;text-decoration:none;">${r.tag}</a></td>
                 <td style="text-align:right;">${num(r.click)}</td>
@@ -280,6 +330,7 @@ export class ClicksPage {
           if (r) this._showChannelModal(r);
         });
       });
+      this._renderPagination(filtered.length);
     }
   }
 
