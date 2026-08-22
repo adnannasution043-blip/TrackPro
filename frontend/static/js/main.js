@@ -222,10 +222,10 @@ function renderShell(path, user) {
             <div class="dot"></div>
             <span id="topbar-meta-label">Meta…</span>
           </div>
-          <button class="topbar-group-btn">
+          <!-- <button class="topbar-group-btn">
             ${icon('group')}
             Gabung Grup
-          </button>
+          </button> -->
           <div class="topbar-user">
             <div class="topbar-user-avatar">${(user?.nama || 'U').slice(0, 2).toUpperCase()}</div>
             <div class="topbar-user-info">
