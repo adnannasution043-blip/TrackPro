@@ -75,7 +75,7 @@ async def sync_account(account_id: UUID, dari: date, sampai: date) -> dict:
                             log.exception("adu upsert gagal: %s", e)
                             gagal += 1
                             if len(errors) < 5:
-                                errors.append(str(e))
+                                errors.append(f"{hari}: {e}")
                     hari += timedelta(days=1)
                     if hari <= sampai:
                         await asyncio.sleep(0.4)  # jeda antar tanggal biar gak kena rate limit
