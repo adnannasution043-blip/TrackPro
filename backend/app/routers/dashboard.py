@@ -520,6 +520,42 @@ async def get_laporan_harian2(
             Decimal("0"),
         )
 
+    # Meta Pribadi: tag berformat "meta+namaOrang" tanpa spasi, contoh METAPRAS, METASANT
+    _PRIBADI_PATTERN = r'^meta[a-zA-Z]+$'
+
+    def _sum_meta_generic():
+        """Tag mengandung 'meta' tapi BUKAN pola meta+nama (e.g. bukan METAPRAS)."""
+        return sa.func.coalesce(
+            sa.func.sum(
+                sa.case(
+                    (
+                        sa.and_(
+                            TagLink.tag.ilike("%meta%"),
+                            TagLink.tag.op("!~*")(_PRIBADI_PATTERN),
+                        ),
+                        DailyMetric.commission_idr,
+                    ),
+                    else_=sa.literal(Decimal("0")),
+                )
+            ),
+            Decimal("0"),
+        )
+
+    def _sum_meta_pribadi():
+        """Tag berformat METAPRAS, METASANT — meta + nama orang tanpa spasi."""
+        return sa.func.coalesce(
+            sa.func.sum(
+                sa.case(
+                    (
+                        TagLink.tag.op("~*")(_PRIBADI_PATTERN),
+                        DailyMetric.commission_idr,
+                    ),
+                    else_=sa.literal(Decimal("0")),
+                )
+            ),
+            Decimal("0"),
+        )
+
     q = (
         sa.select(
             DailyMetric.tanggal,
@@ -527,9 +563,10 @@ async def get_laporan_harian2(
             _sum_excl("feed",  "ig").label("komisi_feed"),
             _sum_and("story", "ig").label("komisi_story_ig"),
             _sum_and("feed",  "ig").label("komisi_feed_ig"),
-            _sum_if("meta").label("komisi_meta"),
+            _sum_meta_generic().label("komisi_meta"),
             _sum_if("adu").label("komisi_adu"),
             _sum_if("terra").label("komisi_terra"),
+            _sum_meta_pribadi().label("komisi_meta_pribadi"),
         )
         .join(TagLink, DailyMetric.tag_link_id == TagLink.id)
         .join(ShopeeAccount, TagLink.shopee_account_id == ShopeeAccount.id)
@@ -552,25 +589,27 @@ async def get_laporan_harian2(
         feed     = r.komisi_feed     or _ZERO
         story_ig = r.komisi_story_ig or _ZERO
         feed_ig  = r.komisi_feed_ig  or _ZERO
-        meta     = r.komisi_meta     or _ZERO
-        adu      = r.komisi_adu      or _ZERO
-        terra    = r.komisi_terra    or _ZERO
+        meta         = r.komisi_meta         or _ZERO
+        adu          = r.komisi_adu          or _ZERO
+        terra        = r.komisi_terra        or _ZERO
+        meta_pribadi = r.komisi_meta_pribadi or _ZERO
         total_fp    = story + feed
         total_ig    = story_ig + feed_ig
-        total_iklan = meta + adu + terra
+        total_iklan = meta + adu + terra + meta_pribadi
         result.append({
-            "tanggal":         str(r.tanggal),
-            "komisi_story":    float(story),
-            "komisi_feed":     float(feed),
-            "total_fp":        float(total_fp),
-            "komisi_story_ig": float(story_ig),
-            "komisi_feed_ig":  float(feed_ig),
-            "total_ig":        float(total_ig),
-            "komisi_meta":     float(meta),
-            "komisi_adu":      float(adu),
-            "komisi_terra":    float(terra),
-            "total_iklan":     float(total_iklan),
-            "total_kotor":     float(total_fp + total_ig + total_iklan),
+            "tanggal":              str(r.tanggal),
+            "komisi_story":         float(story),
+            "komisi_feed":          float(feed),
+            "total_fp":             float(total_fp),
+            "komisi_story_ig":      float(story_ig),
+            "komisi_feed_ig":       float(feed_ig),
+            "total_ig":             float(total_ig),
+            "komisi_meta":          float(meta),
+            "komisi_adu":           float(adu),
+            "komisi_terra":         float(terra),
+            "komisi_meta_pribadi":  float(meta_pribadi),
+            "total_iklan":          float(total_iklan),
+            "total_kotor":          float(total_fp + total_ig + total_iklan),
         })
     return result
 

@@ -17,11 +17,12 @@ function todayStr()    { return new Date().toISOString().split('T')[0]; }
 function firstOfMonth(){ const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), 1).toISOString().split('T')[0]; }
 
 const FILTERS = [
-  { key: 'semua',   label: 'Semua' },
-  { key: 'organic', label: 'Organic' },
-  { key: 'meta',    label: 'Meta' },
-  { key: 'adu',     label: 'Adu' },
-  { key: 'terra',   label: 'Terra' },
+  { key: 'semua',        label: 'Semua' },
+  { key: 'organic',      label: 'Organic' },
+  { key: 'meta',         label: 'Meta' },
+  { key: 'adu',          label: 'Adu' },
+  { key: 'terra',        label: 'Terra' },
+  { key: 'meta_pribadi', label: 'Meta Pribadi' },
 ];
 
 export class LaporanHarian2Page {
@@ -124,20 +125,37 @@ export class LaporanHarian2Page {
 
   _visible() {
     if (this._filters.size === 0) return this._rows;
-    const keyMap = { fp:'total_fp', ig:'total_ig', meta:'komisi_meta', adu:'komisi_adu', terra:'komisi_terra' };
     return this._rows.filter(r => {
       const bd = this._bdMap[r.tanggal] || {};
       return [...this._filters].some(f => {
-        if (f === 'organic') return Number(bd.total_fp || 0) > 0 || Number(bd.total_ig || 0) > 0;
-        return Number(bd[keyMap[f]] || 0) > 0;
+        if (f === 'organic')      return Number(bd.total_fp || 0) > 0 || Number(bd.total_ig || 0) > 0;
+        if (f === 'meta')         return Number(bd.komisi_meta || 0) > 0;
+        if (f === 'adu')          return Number(bd.komisi_adu || 0) > 0;
+        if (f === 'terra')        return Number(bd.komisi_terra || 0) > 0;
+        if (f === 'meta_pribadi') return Number(bd.komisi_meta_pribadi || 0) > 0;
+        return false;
       });
     });
   }
 
+  _getVisibleCols() {
+    if (this._filters.size === 0) {
+      return { fp: true, ig: true, meta: true, adu: true, terra: true, metaPribadi: true };
+    }
+    const c = { fp: false, ig: false, meta: false, adu: false, terra: false, metaPribadi: false };
+    if (this._filters.has('organic'))      { c.fp = true; c.ig = true; }
+    if (this._filters.has('meta'))           c.meta = true;
+    if (this._filters.has('adu'))            c.adu = true;
+    if (this._filters.has('terra'))          c.terra = true;
+    if (this._filters.has('meta_pribadi'))   c.metaPribadi = true;
+    return c;
+  }
+
   _render() {
-    const wrap    = this.container.querySelector('#tbl-wrap');
-    const pgWrap  = this.container.querySelector('#pagination-wrap');
-    const rows    = this._visible();
+    const wrap   = this.container.querySelector('#tbl-wrap');
+    const pgWrap = this.container.querySelector('#pagination-wrap');
+    const rows   = this._visible();
+    const c      = this._getVisibleCols();
 
     if (!rows.length) {
       wrap.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);">Tidak ada data untuk rentang tanggal ini.</div>';
@@ -152,41 +170,83 @@ export class LaporanHarian2Page {
     const pageRows = rows.slice(startIdx, endIdx);
 
     // Aggregat totals (semua rows, bukan hanya halaman ini)
-    const tot = { story:0, feed:0, fp:0, storyIg:0, feedIg:0, ig:0, meta:0, adu:0, terra:0, iklan:0, kotor:0 };
+    const tot = { story:0, feed:0, fp:0, storyIg:0, feedIg:0, ig:0, meta:0, adu:0, terra:0, metaPribadi:0, iklan:0, kotor:0 };
     rows.forEach(r => {
       const bd = this._bdMap[r.tanggal] || {};
-      tot.story   += Number(bd.komisi_story    || 0);
-      tot.feed    += Number(bd.komisi_feed     || 0);
-      tot.fp      += Number(bd.total_fp        || 0);
-      tot.storyIg += Number(bd.komisi_story_ig || 0);
-      tot.feedIg  += Number(bd.komisi_feed_ig  || 0);
-      tot.ig      += Number(bd.total_ig        || 0);
-      tot.meta    += Number(bd.komisi_meta     || 0);
-      tot.adu     += Number(bd.komisi_adu      || 0);
-      tot.terra   += Number(bd.komisi_terra    || 0);
-      tot.iklan   += Number(bd.total_iklan     || 0);
-      tot.kotor   += Number(bd.total_kotor     || 0);
+      tot.story       += Number(bd.komisi_story        || 0);
+      tot.feed        += Number(bd.komisi_feed         || 0);
+      tot.fp          += Number(bd.total_fp            || 0);
+      tot.storyIg     += Number(bd.komisi_story_ig     || 0);
+      tot.feedIg      += Number(bd.komisi_feed_ig      || 0);
+      tot.ig          += Number(bd.total_ig            || 0);
+      tot.meta        += Number(bd.komisi_meta         || 0);
+      tot.adu         += Number(bd.komisi_adu          || 0);
+      tot.terra       += Number(bd.komisi_terra        || 0);
+      tot.metaPribadi += Number(bd.komisi_meta_pribadi || 0);
+      tot.iklan       += Number(bd.total_iklan         || 0);
+      tot.kotor       += Number(bd.total_kotor         || 0);
     });
 
-    const thBase = 'padding:8px 10px;font-size:11px;font-weight:700;white-space:nowrap;text-transform:uppercase;letter-spacing:.4px;background:#f1f5f9;border-bottom:2px solid var(--border);';
-    const thFP   = thBase + 'background:#f5f3ff;color:#7c3aed;';
-    const thIG   = thBase + 'background:#eff6ff;color:#2563eb;';
-    const thIklan= thBase + 'background:#fef2f2;color:#dc2626;';
+    const thBase  = 'padding:8px 10px;font-size:11px;font-weight:700;white-space:nowrap;text-transform:uppercase;letter-spacing:.4px;background:#f1f5f9;border-bottom:2px solid var(--border);';
+    const thFP    = thBase + 'background:#f5f3ff;color:#7c3aed;';
+    const thIG    = thBase + 'background:#eff6ff;color:#2563eb;';
+    const thIklan = thBase + 'background:#fef2f2;color:#dc2626;';
+    const thMeta  = thBase + 'background:#fff7ed;color:#c2410c;';
+
+    // Hitung colspan IKLAN dinamis
+    const iklanIndiv   = [c.meta, c.adu, c.terra, c.metaPribadi].filter(Boolean).length;
+    const hasIklan     = iklanIndiv > 0;
+    const iklanColspan = iklanIndiv + 1; // +1 untuk TOTAL IKLAN
+
+    // Header baris 1
+    const h1Fp    = c.fp      ? `<th colspan="3" style="${thFP}text-align:center;">KOMISI FP</th>` : '';
+    const h1Ig    = c.ig      ? `<th colspan="3" style="${thIG}text-align:center;border-left:2px solid #bfdbfe;">KOMISI IG</th>` : '';
+    const h1Iklan = hasIklan  ? `<th colspan="${iklanColspan}" style="${thIklan}text-align:center;border-left:2px solid #fecaca;">KOMISI IKLAN</th>` : '';
+
+    // Header baris 2
+    const h2Fp = c.fp ? `
+      <th style="${thFP}">STORY</th>
+      <th style="${thFP}">FEW FEED</th>
+      <th style="${thFP}font-weight:800;">TOTAL FP</th>` : '';
+    const h2Ig = c.ig ? `
+      <th style="${thIG}border-left:2px solid #bfdbfe;">STORY IG</th>
+      <th style="${thIG}">FEED IG</th>
+      <th style="${thIG}font-weight:800;">TOTAL IG</th>` : '';
+    const h2IklanMeta  = c.meta        ? `<th style="${thIklan}border-left:2px solid #fecaca;">META</th>` : '';
+    const h2IklanAdu   = c.adu         ? `<th style="${thIklan}">ADU</th>` : '';
+    const h2IklanTerra = c.terra       ? `<th style="${thIklan}">TERRA</th>` : '';
+    const h2IklanPrib  = c.metaPribadi ? `<th style="${thMeta}${!c.meta && !c.adu && !c.terra ? 'border-left:2px solid #fed7aa;' : ''}">META PRIBADI</th>` : '';
+    const h2IklanTot   = hasIklan      ? `<th style="${thIklan}font-weight:800;">TOTAL IKLAN</th>` : '';
 
     const rowsHtml = pageRows.map((r, i) => {
-      const bd       = this._bdMap[r.tanggal] || {};
-      const story    = Number(bd.komisi_story    || 0);
-      const feed     = Number(bd.komisi_feed     || 0);
-      const fp       = Number(bd.total_fp        || 0);
-      const storyIg  = Number(bd.komisi_story_ig || 0);
-      const feedIg   = Number(bd.komisi_feed_ig  || 0);
-      const ig       = Number(bd.total_ig        || 0);
-      const meta     = Number(bd.komisi_meta     || 0);
-      const adu      = Number(bd.komisi_adu      || 0);
-      const terra    = Number(bd.komisi_terra    || 0);
-      const iklan    = Number(bd.total_iklan     || 0);
-      const kotor    = Number(bd.total_kotor     || 0);
-      const bgRow    = i % 2 === 0 ? '' : 'background:var(--bg-muted);';
+      const bd          = this._bdMap[r.tanggal] || {};
+      const story       = Number(bd.komisi_story        || 0);
+      const feed        = Number(bd.komisi_feed         || 0);
+      const fp          = Number(bd.total_fp            || 0);
+      const storyIg     = Number(bd.komisi_story_ig     || 0);
+      const feedIg      = Number(bd.komisi_feed_ig      || 0);
+      const ig          = Number(bd.total_ig            || 0);
+      const meta        = Number(bd.komisi_meta         || 0);
+      const adu         = Number(bd.komisi_adu          || 0);
+      const terra       = Number(bd.komisi_terra        || 0);
+      const metaPribadi = Number(bd.komisi_meta_pribadi || 0);
+      const iklan       = Number(bd.total_iklan         || 0);
+      const kotor       = Number(bd.total_kotor         || 0);
+      const bgRow       = i % 2 === 0 ? '' : 'background:var(--bg-muted);';
+
+      const tdFp = c.fp ? `
+        <td style="white-space:nowrap;color:#7c3aed;">${rp(Math.round(story))}</td>
+        <td style="white-space:nowrap;color:#7c3aed;">${rp(Math.round(feed))}</td>
+        <td style="font-weight:700;color:#7c3aed;background:#f5f3ff;">${rp(Math.round(fp))}</td>` : '';
+      const tdIg = c.ig ? `
+        <td style="white-space:nowrap;color:#2563eb;border-left:2px solid #bfdbfe;">${rp(Math.round(storyIg))}</td>
+        <td style="white-space:nowrap;color:#2563eb;">${rp(Math.round(feedIg))}</td>
+        <td style="font-weight:700;color:#2563eb;background:#eff6ff;">${rp(Math.round(ig))}</td>` : '';
+      const tdMeta  = c.meta        ? `<td style="white-space:nowrap;color:#dc2626;border-left:2px solid #fecaca;">${rp(Math.round(meta))}</td>` : '';
+      const tdAdu   = c.adu         ? `<td style="white-space:nowrap;color:#dc2626;">${rp(Math.round(adu))}</td>` : '';
+      const tdTerra = c.terra       ? `<td style="white-space:nowrap;color:#dc2626;">${rp(Math.round(terra))}</td>` : '';
+      const tdPrib  = c.metaPribadi ? `<td style="white-space:nowrap;color:#c2410c;${!c.meta && !c.adu && !c.terra ? 'border-left:2px solid #fed7aa;' : ''}">${rp(Math.round(metaPribadi))}</td>` : '';
+      const tdIklan = hasIklan      ? `<td style="font-weight:700;color:#dc2626;background:#fef2f2;">${rp(Math.round(iklan))}</td>` : '';
 
       return `<tr style="${bgRow}font-size:12.5px;">
         <td style="white-space:nowrap;padding:7px 10px;">
@@ -195,57 +255,35 @@ export class LaporanHarian2Page {
             ${fmtDate(r.tanggal)}
           </button>
         </td>
-        <td style="white-space:nowrap;color:#7c3aed;">${rp(Math.round(story))}</td>
-        <td style="white-space:nowrap;color:#7c3aed;">${rp(Math.round(feed))}</td>
-        <td style="font-weight:700;color:#7c3aed;background:#f5f3ff;">${rp(Math.round(fp))}</td>
-        <td style="white-space:nowrap;color:#2563eb;border-left:2px solid #bfdbfe;">${rp(Math.round(storyIg))}</td>
-        <td style="white-space:nowrap;color:#2563eb;">${rp(Math.round(feedIg))}</td>
-        <td style="font-weight:700;color:#2563eb;background:#eff6ff;">${rp(Math.round(ig))}</td>
-        <td style="white-space:nowrap;color:#dc2626;border-left:2px solid #fecaca;">${rp(Math.round(meta))}</td>
-        <td style="white-space:nowrap;color:#dc2626;">${rp(Math.round(adu))}</td>
-        <td style="white-space:nowrap;color:#dc2626;">${rp(Math.round(terra))}</td>
-        <td style="font-weight:700;color:#dc2626;background:#fef2f2;">${rp(Math.round(iklan))}</td>
+        ${tdFp}${tdIg}${tdMeta}${tdAdu}${tdTerra}${tdPrib}${tdIklan}
         <td style="font-weight:700;color:#10b981;border-left:2px solid #bbf7d0;">${rp(Math.round(kotor))}</td>
       </tr>`;
     }).join('');
 
+    // Baris total
+    const tfFp    = c.fp          ? `<td style="color:#7c3aed;">${rp(Math.round(tot.story))}</td><td style="color:#7c3aed;">${rp(Math.round(tot.feed))}</td><td style="color:#7c3aed;font-weight:800;">${rp(Math.round(tot.fp))}</td>` : '';
+    const tfIg    = c.ig          ? `<td style="color:#2563eb;">${rp(Math.round(tot.storyIg))}</td><td style="color:#2563eb;">${rp(Math.round(tot.feedIg))}</td><td style="color:#2563eb;font-weight:800;">${rp(Math.round(tot.ig))}</td>` : '';
+    const tfMeta  = c.meta        ? `<td style="color:#dc2626;">${rp(Math.round(tot.meta))}</td>` : '';
+    const tfAdu   = c.adu         ? `<td style="color:#dc2626;">${rp(Math.round(tot.adu))}</td>` : '';
+    const tfTerra = c.terra       ? `<td style="color:#dc2626;">${rp(Math.round(tot.terra))}</td>` : '';
+    const tfPrib  = c.metaPribadi ? `<td style="color:#c2410c;">${rp(Math.round(tot.metaPribadi))}</td>` : '';
+    const tfIklan = hasIklan      ? `<td style="color:#dc2626;font-weight:800;">${rp(Math.round(tot.iklan))}</td>` : '';
+
     wrap.innerHTML = `
-      <table class="data-table" style="font-size:12.5px;min-width:900px;border-collapse:collapse;">
+      <table class="data-table" style="font-size:12.5px;min-width:700px;border-collapse:collapse;">
         <thead>
           <tr style="background:#f8fafc;">
             <th rowspan="2" style="${thBase}min-width:80px;">TGL</th>
-            <th colspan="3" style="${thFP}text-align:center;">KOMISI FP</th>
-            <th colspan="3" style="${thIG}text-align:center;border-left:2px solid #bfdbfe;">KOMISI IG</th>
-            <th colspan="4" style="${thIklan}text-align:center;border-left:2px solid #fecaca;">KOMISI IKLAN</th>
+            ${h1Fp}${h1Ig}${h1Iklan}
             <th rowspan="2" style="${thBase}background:#f0fdf4;color:#15803d;white-space:nowrap;border-left:2px solid #bbf7d0;">TOTAL KOTOR</th>
           </tr>
-          <tr>
-            <th style="${thFP}">STORY</th>
-            <th style="${thFP}">FEW FEED</th>
-            <th style="${thFP}font-weight:800;">TOTAL FP</th>
-            <th style="${thIG}border-left:2px solid #bfdbfe;">STORY IG</th>
-            <th style="${thIG}">FEED IG</th>
-            <th style="${thIG}font-weight:800;">TOTAL IG</th>
-            <th style="${thIklan}border-left:2px solid #fecaca;">META</th>
-            <th style="${thIklan}">ADU</th>
-            <th style="${thIklan}">TERRA</th>
-            <th style="${thIklan}font-weight:800;">TOTAL IKLAN</th>
-          </tr>
+          <tr>${h2Fp}${h2Ig}${h2IklanMeta}${h2IklanAdu}${h2IklanTerra}${h2IklanPrib}${h2IklanTot}</tr>
         </thead>
         <tbody>${rowsHtml}</tbody>
         <tfoot>
           <tr style="font-weight:700;background:var(--bg-muted);border-top:2px solid var(--border);font-size:12px;">
             <td style="font-weight:800;white-space:nowrap;padding:8px 10px;">TOTAL (${rows.length} hari)</td>
-            <td style="color:#7c3aed;">${rp(Math.round(tot.story))}</td>
-            <td style="color:#7c3aed;">${rp(Math.round(tot.feed))}</td>
-            <td style="color:#7c3aed;font-weight:800;">${rp(Math.round(tot.fp))}</td>
-            <td style="color:#2563eb;">${rp(Math.round(tot.storyIg))}</td>
-            <td style="color:#2563eb;">${rp(Math.round(tot.feedIg))}</td>
-            <td style="color:#2563eb;font-weight:800;">${rp(Math.round(tot.ig))}</td>
-            <td style="color:#dc2626;">${rp(Math.round(tot.meta))}</td>
-            <td style="color:#dc2626;">${rp(Math.round(tot.adu))}</td>
-            <td style="color:#dc2626;">${rp(Math.round(tot.terra))}</td>
-            <td style="color:#dc2626;font-weight:800;">${rp(Math.round(tot.iklan))}</td>
+            ${tfFp}${tfIg}${tfMeta}${tfAdu}${tfTerra}${tfPrib}${tfIklan}
             <td style="color:#10b981;font-weight:800;">${rp(Math.round(tot.kotor))}</td>
           </tr>
         </tfoot>
@@ -259,12 +297,8 @@ export class LaporanHarian2Page {
     });
 
     if (pgWrap) {
-      if (totalPages > 1) {
-        pgWrap.innerHTML = this._pgBarHtml(startIdx, Math.min(endIdx, rows.length), rows.length, totalPages);
-        this._bindPgBar(pgWrap, totalPages, () => this._render());
-      } else {
-        pgWrap.innerHTML = '';
-      }
+      pgWrap.innerHTML = this._pgBarHtml(startIdx, Math.min(endIdx, rows.length), rows.length, totalPages);
+      this._bindPgBar(pgWrap, totalPages, () => this._render());
     }
   }
 
