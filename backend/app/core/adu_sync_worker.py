@@ -8,6 +8,7 @@ dibutuhkan tabel adu_placements, kita panggil API sekali per tanggal dalam
 rentang, masing-masing dengan groupBy=zone (dateFrom == dateTill).
 """
 
+import asyncio
 import logging
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
@@ -63,6 +64,7 @@ async def sync_account(account_id: UUID, dari: date, sampai: date) -> dict:
                             raise
                         errors.append(f"{hari}: {_parse_error(exc.response.text)}")
                         hari += timedelta(days=1)
+                        await asyncio.sleep(0.4)
                         continue
                     fetched += len(rows)
                     for row in rows:
@@ -73,6 +75,8 @@ async def sync_account(account_id: UUID, dari: date, sampai: date) -> dict:
                             log.exception("adu upsert gagal: %s", e)
                             gagal += 1
                     hari += timedelta(days=1)
+                    if hari <= sampai:
+                        await asyncio.sleep(0.4)  # jeda antar tanggal biar gak kena rate limit
 
             if errors:
                 status = "sebagian_gagal" if upserted > 0 else "gagal"
@@ -134,7 +138,7 @@ async def _fetch_statistics(
 ) -> list[dict]:
     """Ambil semua baris statistik (auto-paginate) untuk satu rentang tanggal."""
     all_rows: list[dict] = []
-    page = 0
+    page = 1  # API menolak page=0 ("This value should be greater than 0.")
     limit = 150
     while True:
         params = {
@@ -144,12 +148,7 @@ async def _fetch_statistics(
             "limit": limit,
             "page": page,
         }
-        resp = await client.get(
-            f"{CLICKADU_API_BASE}{STATS_PATH}",
-            params=params,
-            headers={"Authorization": api_key},
-        )
-        resp.raise_for_status()
+        resp = await _get_with_retry(client, f"{CLICKADU_API_BASE}{STATS_PATH}", params, api_key)
         data = resp.json()
         page_rows = data.get("result", data) if isinstance(data, dict) else data
         if not page_rows:
@@ -159,6 +158,18 @@ async def _fetch_statistics(
             break
         page += 1
     return all_rows
+
+
+async def _get_with_retry(client: httpx.AsyncClient, url: str, params: dict, api_key: str, max_retries: int = 3):
+    """GET dengan retry+backoff kalau kena rate limit (429)."""
+    delay = 1.0
+    for attempt in range(max_retries + 1):
+        resp = await client.get(url, params=params, headers={"Authorization": api_key})
+        if resp.status_code != 429 or attempt == max_retries:
+            resp.raise_for_status()
+            return resp
+        await asyncio.sleep(delay)
+        delay *= 2
 
 
 def _pick(row: dict, keys: tuple[str, ...]):
