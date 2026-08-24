@@ -24,6 +24,8 @@ from app.models.account import MetaAccount, ShopeeAccount
 from app.models.campaign import Campaign, CampaignTagMap, TagLink
 from app.models.campaign_note import CampaignNote
 from app.models.metrics import DailyMetric, MetaBreakdown, OrderSnapshot
+from app.models.adu import AduPlacement
+from app.models.terra import TerraPlacement
 from app.schemas.dashboard import (
     CampaignHarianResponse, CampaignHarianRow, CampaignRow, CampaignsResponse,
     CatatanUpdate, DashboardResponse, DashboardSummary, HarianRow, JenisIklanUpdate, TahapUpdate,
@@ -583,6 +585,51 @@ async def get_laporan_harian2(
 
     rows = (await db.execute(q)).all()
 
+    # Budget Meta: total spend Meta Ads (spend_idr) per tanggal
+    q_bm = (
+        sa.select(
+            DailyMetric.tanggal,
+            sa.func.coalesce(sa.func.sum(DailyMetric.spend_idr), Decimal("0")).label("budget"),
+        )
+        .join(Campaign, DailyMetric.campaign_id == Campaign.id)
+        .join(MetaAccount, Campaign.meta_account_id == MetaAccount.id)
+        .where(
+            MetaAccount.user_id == current_user.id,
+            DailyMetric.campaign_id.isnot(None),
+            DailyMetric.tanggal.between(tanggal_dari, tanggal_sampai),
+        )
+        .group_by(DailyMetric.tanggal)
+    )
+    budget_meta_map = {r.tanggal: r.budget for r in (await db.execute(q_bm)).all()}
+
+    # Budget Adu: sum budget_rupiah dari adu_placements
+    q_ba = (
+        sa.select(
+            AduPlacement.tanggal,
+            sa.func.coalesce(sa.func.sum(AduPlacement.budget_rupiah), Decimal("0")).label("budget"),
+        )
+        .where(
+            AduPlacement.user_id == current_user.id,
+            AduPlacement.tanggal.between(tanggal_dari, tanggal_sampai),
+        )
+        .group_by(AduPlacement.tanggal)
+    )
+    budget_adu_map = {r.tanggal: r.budget for r in (await db.execute(q_ba)).all()}
+
+    # Budget Terra: sum budget_rupiah dari terra_placements
+    q_bt = (
+        sa.select(
+            TerraPlacement.tanggal,
+            sa.func.coalesce(sa.func.sum(TerraPlacement.budget_rupiah), Decimal("0")).label("budget"),
+        )
+        .where(
+            TerraPlacement.user_id == current_user.id,
+            TerraPlacement.tanggal.between(tanggal_dari, tanggal_sampai),
+        )
+        .group_by(TerraPlacement.tanggal)
+    )
+    budget_terra_map = {r.tanggal: r.budget for r in (await db.execute(q_bt)).all()}
+
     result = []
     for r in rows:
         story    = r.komisi_story    or _ZERO
@@ -593,6 +640,9 @@ async def get_laporan_harian2(
         adu          = r.komisi_adu          or _ZERO
         terra        = r.komisi_terra        or _ZERO
         meta_pribadi = r.komisi_meta_pribadi or _ZERO
+        budget_meta  = budget_meta_map.get(r.tanggal,  _ZERO)
+        budget_adu   = budget_adu_map.get(r.tanggal,   _ZERO)
+        budget_terra = budget_terra_map.get(r.tanggal, _ZERO)
         total_fp    = story + feed
         total_ig    = story_ig + feed_ig
         total_iklan = meta + adu + terra + meta_pribadi
@@ -605,8 +655,11 @@ async def get_laporan_harian2(
             "komisi_feed_ig":       float(feed_ig),
             "total_ig":             float(total_ig),
             "komisi_meta":          float(meta),
+            "budget_meta":          float(budget_meta),
             "komisi_adu":           float(adu),
+            "budget_adu":           float(budget_adu),
             "komisi_terra":         float(terra),
+            "budget_terra":         float(budget_terra),
             "komisi_meta_pribadi":  float(meta_pribadi),
             "total_iklan":          float(total_iklan),
             "total_kotor":          float(total_fp + total_ig + total_iklan),

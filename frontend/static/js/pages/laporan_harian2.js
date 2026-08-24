@@ -170,7 +170,7 @@ export class LaporanHarian2Page {
     const pageRows = rows.slice(startIdx, endIdx);
 
     // Aggregat totals (semua rows, bukan hanya halaman ini)
-    const tot = { story:0, feed:0, fp:0, storyIg:0, feedIg:0, ig:0, meta:0, adu:0, terra:0, metaPribadi:0, iklan:0, kotor:0 };
+    const tot = { story:0, feed:0, fp:0, storyIg:0, feedIg:0, ig:0, meta:0, budgetMeta:0, adu:0, budgetAdu:0, terra:0, budgetTerra:0, metaPribadi:0, iklan:0, kotor:0 };
     rows.forEach(r => {
       const bd = this._bdMap[r.tanggal] || {};
       tot.story       += Number(bd.komisi_story        || 0);
@@ -180,23 +180,27 @@ export class LaporanHarian2Page {
       tot.feedIg      += Number(bd.komisi_feed_ig      || 0);
       tot.ig          += Number(bd.total_ig            || 0);
       tot.meta        += Number(bd.komisi_meta         || 0);
+      tot.budgetMeta  += Number(bd.budget_meta         || 0);
       tot.adu         += Number(bd.komisi_adu          || 0);
+      tot.budgetAdu   += Number(bd.budget_adu          || 0);
       tot.terra       += Number(bd.komisi_terra        || 0);
+      tot.budgetTerra += Number(bd.budget_terra        || 0);
       tot.metaPribadi += Number(bd.komisi_meta_pribadi || 0);
       tot.iklan       += Number(bd.total_iklan         || 0);
       tot.kotor       += Number(bd.total_kotor         || 0);
     });
 
-    const thBase  = 'padding:8px 10px;font-size:11px;font-weight:700;white-space:nowrap;text-transform:uppercase;letter-spacing:.4px;background:#f1f5f9;border-bottom:2px solid var(--border);';
-    const thFP    = thBase + 'background:#f5f3ff;color:#7c3aed;';
-    const thIG    = thBase + 'background:#eff6ff;color:#2563eb;';
-    const thIklan = thBase + 'background:#fef2f2;color:#dc2626;';
-    const thMeta  = thBase + 'background:#fff7ed;color:#c2410c;';
+    const thBase   = 'padding:8px 10px;font-size:11px;font-weight:700;white-space:nowrap;text-transform:uppercase;letter-spacing:.4px;background:#f1f5f9;border-bottom:2px solid var(--border);';
+    const thFP     = thBase + 'background:#f5f3ff;color:#7c3aed;';
+    const thIG     = thBase + 'background:#eff6ff;color:#2563eb;';
+    const thIklan  = thBase + 'background:#fef2f2;color:#dc2626;';
+    const thMeta   = thBase + 'background:#fff7ed;color:#c2410c;';
+    const thBudget = thBase + 'background:#f8fafc;color:#64748b;font-style:italic;';
 
-    // Hitung colspan IKLAN dinamis
-    const iklanIndiv   = [c.meta, c.adu, c.terra, c.metaPribadi].filter(Boolean).length;
+    // colspan IKLAN: meta/adu/terra masing-masing 2 kolom (komisi + budget), meta_pribadi 1 kolom
+    const iklanIndiv   = (c.meta ? 2 : 0) + (c.adu ? 2 : 0) + (c.terra ? 2 : 0) + (c.metaPribadi ? 1 : 0);
     const hasIklan     = iklanIndiv > 0;
-    const iklanColspan = iklanIndiv + 1; // +1 untuk TOTAL IKLAN
+    const iklanColspan = iklanIndiv + (hasIklan ? 1 : 0); // +1 untuk TOTAL IKLAN
 
     // Header baris 1
     const h1Fp    = c.fp      ? `<th colspan="3" style="${thFP}text-align:center;">KOMISI FP</th>` : '';
@@ -212,9 +216,9 @@ export class LaporanHarian2Page {
       <th style="${thIG}border-left:2px solid #bfdbfe;">STORY IG</th>
       <th style="${thIG}">FEED IG</th>
       <th style="${thIG}font-weight:800;">TOTAL IG</th>` : '';
-    const h2IklanMeta  = c.meta        ? `<th style="${thIklan}border-left:2px solid #fecaca;">META</th>` : '';
-    const h2IklanAdu   = c.adu         ? `<th style="${thIklan}">ADU</th>` : '';
-    const h2IklanTerra = c.terra       ? `<th style="${thIklan}">TERRA</th>` : '';
+    const h2IklanMeta  = c.meta        ? `<th style="${thIklan}border-left:2px solid #fecaca;">META</th><th style="${thBudget}">BUDGET META</th>` : '';
+    const h2IklanAdu   = c.adu         ? `<th style="${thIklan}${!c.meta ? 'border-left:2px solid #fecaca;' : ''}">ADU</th><th style="${thBudget}">BUDGET ADU</th>` : '';
+    const h2IklanTerra = c.terra       ? `<th style="${thIklan}${!c.meta && !c.adu ? 'border-left:2px solid #fecaca;' : ''}">TERRA</th><th style="${thBudget}">BUDGET TERRA</th>` : '';
     const h2IklanPrib  = c.metaPribadi ? `<th style="${thMeta}${!c.meta && !c.adu && !c.terra ? 'border-left:2px solid #fed7aa;' : ''}">META PRIBADI</th>` : '';
     const h2IklanTot   = hasIklan      ? `<th style="${thIklan}font-weight:800;">TOTAL IKLAN</th>` : '';
 
@@ -227,12 +231,16 @@ export class LaporanHarian2Page {
       const feedIg      = Number(bd.komisi_feed_ig      || 0);
       const ig          = Number(bd.total_ig            || 0);
       const meta        = Number(bd.komisi_meta         || 0);
+      const budgetMeta  = Number(bd.budget_meta         || 0);
       const adu         = Number(bd.komisi_adu          || 0);
+      const budgetAdu   = Number(bd.budget_adu          || 0);
       const terra       = Number(bd.komisi_terra        || 0);
+      const budgetTerra = Number(bd.budget_terra        || 0);
       const metaPribadi = Number(bd.komisi_meta_pribadi || 0);
       const iklan       = Number(bd.total_iklan         || 0);
       const kotor       = Number(bd.total_kotor         || 0);
       const bgRow       = i % 2 === 0 ? '' : 'background:var(--bg-muted);';
+      const tdBg        = i % 2 === 0 ? '#f8fafc' : 'var(--bg-muted)';
 
       const tdFp = c.fp ? `
         <td style="white-space:nowrap;color:#7c3aed;">${rp(Math.round(story))}</td>
@@ -242,9 +250,9 @@ export class LaporanHarian2Page {
         <td style="white-space:nowrap;color:#2563eb;border-left:2px solid #bfdbfe;">${rp(Math.round(storyIg))}</td>
         <td style="white-space:nowrap;color:#2563eb;">${rp(Math.round(feedIg))}</td>
         <td style="font-weight:700;color:#2563eb;background:#eff6ff;">${rp(Math.round(ig))}</td>` : '';
-      const tdMeta  = c.meta        ? `<td style="white-space:nowrap;color:#dc2626;border-left:2px solid #fecaca;">${rp(Math.round(meta))}</td>` : '';
-      const tdAdu   = c.adu         ? `<td style="white-space:nowrap;color:#dc2626;">${rp(Math.round(adu))}</td>` : '';
-      const tdTerra = c.terra       ? `<td style="white-space:nowrap;color:#dc2626;">${rp(Math.round(terra))}</td>` : '';
+      const tdMeta  = c.meta        ? `<td style="white-space:nowrap;color:#dc2626;border-left:2px solid #fecaca;">${rp(Math.round(meta))}</td><td style="white-space:nowrap;color:#64748b;font-style:italic;">${rp(Math.round(budgetMeta))}</td>` : '';
+      const tdAdu   = c.adu         ? `<td style="white-space:nowrap;color:#dc2626;${!c.meta ? 'border-left:2px solid #fecaca;' : ''}">${rp(Math.round(adu))}</td><td style="white-space:nowrap;color:#64748b;font-style:italic;">${rp(Math.round(budgetAdu))}</td>` : '';
+      const tdTerra = c.terra       ? `<td style="white-space:nowrap;color:#dc2626;${!c.meta && !c.adu ? 'border-left:2px solid #fecaca;' : ''}">${rp(Math.round(terra))}</td><td style="white-space:nowrap;color:#64748b;font-style:italic;">${rp(Math.round(budgetTerra))}</td>` : '';
       const tdPrib  = c.metaPribadi ? `<td style="white-space:nowrap;color:#c2410c;${!c.meta && !c.adu && !c.terra ? 'border-left:2px solid #fed7aa;' : ''}">${rp(Math.round(metaPribadi))}</td>` : '';
       const tdIklan = hasIklan      ? `<td style="font-weight:700;color:#dc2626;background:#fef2f2;">${rp(Math.round(iklan))}</td>` : '';
 
@@ -263,9 +271,9 @@ export class LaporanHarian2Page {
     // Baris total
     const tfFp    = c.fp          ? `<td style="color:#7c3aed;">${rp(Math.round(tot.story))}</td><td style="color:#7c3aed;">${rp(Math.round(tot.feed))}</td><td style="color:#7c3aed;font-weight:800;">${rp(Math.round(tot.fp))}</td>` : '';
     const tfIg    = c.ig          ? `<td style="color:#2563eb;">${rp(Math.round(tot.storyIg))}</td><td style="color:#2563eb;">${rp(Math.round(tot.feedIg))}</td><td style="color:#2563eb;font-weight:800;">${rp(Math.round(tot.ig))}</td>` : '';
-    const tfMeta  = c.meta        ? `<td style="color:#dc2626;">${rp(Math.round(tot.meta))}</td>` : '';
-    const tfAdu   = c.adu         ? `<td style="color:#dc2626;">${rp(Math.round(tot.adu))}</td>` : '';
-    const tfTerra = c.terra       ? `<td style="color:#dc2626;">${rp(Math.round(tot.terra))}</td>` : '';
+    const tfMeta  = c.meta        ? `<td style="color:#dc2626;">${rp(Math.round(tot.meta))}</td><td style="color:#64748b;font-style:italic;">${rp(Math.round(tot.budgetMeta))}</td>` : '';
+    const tfAdu   = c.adu         ? `<td style="color:#dc2626;">${rp(Math.round(tot.adu))}</td><td style="color:#64748b;font-style:italic;">${rp(Math.round(tot.budgetAdu))}</td>` : '';
+    const tfTerra = c.terra       ? `<td style="color:#dc2626;">${rp(Math.round(tot.terra))}</td><td style="color:#64748b;font-style:italic;">${rp(Math.round(tot.budgetTerra))}</td>` : '';
     const tfPrib  = c.metaPribadi ? `<td style="color:#c2410c;">${rp(Math.round(tot.metaPribadi))}</td>` : '';
     const tfIklan = hasIklan      ? `<td style="color:#dc2626;font-weight:800;">${rp(Math.round(tot.iklan))}</td>` : '';
 
