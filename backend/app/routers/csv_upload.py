@@ -42,6 +42,7 @@ from app.models.campaign import Campaign, TagLink
 from app.models.import_log import CsvImport
 from app.models.metrics import ClickBySource, DailyMetric, MetaBreakdown, OrderSnapshot
 from app.models.terra import TerraPlacement
+from app.models.adu import AduPlacement
 from app.schemas.upload import UploadResponse
 
 router = APIRouter()
@@ -532,6 +533,99 @@ async def upload_terra(
                     "clicks": clicks,
                     "spent_usd": spent_usd,
                     "budget_rupiah": budget_rupiah,
+                    "uploaded_at": sa.text("now()"),
+                },
+            )
+            await db.execute(stmt)
+            ok += 1
+        except Exception:
+            fail += 1
+
+    return await _finish_import(import_log, ok, fail, db)
+
+
+# ===========================================================================
+# Adu Ads — zone placement spend dengan konversi USD → IDR
+# ===========================================================================
+
+_ADU_KURS = 19_000  # 1 USD = Rp 19.000
+
+
+@router.post("/adu", response_model=UploadResponse, status_code=status.HTTP_201_CREATED)
+async def upload_adu(
+    file: UploadFile,
+    current_user: CurrentUser,
+    db: DB,
+    tanggal: date = Query(..., description="Tanggal data dalam format YYYY-MM-DD"),
+):
+    """Upload Adu Ads zone CSV. Kolom Cost (USD) dikonversi ke budget_rupiah × 19.000."""
+    import csv as csv_mod
+    import io
+    from decimal import Decimal, InvalidOperation
+
+    raw = await file.read()
+    import_log = _start_import(current_user.id, "adu", file.filename, db)
+
+    try:
+        text = raw.decode("utf-8-sig", errors="replace")
+        reader = csv_mod.DictReader(io.StringIO(text))
+        # normalisasi nama kolom (strip whitespace dan kutip)
+        fieldnames = [f.strip().strip('"') for f in (reader.fieldnames or [])]
+        if "Cost" not in fieldnames and "cost" not in [f.lower() for f in fieldnames]:
+            return await _fail_import(import_log, db,
+                "Kolom 'Cost' tidak ditemukan. Pastikan file adalah Adu Ads zone CSV.")
+    except Exception as exc:
+        return await _fail_import(import_log, db, f"Gagal membaca file: {exc}")
+
+    def _col(row: dict, name: str) -> str:
+        """Ambil nilai kolom case-insensitive, strip whitespace dan kutip."""
+        for k, v in row.items():
+            if k.strip().strip('"').lower() == name.lower():
+                return str(v or "").strip().strip('"').strip()
+        return ""
+
+    def _int(s: str) -> int:
+        try:
+            return int(s.replace(",", "").split(".")[0])
+        except (ValueError, AttributeError):
+            return 0
+
+    ok, fail = 0, 0
+    for row in reader:
+        zone_id = _col(row, "Zone ID")
+        if not zone_id:
+            fail += 1
+            continue
+        cost_raw = _col(row, "Cost")
+        if not cost_raw or cost_raw == "0":
+            # baris cost 0 tetap disimpan agar data lengkap
+            cost_raw = "0"
+        try:
+            cost_usd = Decimal(cost_raw)
+        except InvalidOperation:
+            fail += 1
+            continue
+
+        budget_rupiah = round(cost_usd * _ADU_KURS)
+
+        try:
+            stmt = sa_pg.insert(AduPlacement).values(
+                user_id=current_user.id,
+                tanggal=tanggal,
+                zone_id=zone_id,
+                impressions=_int(_col(row, "Impressions")),
+                clicks=_int(_col(row, "Clicks")),
+                conversions=_int(_col(row, "Conversions")),
+                cost_usd=cost_usd,
+                budget_rupiah=budget_rupiah,
+            ).on_conflict_do_update(
+                constraint="uq_adu_placement",
+                set_={
+                    "impressions": sa.text("excluded.impressions"),
+                    "clicks": sa.text("excluded.clicks"),
+                    "conversions": sa.text("excluded.conversions"),
+                    "cost_usd": sa.text("excluded.cost_usd"),
+                    "budget_rupiah": sa.text("excluded.budget_rupiah"),
                     "uploaded_at": sa.text("now()"),
                 },
             )
