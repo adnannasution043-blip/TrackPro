@@ -45,7 +45,7 @@ async def sync_terra_ads(
 
     result = await sync_account(account_id, body.tanggal_dari, body.tanggal_sampai)
     if result["status"] == "gagal":
-        raise HTTPException(502, "Sync gagal. Cek riwayat sync untuk detail.")
+        raise HTTPException(502, result.get("catatan") or "Sync gagal. Cek riwayat sync untuk detail.")
     return TerraSyncResponse(**result)
 
 

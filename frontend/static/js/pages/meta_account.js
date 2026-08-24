@@ -922,6 +922,7 @@ export class MetaAccountPage {
           this._loadAduSyncLogs(id, el);
         } catch (e) {
           _showResult(resultEl, e.message || 'Sync gagal.', 'error');
+          this._loadAduSyncLogs(id, el);
         } finally {
           btn.disabled = false; btn.textContent = orig;
         }
@@ -941,11 +942,14 @@ export class MetaAccountPage {
       logsEl.innerHTML = `
         <div style="font-size:11px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px;">Riwayat Sync</div>
         ${logs.map(l => `
-          <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px;">
-            <span class="badge ${l.status === 'selesai' ? 'badge-green' : 'badge-red'}" style="font-size:10px;padding:2px 6px;">${l.status}</span>
-            <span style="color:var(--text-muted);">${l.tanggal_dari} – ${l.tanggal_sampai}</span>
-            <span style="flex:1;text-align:right;color:var(--text-muted);">${l.rows_upserted} upsert${l.rows_gagal > 0 ? ` · ${l.rows_gagal} gagal` : ''}</span>
-            <span style="color:var(--text-muted);font-size:10.5px;">${_fmtDt(l.synced_at)}</span>
+          <div style="padding:7px 0;border-bottom:1px solid var(--border);font-size:12px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span class="badge ${l.status === 'selesai' ? 'badge-green' : 'badge-red'}" style="font-size:10px;padding:2px 6px;">${l.status}</span>
+              <span style="color:var(--text-muted);">${l.tanggal_dari} – ${l.tanggal_sampai}</span>
+              <span style="flex:1;text-align:right;color:var(--text-muted);">${l.rows_upserted} upsert${l.rows_gagal > 0 ? ` · ${l.rows_gagal} gagal` : ''}</span>
+              <span style="color:var(--text-muted);font-size:10.5px;">${_fmtDt(l.synced_at)}</span>
+            </div>
+            ${l.catatan ? `<div style="margin-top:4px;color:#dc2626;font-size:11px;">${l.catatan}</div>` : ''}
           </div>
         `).join('')}
       `;
@@ -1182,6 +1186,7 @@ export class MetaAccountPage {
           this._loadTerraSyncLogs(id, el);
         } catch (e) {
           _showResult(resultEl, e.message || 'Sync gagal.', 'error');
+          this._loadTerraSyncLogs(id, el);
         } finally {
           btn.disabled = false; btn.textContent = orig;
         }
@@ -1201,11 +1206,14 @@ export class MetaAccountPage {
       logsEl.innerHTML = `
         <div style="font-size:11px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px;">Riwayat Sync</div>
         ${logs.map(l => `
-          <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px;">
-            <span class="badge ${l.status === 'selesai' ? 'badge-green' : 'badge-red'}" style="font-size:10px;padding:2px 6px;">${l.status}</span>
-            <span style="color:var(--text-muted);">${l.tanggal_dari} – ${l.tanggal_sampai}</span>
-            <span style="flex:1;text-align:right;color:var(--text-muted);">${l.rows_upserted} upsert${l.rows_gagal > 0 ? ` · ${l.rows_gagal} gagal` : ''}</span>
-            <span style="color:var(--text-muted);font-size:10.5px;">${_fmtDt(l.synced_at)}</span>
+          <div style="padding:7px 0;border-bottom:1px solid var(--border);font-size:12px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span class="badge ${l.status === 'selesai' ? 'badge-green' : 'badge-red'}" style="font-size:10px;padding:2px 6px;">${l.status}</span>
+              <span style="color:var(--text-muted);">${l.tanggal_dari} – ${l.tanggal_sampai}</span>
+              <span style="flex:1;text-align:right;color:var(--text-muted);">${l.rows_upserted} upsert${l.rows_gagal > 0 ? ` · ${l.rows_gagal} gagal` : ''}</span>
+              <span style="color:var(--text-muted);font-size:10.5px;">${_fmtDt(l.synced_at)}</span>
+            </div>
+            ${l.catatan ? `<div style="margin-top:4px;color:#dc2626;font-size:11px;">${l.catatan}</div>` : ''}
           </div>
         `).join('')}
       `;

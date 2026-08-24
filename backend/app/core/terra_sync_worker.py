@@ -85,7 +85,10 @@ async def sync_account(account_id: UUID, dari: date, sampai: date) -> dict:
         ))
         await db.commit()
 
-    return {"status": status, "rows_fetched": fetched, "rows_upserted": upserted, "rows_gagal": gagal}
+    return {
+        "status": status, "rows_fetched": fetched, "rows_upserted": upserted,
+        "rows_gagal": gagal, "catatan": catatan,
+    }
 
 
 async def sync_all_active_accounts(dari: date, sampai: date) -> None:

@@ -49,12 +49,21 @@ async def sync_account(account_id: UUID, dari: date, sampai: date) -> dict:
         fetched = upserted = gagal = 0
         status  = "selesai"
         catatan = None
+        errors: list[str] = []
 
         try:
             hari = dari
             async with httpx.AsyncClient(timeout=30) as client:
                 while hari <= sampai:
-                    rows = await _fetch_statistics(client, account.api_key_enc, hari, hari, "zone")
+                    try:
+                        rows = await _fetch_statistics(client, account.api_key_enc, hari, hari, "zone")
+                    except httpx.HTTPStatusError as exc:
+                        if exc.response.status_code == 401:
+                            account.status_koneksi = "token_expired"
+                            raise
+                        errors.append(f"{hari}: {_parse_error(exc.response.text)}")
+                        hari += timedelta(days=1)
+                        continue
                     fetched += len(rows)
                     for row in rows:
                         try:
@@ -64,11 +73,15 @@ async def sync_account(account_id: UUID, dari: date, sampai: date) -> dict:
                             log.exception("adu upsert gagal: %s", e)
                             gagal += 1
                     hari += timedelta(days=1)
-            account.status_koneksi = "terhubung"
+
+            if errors:
+                status = "sebagian_gagal" if upserted > 0 else "gagal"
+                shown = errors[:5]
+                catatan = "; ".join(shown) + (f" (+{len(errors) - 5} tanggal lainnya gagal)" if len(errors) > 5 else "")
+            if upserted > 0 or fetched > 0:
+                account.status_koneksi = "terhubung"
         except httpx.HTTPStatusError as exc:
             catatan = _parse_error(exc.response.text)
-            if exc.response.status_code == 401:
-                account.status_koneksi = "token_expired"
             status = "gagal"
             log.error("Clickadu API error untuk akun %s: %s", account_id, catatan)
         except Exception as exc:
@@ -89,7 +102,10 @@ async def sync_account(account_id: UUID, dari: date, sampai: date) -> dict:
         ))
         await db.commit()
 
-    return {"status": status, "rows_fetched": fetched, "rows_upserted": upserted, "rows_gagal": gagal}
+    return {
+        "status": status, "rows_fetched": fetched, "rows_upserted": upserted,
+        "rows_gagal": gagal, "catatan": catatan,
+    }
 
 
 async def sync_all_active_accounts(dari: date, sampai: date) -> None:
