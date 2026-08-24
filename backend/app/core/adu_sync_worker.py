@@ -152,7 +152,21 @@ async def _fetch_statistics(
         }
         resp = await _get_with_retry(client, f"{CLICKADU_API_BASE}{STATS_PATH}", params, api_key)
         data = resp.json()
-        page_rows = data.get("result", data) if isinstance(data, dict) else data
+        if isinstance(data, list):
+            page_rows = data
+        elif isinstance(data, dict):
+            page_rows = None
+            for key in ("result", "data", "items", "rows", "statistics"):
+                val = data.get(key)
+                if isinstance(val, list):
+                    page_rows = val
+                    break
+            if page_rows is None:
+                raise ValueError(
+                    f"Format response statistics tidak dikenali (bukan array, keys: {list(data.keys())}): {data}"
+                )
+        else:
+            page_rows = []
         if not page_rows:
             break
         all_rows.extend(page_rows)
