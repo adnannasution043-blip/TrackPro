@@ -198,9 +198,11 @@ export class LaporanHarian2Page {
     const thBudget = thBase + 'background:#f8fafc;color:#64748b;font-style:italic;';
 
     // colspan IKLAN: meta/adu/terra masing-masing 2 kolom (komisi + budget), meta_pribadi 1 kolom
-    const iklanIndiv   = (c.meta ? 2 : 0) + (c.adu ? 2 : 0) + (c.terra ? 2 : 0) + (c.metaPribadi ? 1 : 0);
-    const hasIklan     = iklanIndiv > 0;
-    const iklanColspan = iklanIndiv + (hasIklan ? 1 : 0); // +1 untuk TOTAL IKLAN
+    const iklanIndiv    = (c.meta ? 2 : 0) + (c.adu ? 2 : 0) + (c.terra ? 2 : 0) + (c.metaPribadi ? 1 : 0);
+    const hasIklan      = iklanIndiv > 0;
+    const budgetGroups  = (c.meta ? 1 : 0) + (c.adu ? 1 : 0) + (c.terra ? 1 : 0);
+    const hasTotalBudget = budgetGroups >= 2;
+    const iklanColspan  = iklanIndiv + (hasIklan ? 1 : 0) + (hasTotalBudget ? 1 : 0);
 
     // Header baris 1
     const h1Fp    = c.fp      ? `<th colspan="3" style="${thFP}text-align:center;">KOMISI FP</th>` : '';
@@ -221,6 +223,7 @@ export class LaporanHarian2Page {
     const h2IklanTerra = c.terra       ? `<th style="${thIklan}${!c.meta && !c.adu ? 'border-left:2px solid #fecaca;' : ''}">TERRA</th><th style="${thBudget}">BUDGET TERRA</th>` : '';
     const h2IklanPrib  = c.metaPribadi ? `<th style="${thMeta}${!c.meta && !c.adu && !c.terra ? 'border-left:2px solid #fed7aa;' : ''}">META PRIBADI</th>` : '';
     const h2IklanTot   = hasIklan      ? `<th style="${thIklan}font-weight:800;">TOTAL IKLAN</th>` : '';
+    const h2TotBudget  = hasTotalBudget ? `<th style="${thBudget}font-weight:800;">TOTAL BUDGET</th>` : '';
 
     const rowsHtml = pageRows.map((r, i) => {
       const bd          = this._bdMap[r.tanggal] || {};
@@ -255,6 +258,8 @@ export class LaporanHarian2Page {
       const tdTerra = c.terra       ? `<td style="white-space:nowrap;color:#dc2626;${!c.meta && !c.adu ? 'border-left:2px solid #fecaca;' : ''}">${rp(Math.round(terra))}</td><td style="white-space:nowrap;color:#64748b;font-style:italic;">${rp(Math.round(budgetTerra))}</td>` : '';
       const tdPrib  = c.metaPribadi ? `<td style="white-space:nowrap;color:#c2410c;${!c.meta && !c.adu && !c.terra ? 'border-left:2px solid #fed7aa;' : ''}">${rp(Math.round(metaPribadi))}</td>` : '';
       const tdIklan = hasIklan      ? `<td style="font-weight:700;color:#dc2626;background:#fef2f2;">${rp(Math.round(iklan))}</td>` : '';
+      const rowTotalBudget = (c.meta ? budgetMeta : 0) + (c.adu ? budgetAdu : 0) + (c.terra ? budgetTerra : 0);
+      const tdTotBudget = hasTotalBudget ? `<td style="font-weight:700;color:#64748b;font-style:italic;background:#f8fafc;">${rp(Math.round(rowTotalBudget))}</td>` : '';
 
       return `<tr style="${bgRow}font-size:12.5px;">
         <td style="white-space:nowrap;padding:7px 10px;">
@@ -263,7 +268,7 @@ export class LaporanHarian2Page {
             ${fmtDate(r.tanggal)}
           </button>
         </td>
-        ${tdFp}${tdIg}${tdMeta}${tdAdu}${tdTerra}${tdPrib}${tdIklan}
+        ${tdFp}${tdIg}${tdMeta}${tdAdu}${tdTerra}${tdPrib}${tdIklan}${tdTotBudget}
         <td style="font-weight:700;color:#10b981;border-left:2px solid #bbf7d0;">${rp(Math.round(kotor))}</td>
       </tr>`;
     }).join('');
@@ -276,6 +281,8 @@ export class LaporanHarian2Page {
     const tfTerra = c.terra       ? `<td style="color:#dc2626;">${rp(Math.round(tot.terra))}</td><td style="color:#64748b;font-style:italic;">${rp(Math.round(tot.budgetTerra))}</td>` : '';
     const tfPrib  = c.metaPribadi ? `<td style="color:#c2410c;">${rp(Math.round(tot.metaPribadi))}</td>` : '';
     const tfIklan = hasIklan      ? `<td style="color:#dc2626;font-weight:800;">${rp(Math.round(tot.iklan))}</td>` : '';
+    const totTotalBudget = (c.meta ? tot.budgetMeta : 0) + (c.adu ? tot.budgetAdu : 0) + (c.terra ? tot.budgetTerra : 0);
+    const tfTotBudget = hasTotalBudget ? `<td style="color:#64748b;font-style:italic;font-weight:800;">${rp(Math.round(totTotalBudget))}</td>` : '';
 
     wrap.innerHTML = `
       <table class="data-table" style="font-size:12.5px;min-width:700px;border-collapse:collapse;">
@@ -285,13 +292,13 @@ export class LaporanHarian2Page {
             ${h1Fp}${h1Ig}${h1Iklan}
             <th rowspan="2" style="${thBase}background:#f0fdf4;color:#15803d;white-space:nowrap;border-left:2px solid #bbf7d0;">TOTAL KOTOR</th>
           </tr>
-          <tr>${h2Fp}${h2Ig}${h2IklanMeta}${h2IklanAdu}${h2IklanTerra}${h2IklanPrib}${h2IklanTot}</tr>
+          <tr>${h2Fp}${h2Ig}${h2IklanMeta}${h2IklanAdu}${h2IklanTerra}${h2IklanPrib}${h2IklanTot}${h2TotBudget}</tr>
         </thead>
         <tbody>${rowsHtml}</tbody>
         <tfoot>
           <tr style="font-weight:700;background:var(--bg-muted);border-top:2px solid var(--border);font-size:12px;">
             <td style="font-weight:800;white-space:nowrap;padding:8px 10px;">TOTAL (${rows.length} hari)</td>
-            ${tfFp}${tfIg}${tfMeta}${tfAdu}${tfTerra}${tfPrib}${tfIklan}
+            ${tfFp}${tfIg}${tfMeta}${tfAdu}${tfTerra}${tfPrib}${tfIklan}${tfTotBudget}
             <td style="color:#10b981;font-weight:800;">${rp(Math.round(tot.kotor))}</td>
           </tr>
         </tfoot>
