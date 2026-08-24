@@ -30,7 +30,7 @@ STATS_PATH = "/v1.0/api/client/statistics/"
 _ADU_KURS = 19_000  # 1 USD = Rp 19.000, sama seperti upload CSV manual
 
 _ZONE_KEYS  = ("zoneId", "zone_id", "zone")
-_COST_KEYS  = ("cost", "spend", "spentUsd", "spent_usd")
+_COST_KEYS  = ("spent", "cost", "spend", "spentUsd", "spent_usd")
 _IMP_KEYS   = ("impressions", "impression")
 _CLICK_KEYS = ("clicks", "click")
 _CONV_KEYS  = ("conversions", "conversion")
@@ -152,25 +152,27 @@ async def _fetch_statistics(
         }
         resp = await _get_with_retry(client, f"{CLICKADU_API_BASE}{STATS_PATH}", params, api_key)
         data = resp.json()
-        if isinstance(data, list):
+        # Bentuk aktual: {"result": {"page":.., "items": [...], "totalPages":.., "totals": {...}}}
+        result = data.get("result") if isinstance(data, dict) else None
+        if isinstance(result, dict):
+            page_rows = result.get("items") or []
+            total_pages = result.get("totalPages")
+        elif isinstance(result, list):
+            page_rows = result
+            total_pages = None
+        elif isinstance(data, list):
             page_rows = data
-        elif isinstance(data, dict):
-            page_rows = None
-            for key in ("result", "data", "items", "rows", "statistics"):
-                val = data.get(key)
-                if isinstance(val, list):
-                    page_rows = val
-                    break
-            if page_rows is None:
-                raise ValueError(
-                    f"Format response statistics tidak dikenali (bukan array, keys: {list(data.keys())}): {data}"
-                )
+            total_pages = None
         else:
-            page_rows = []
+            raise ValueError(f"Format response statistics tidak dikenali: {data}")
+
         if not page_rows:
             break
         all_rows.extend(page_rows)
-        if len(page_rows) < limit:
+        if total_pages is not None:
+            if page >= total_pages:
+                break
+        elif len(page_rows) < limit:
             break
         page += 1
     return all_rows
