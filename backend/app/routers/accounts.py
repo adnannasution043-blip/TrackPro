@@ -6,12 +6,17 @@ from sqlalchemy import delete, select
 
 from app.core.deps import DB, CurrentUser
 from app.models.account import AccountLink, MetaAccount, ShopeeAccount
+from app.models.adu_account import AduAccount
 from datetime import datetime, timedelta, timezone
 
 from app.schemas.account import (
     AccountItem,
     AccountLinkRequest,
     AccountsTree,
+    AduAccountCreate,
+    AduAccountResponse,
+    AduAccountUpdate,
+    AduApiKeyUpdate,
     MetaAccountCreate,
     MetaAccountResponse,
     MetaAccountUpdate,
@@ -266,6 +271,70 @@ async def delete_shopee_account(account_id: UUID, current_user: CurrentUser, db:
 
 
 # ===========================================================================
+# Adu Accounts (Clickadu API)
+# ===========================================================================
+
+@router.get("/adu", response_model=list[AduAccountResponse])
+async def list_adu_accounts(current_user: CurrentUser, db: DB):
+    result = await db.execute(
+        select(AduAccount)
+        .where(AduAccount.user_id == current_user.id)
+        .order_by(AduAccount.created_at)
+    )
+    return [_to_adu_response(a) for a in result.scalars().all()]
+
+
+@router.post("/adu", response_model=AduAccountResponse, status_code=status.HTTP_201_CREATED)
+async def create_adu_account(body: AduAccountCreate, current_user: CurrentUser, db: DB):
+    existing = await db.execute(
+        select(AduAccount).where(
+            AduAccount.user_id == current_user.id,
+            AduAccount.nama_tampilan == body.nama_tampilan,
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="Nama akun Adu sudah ada.")
+
+    account = AduAccount(user_id=current_user.id, **body.model_dump())
+    db.add(account)
+    await db.commit()
+    await db.refresh(account)
+    return _to_adu_response(account)
+
+
+@router.patch("/adu/{account_id}", response_model=AduAccountResponse)
+async def update_adu_account(account_id: UUID, body: AduAccountUpdate, current_user: CurrentUser, db: DB):
+    account = await _get_adu_account(account_id, current_user.id, db)
+    for field, value in body.model_dump(exclude_none=True).items():
+        setattr(account, field, value)
+    await db.commit()
+    await db.refresh(account)
+    return _to_adu_response(account)
+
+
+@router.patch("/adu/{account_id}/api-key", status_code=status.HTTP_204_NO_CONTENT)
+async def update_adu_api_key(account_id: UUID, body: AduApiKeyUpdate, current_user: CurrentUser, db: DB):
+    account = await _get_adu_account(account_id, current_user.id, db)
+    account.api_key_enc = body.api_key.strip()
+    account.status_koneksi = "terhubung"
+    await db.commit()
+
+
+@router.delete("/adu/{account_id}/api-key", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_adu_api_key(account_id: UUID, current_user: CurrentUser, db: DB):
+    account = await _get_adu_account(account_id, current_user.id, db)
+    account.api_key_enc = None
+    await db.commit()
+
+
+@router.delete("/adu/{account_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_adu_account(account_id: UUID, current_user: CurrentUser, db: DB):
+    account = await _get_adu_account(account_id, current_user.id, db)
+    await db.delete(account)
+    await db.commit()
+
+
+# ===========================================================================
 # Helper privat
 # ===========================================================================
 
@@ -295,6 +364,26 @@ async def _assert_shopee_owned(shopee_id: UUID, user_id, db: DB) -> None:
     )
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Akun Shopee tidak ditemukan.")
+
+
+async def _get_adu_account(account_id: UUID, user_id, db: DB) -> AduAccount:
+    result = await db.execute(
+        select(AduAccount).where(AduAccount.id == account_id, AduAccount.user_id == user_id)
+    )
+    account = result.scalar_one_or_none()
+    if not account:
+        raise HTTPException(status_code=404, detail="Akun Adu tidak ditemukan.")
+    return account
+
+
+def _to_adu_response(a: AduAccount) -> AduAccountResponse:
+    return AduAccountResponse(
+        id=a.id,
+        nama_tampilan=a.nama_tampilan,
+        status_koneksi=a.status_koneksi,
+        has_api_key=bool(a.api_key_enc),
+        created_at=a.created_at,
+    )
 
 
 def _to_meta_response(m: MetaAccount) -> MetaAccountResponse:

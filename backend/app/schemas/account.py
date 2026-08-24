@@ -61,6 +61,33 @@ class ShopeeAccountResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Adu Account (Clickadu API)
+# ---------------------------------------------------------------------------
+
+class AduAccountCreate(BaseModel):
+    nama_tampilan: str
+
+
+class AduAccountUpdate(BaseModel):
+    nama_tampilan: str | None = None
+    status_koneksi: str | None = None
+
+
+class AduApiKeyUpdate(BaseModel):
+    api_key: str
+
+
+class AduAccountResponse(BaseModel):
+    id: UUID
+    nama_tampilan: str
+    status_koneksi: str
+    has_api_key: bool = False
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ---------------------------------------------------------------------------
 # Account Link (relasi meta <-> shopee)
 # ---------------------------------------------------------------------------
 

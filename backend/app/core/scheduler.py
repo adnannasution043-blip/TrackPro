@@ -8,6 +8,7 @@ import logging
 from datetime import date, datetime, timedelta, timezone
 
 from app.core.meta_sync_worker import sync_all_active_accounts
+from app.core.adu_sync_worker import sync_all_active_accounts as sync_all_adu_accounts
 
 log = logging.getLogger(__name__)
 
@@ -37,7 +38,11 @@ async def _loop():
         try:
             await sync_all_active_accounts(dari=kemarin, sampai=kemarin)
         except Exception as e:
-            log.exception("auto-sync harian gagal: %s", e)
+            log.exception("auto-sync harian Meta gagal: %s", e)
+        try:
+            await sync_all_adu_accounts(dari=kemarin, sampai=kemarin)
+        except Exception as e:
+            log.exception("auto-sync harian Adu gagal: %s", e)
 
 
 def _seconds_until_next_run(hour: int, minute: int) -> float:
