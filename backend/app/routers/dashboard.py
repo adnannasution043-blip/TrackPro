@@ -630,24 +630,30 @@ async def get_laporan_harian2(
     )
     budget_terra_map = {r.tanggal: r.budget for r in (await db.execute(q_bt)).all()}
 
+    # Gabung semua tanggal dari semua sumber agar budget tetap muncul
+    # walau tanggal tertentu tidak punya data komisi Shopee
+    commission_map = {r.tanggal: r for r in rows}
+    all_dates = set(commission_map) | set(budget_meta_map) | set(budget_adu_map) | set(budget_terra_map)
+
     result = []
-    for r in rows:
-        story    = r.komisi_story    or _ZERO
-        feed     = r.komisi_feed     or _ZERO
-        story_ig = r.komisi_story_ig or _ZERO
-        feed_ig  = r.komisi_feed_ig  or _ZERO
-        meta         = r.komisi_meta         or _ZERO
-        adu          = r.komisi_adu          or _ZERO
-        terra        = r.komisi_terra        or _ZERO
-        meta_pribadi = r.komisi_meta_pribadi or _ZERO
-        budget_meta  = budget_meta_map.get(r.tanggal,  _ZERO)
-        budget_adu   = budget_adu_map.get(r.tanggal,   _ZERO)
-        budget_terra = budget_terra_map.get(r.tanggal, _ZERO)
+    for tgl in sorted(all_dates):
+        r = commission_map.get(tgl)
+        story    = (r.komisi_story    or _ZERO) if r else _ZERO
+        feed     = (r.komisi_feed     or _ZERO) if r else _ZERO
+        story_ig = (r.komisi_story_ig or _ZERO) if r else _ZERO
+        feed_ig  = (r.komisi_feed_ig  or _ZERO) if r else _ZERO
+        meta         = (r.komisi_meta         or _ZERO) if r else _ZERO
+        adu          = (r.komisi_adu          or _ZERO) if r else _ZERO
+        terra        = (r.komisi_terra        or _ZERO) if r else _ZERO
+        meta_pribadi = (r.komisi_meta_pribadi or _ZERO) if r else _ZERO
+        budget_meta  = budget_meta_map.get(tgl,  _ZERO)
+        budget_adu   = budget_adu_map.get(tgl,   _ZERO)
+        budget_terra = budget_terra_map.get(tgl, _ZERO)
         total_fp    = story + feed
         total_ig    = story_ig + feed_ig
         total_iklan = meta + adu + terra + meta_pribadi
         result.append({
-            "tanggal":              str(r.tanggal),
+            "tanggal":              str(tgl),
             "komisi_story":         float(story),
             "komisi_feed":          float(feed),
             "total_fp":             float(total_fp),
