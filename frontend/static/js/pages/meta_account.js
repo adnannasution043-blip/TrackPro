@@ -812,7 +812,11 @@ export class MetaAccountPage {
             </div>
             <div class="form-hint" style="margin-top:6px;">Sync ditarik per-hari (satu API call per tanggal) agar budget per zone akurat per hari.</div>
             <div id="adu-sync-result-${a.id}" style="display:none;margin-top:10px;"></div>
-            <div id="adu-sync-logs-${a.id}" style="margin-top:12px;"></div>
+            <button data-toggle-adu-hist="${a.id}" style="margin-top:12px;background:none;border:none;padding:0;cursor:pointer;font-size:11.5px;color:var(--text-muted);display:flex;align-items:center;gap:4px;">
+              <svg id="adu-hist-chevron-${a.id}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" style="transition:transform 0.2s;"><polyline points="9 18 15 12 9 6"/></svg>
+              Riwayat Sync
+            </button>
+            <div id="adu-sync-logs-${a.id}" style="display:none;margin-top:8px;"></div>
             `}
           </div>
         </div>
@@ -895,6 +899,16 @@ export class MetaAccountPage {
         const open = panel.style.display === 'none';
         panel.style.display = open ? 'block' : 'none';
         if (chevron) chevron.style.transform = open ? 'rotate(180deg)' : '';
+      });
+    });
+    el.querySelectorAll('[data-toggle-adu-hist]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.toggleAduHist;
+        const panel = el.querySelector(`#adu-sync-logs-${id}`);
+        const chevron = el.querySelector(`#adu-hist-chevron-${id}`);
+        const open = panel.style.display === 'none';
+        panel.style.display = open ? 'block' : 'none';
+        if (chevron) chevron.style.transform = open ? 'rotate(90deg)' : '';
         if (open) this._loadAduSyncLogs(id, el);
       });
     });
@@ -919,10 +933,10 @@ export class MetaAccountPage {
             `Selesai — ${res.rows_fetched} baris dari Clickadu, ${res.rows_upserted} berhasil diupsert${res.rows_gagal > 0 ? `, ${res.rows_gagal} gagal` : ''}.`,
             'success'
           );
-          this._loadAduSyncLogs(id, el);
+          if (el.querySelector(`#adu-sync-logs-${id}`)?.style.display !== 'none') this._loadAduSyncLogs(id, el);
         } catch (e) {
           _showResult(resultEl, e.message || 'Sync gagal.', 'error');
-          this._loadAduSyncLogs(id, el);
+          if (el.querySelector(`#adu-sync-logs-${id}`)?.style.display !== 'none') this._loadAduSyncLogs(id, el);
         } finally {
           btn.disabled = false; btn.textContent = orig;
         }
@@ -1076,7 +1090,11 @@ export class MetaAccountPage {
             </div>
             <div class="form-hint" style="margin-top:6px;">Satu kali sync mencakup seluruh rentang tanggal (breakdown per hari per placement langsung dari API).</div>
             <div id="terra-sync-result-${a.id}" style="display:none;margin-top:10px;"></div>
-            <div id="terra-sync-logs-${a.id}" style="margin-top:12px;"></div>
+            <button data-toggle-terra-hist="${a.id}" style="margin-top:12px;background:none;border:none;padding:0;cursor:pointer;font-size:11.5px;color:var(--text-muted);display:flex;align-items:center;gap:4px;">
+              <svg id="terra-hist-chevron-${a.id}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" style="transition:transform 0.2s;"><polyline points="9 18 15 12 9 6"/></svg>
+              Riwayat Sync
+            </button>
+            <div id="terra-sync-logs-${a.id}" style="display:none;margin-top:8px;"></div>
             `}
           </div>
         </div>
@@ -1159,6 +1177,16 @@ export class MetaAccountPage {
         const open = panel.style.display === 'none';
         panel.style.display = open ? 'block' : 'none';
         if (chevron) chevron.style.transform = open ? 'rotate(180deg)' : '';
+      });
+    });
+    el.querySelectorAll('[data-toggle-terra-hist]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.toggleTerraHist;
+        const panel = el.querySelector(`#terra-sync-logs-${id}`);
+        const chevron = el.querySelector(`#terra-hist-chevron-${id}`);
+        const open = panel.style.display === 'none';
+        panel.style.display = open ? 'block' : 'none';
+        if (chevron) chevron.style.transform = open ? 'rotate(90deg)' : '';
         if (open) this._loadTerraSyncLogs(id, el);
       });
     });
@@ -1183,10 +1211,10 @@ export class MetaAccountPage {
             `Selesai — ${res.rows_fetched} baris dari Adsterra, ${res.rows_upserted} berhasil diupsert${res.rows_gagal > 0 ? `, ${res.rows_gagal} gagal` : ''}.`,
             'success'
           );
-          this._loadTerraSyncLogs(id, el);
+          if (el.querySelector(`#terra-sync-logs-${id}`)?.style.display !== 'none') this._loadTerraSyncLogs(id, el);
         } catch (e) {
           _showResult(resultEl, e.message || 'Sync gagal.', 'error');
-          this._loadTerraSyncLogs(id, el);
+          if (el.querySelector(`#terra-sync-logs-${id}`)?.style.display !== 'none') this._loadTerraSyncLogs(id, el);
         } finally {
           btn.disabled = false; btn.textContent = orig;
         }

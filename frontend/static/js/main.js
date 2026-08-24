@@ -249,6 +249,14 @@ function renderShell(path, user) {
             <div class="dot"></div>
             <span id="topbar-meta-label">Meta…</span>
           </div>
+          <div class="topbar-meta-status" id="topbar-adu-status" style="opacity:0.4;">
+            <div class="dot"></div>
+            <span id="topbar-adu-label">Adu…</span>
+          </div>
+          <div class="topbar-meta-status" id="topbar-terra-status" style="opacity:0.4;">
+            <div class="dot"></div>
+            <span id="topbar-terra-label">Terra…</span>
+          </div>
           <!-- <button class="topbar-group-btn">
             ${icon('group')}
             Gabung Grup
@@ -327,8 +335,10 @@ function updateSidebarLive() {
     });
   }
 
-  // Status koneksi Meta di topbar
+  // Status koneksi Meta / Adu / Terra di topbar
   _loadMetaStatus();
+  _loadSimpleApiStatus('adu', '/accounts/adu');
+  _loadSimpleApiStatus('terra', '/accounts/terra');
 
   // Populate filter akun dropdown dari tree
   _initSidebarFilter();
@@ -574,6 +584,42 @@ async function _loadMetaStatus() {
       );
     } else {
       _removeTokenBanner();
+    }
+  } catch (_) {}
+}
+
+async function _loadSimpleApiStatus(kind, endpoint) {
+  const el = document.getElementById(`topbar-${kind}-status`);
+  const label = document.getElementById(`topbar-${kind}-label`);
+  if (!el || !label) return;
+  const namaLabel = kind === 'adu' ? 'Adu' : 'Terra';
+  try {
+    const list = await apiFetch(endpoint);
+    const dot = el.querySelector('.dot');
+    if (!list || list.length === 0) {
+      el.style.opacity = '0.4';
+      el.style.color = '';
+      label.textContent = `${namaLabel} Tidak Terhubung`;
+      if (dot) dot.style.background = '#9ca3af';
+      return;
+    }
+    const aktif = list.filter(a => a.has_api_key && a.status_koneksi === 'terhubung');
+    const invalid = list.filter(a => a.has_api_key && a.status_koneksi === 'token_expired');
+    if (aktif.length > 0) {
+      el.style.opacity = '1';
+      el.style.color = '';
+      if (dot) dot.style.background = '';
+      label.textContent = aktif.length === 1 ? `${namaLabel} Terhubung` : `${namaLabel} Terhubung (${aktif.length})`;
+    } else if (invalid.length > 0) {
+      el.style.opacity = '1';
+      el.style.color = '#f59e0b';
+      if (dot) dot.style.background = '#f59e0b';
+      label.textContent = `${namaLabel} API Key Invalid`;
+    } else {
+      el.style.opacity = '0.4';
+      el.style.color = '';
+      if (dot) dot.style.background = '#9ca3af';
+      label.textContent = `${namaLabel} Belum Ada API Key`;
     }
   } catch (_) {}
 }

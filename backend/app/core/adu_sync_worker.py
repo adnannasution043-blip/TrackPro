@@ -74,6 +74,8 @@ async def sync_account(account_id: UUID, dari: date, sampai: date) -> dict:
                         except Exception as e:
                             log.exception("adu upsert gagal: %s", e)
                             gagal += 1
+                            if len(errors) < 5:
+                                errors.append(str(e))
                     hari += timedelta(days=1)
                     if hari <= sampai:
                         await asyncio.sleep(0.4)  # jeda antar tanggal biar gak kena rate limit
@@ -81,7 +83,7 @@ async def sync_account(account_id: UUID, dari: date, sampai: date) -> dict:
             if errors:
                 status = "sebagian_gagal" if upserted > 0 else "gagal"
                 shown = errors[:5]
-                catatan = "; ".join(shown) + (f" (+{len(errors) - 5} tanggal lainnya gagal)" if len(errors) > 5 else "")
+                catatan = "; ".join(shown) + (f" (+{len(errors) - 5} error lainnya)" if len(errors) > 5 else "")
             if upserted > 0 or fetched > 0:
                 account.status_koneksi = "terhubung"
         except httpx.HTTPStatusError as exc:
