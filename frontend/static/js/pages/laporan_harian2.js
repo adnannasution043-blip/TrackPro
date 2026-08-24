@@ -129,9 +129,9 @@ export class LaporanHarian2Page {
       const bd = this._bdMap[r.tanggal] || {};
       return [...this._filters].some(f => {
         if (f === 'organic')      return Number(bd.total_fp || 0) > 0 || Number(bd.total_ig || 0) > 0;
-        if (f === 'meta')         return Number(bd.komisi_meta || 0) > 0;
-        if (f === 'adu')          return Number(bd.komisi_adu || 0) > 0;
-        if (f === 'terra')        return Number(bd.komisi_terra || 0) > 0;
+        if (f === 'meta')         return Number(bd.komisi_meta || 0) > 0 || Number(bd.budget_meta || 0) > 0;
+        if (f === 'adu')          return Number(bd.komisi_adu || 0) > 0 || Number(bd.budget_adu || 0) > 0;
+        if (f === 'terra')        return Number(bd.komisi_terra || 0) > 0 || Number(bd.budget_terra || 0) > 0;
         if (f === 'meta_pribadi') return Number(bd.komisi_meta_pribadi || 0) > 0;
         return false;
       });
