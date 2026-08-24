@@ -9,9 +9,20 @@ from fastapi.staticfiles import StaticFiles
 from app.core.scheduler import start_scheduler, stop_scheduler
 from app.routers import accounts, auth, balance, clicks, csv_upload, dashboard, export_excel, meta_oauth, meta_sync, orders, taglink
 
+_ALEMBIC_INI = Path(__file__).parent.parent / "alembic.ini"
+
+
+def _run_migrations() -> None:
+    from alembic.config import Config
+    from alembic import command
+    cfg = Config(str(_ALEMBIC_INI))
+    command.upgrade(cfg, "head")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    import asyncio
+    await asyncio.to_thread(_run_migrations)
     start_scheduler()
     yield
     stop_scheduler()
