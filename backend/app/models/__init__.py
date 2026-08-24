@@ -7,6 +7,7 @@ from app.models.campaign import Campaign, CampaignTagMap, TagLink
 from app.models.import_log import CsvImport
 from app.models.meta_sync_log import MetaSyncLog
 from app.models.metrics import DailyMetric, MetaBreakdown, OrderSnapshot
+from app.models.terra import TerraPlacement
 from app.models.user import User
 
 __all__ = [
@@ -26,4 +27,5 @@ __all__ = [
     "MetaAppConfig",
     "CampaignNote",
     "WdPayment",
+    "TerraPlacement",
 ]

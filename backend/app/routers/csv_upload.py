@@ -41,6 +41,7 @@ from app.models.balance import AccountBalance
 from app.models.campaign import Campaign, TagLink
 from app.models.import_log import CsvImport
 from app.models.metrics import ClickBySource, DailyMetric, MetaBreakdown, OrderSnapshot
+from app.models.terra import TerraPlacement
 from app.schemas.upload import UploadResponse
 
 router = APIRouter()
@@ -453,6 +454,93 @@ async def get_wd_payments(
     rows = (await db.execute(q)).all()
     return [{"tanggal": str(r.tanggal), "total_komisi": float(r.total_komisi),
              "jumlah_orders": r.jumlah_orders} for r in rows]
+
+
+# ===========================================================================
+# Terra Ads — placement spend dengan konversi USD → IDR
+# ===========================================================================
+
+_TERRA_KURS = 19_000  # 1 USD = Rp 19.000
+
+
+@router.post("/terra", response_model=UploadResponse, status_code=status.HTTP_201_CREATED)
+async def upload_terra(
+    file: UploadFile,
+    current_user: CurrentUser,
+    db: DB,
+    tanggal: date = Query(..., description="Tanggal data dalam format YYYY-MM-DD"),
+):
+    """Upload Terra Ads placement CSV. Kolom Spent (USD) dikonversi ke budget_rupiah × 19.000."""
+    import csv as csv_mod
+    import io
+    from decimal import Decimal, InvalidOperation
+
+    raw = await file.read()
+    import_log = _start_import(current_user.id, "terra", file.filename, db)
+
+    try:
+        text = raw.decode("utf-8-sig", errors="replace")
+        reader = csv_mod.DictReader(io.StringIO(text))
+        if "Spent" not in (reader.fieldnames or []):
+            return await _fail_import(import_log, db,
+                "Kolom 'Spent' tidak ditemukan. Pastikan file adalah Terra Ads placement CSV.")
+    except Exception as exc:
+        return await _fail_import(import_log, db, f"Gagal membaca file: {exc}")
+
+    ok, fail = 0, 0
+    for row in reader:
+        placement_id = (row.get("Placement") or "").strip()
+        if not placement_id:
+            fail += 1
+            continue
+        spent_raw = (row.get("Spent") or "").strip().lstrip("$").replace(",", "")
+        if not spent_raw or spent_raw == "-":
+            fail += 1
+            continue
+        try:
+            spent_usd = Decimal(spent_raw)
+        except InvalidOperation:
+            fail += 1
+            continue
+
+        budget_rupiah = round(spent_usd * _TERRA_KURS)
+        state = (row.get("State") or "").strip()
+        try:
+            impressions = int((row.get("Impressions") or "0").replace(",", ""))
+        except (ValueError, AttributeError):
+            impressions = 0
+        try:
+            clicks = int((row.get("Clicks") or "0").replace(",", ""))
+        except (ValueError, AttributeError):
+            clicks = 0
+
+        try:
+            stmt = sa_pg.insert(TerraPlacement).values(
+                user_id=current_user.id,
+                tanggal=tanggal,
+                placement_id=placement_id,
+                state=state,
+                impressions=impressions,
+                clicks=clicks,
+                spent_usd=spent_usd,
+                budget_rupiah=budget_rupiah,
+            ).on_conflict_do_update(
+                constraint="uq_terra_placement",
+                set_={
+                    "state": state,
+                    "impressions": impressions,
+                    "clicks": clicks,
+                    "spent_usd": spent_usd,
+                    "budget_rupiah": budget_rupiah,
+                    "uploaded_at": sa.text("now()"),
+                },
+            )
+            await db.execute(stmt)
+            ok += 1
+        except Exception:
+            fail += 1
+
+    return await _finish_import(import_log, ok, fail, db)
 
 
 # ===========================================================================

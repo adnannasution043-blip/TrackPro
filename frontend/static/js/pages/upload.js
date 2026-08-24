@@ -188,6 +188,35 @@ export class UploadPage {
       </div>
 
       <div class="card" style="margin-bottom:16px;">
+        <div style="font-size:13px;font-weight:700;margin-bottom:4px;">Terra Ads</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px;">
+          Upload <strong>Placement CSV dari Terra Ads</strong>. Kolom <code>Spent</code> (USD)
+          otomatis dikonversi ke <strong>Budget Rupiah</strong> (× Rp 19.000).
+        </div>
+
+        <div class="form-group" style="margin-bottom:12px;">
+          <div class="form-label">TANGGAL DATA</div>
+          <input type="date" id="inp-terra-tanggal" class="form-input" style="width:180px;"
+            value="${new Date().toISOString().split('T')[0]}">
+        </div>
+
+        <div class="upload-zone" id="zone-terra" style="max-width:480px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <p><strong>Pilih file CSV</strong> atau drag & drop</p>
+          <p style="font-size:12px;margin-top:4px;">Placement CSV dari Terra Ads (kolom: Placement, Spent, dll.)</p>
+        </div>
+        <input type="file" id="file-terra" accept=".csv" style="display:none">
+        <div id="name-terra" style="font-size:12px;color:#6b7280;margin-top:4px;"></div>
+
+        <div id="terra-error"   class="alert alert-error"   style="display:none;margin-top:10px;"></div>
+        <div id="terra-success" class="alert alert-success" style="display:none;margin-top:10px;"></div>
+
+        <div style="margin-top:12px;display:flex;justify-content:flex-end;">
+          <button class="btn btn-primary" id="btn-upload-terra" style="padding:9px 32px;">Upload Terra</button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:16px;">
         <div style="font-size:13px;font-weight:700;margin-bottom:4px;">Pembayaran WD Shopee</div>
         <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px;">
           Upload <strong>BillConversionReport</strong> dari Shopee Affiliate (format .csv atau .xlsx).
@@ -225,9 +254,11 @@ export class UploadPage {
     this._bindUploadZone('zone-breakdown-placement', 'file-breakdown-placement', 'name-breakdown-placement');
     this._bindUploadZone('zone-breakdown-platform', 'file-breakdown-platform', 'name-breakdown-platform');
     this._bindUploadZone('zone-breakdown-age', 'file-breakdown-age', 'name-breakdown-age');
+    this._bindUploadZone('zone-terra', 'file-terra', 'name-terra');
     this._bindUploadZone('zone-wd', 'file-wd', 'name-wd');
 
     el.querySelector('#btn-upload').addEventListener('click', () => this._submit());
+    el.querySelector('#btn-upload-terra').addEventListener('click', () => this._submitTerra());
     el.querySelector('#btn-upload-wd').addEventListener('click', () => this._submitWd());
 
     el.querySelector('#btn-toggle-template').addEventListener('click', () => {
@@ -413,6 +444,45 @@ export class UploadPage {
     } finally {
       btn.disabled = false;
       btn.textContent = 'Upload WD';
+    }
+  }
+
+  async _submitTerra() {
+    const errEl     = this.container.querySelector('#terra-error');
+    const successEl = this.container.querySelector('#terra-success');
+    const btn       = this.container.querySelector('#btn-upload-terra');
+    errEl.style.display = 'none';
+    successEl.style.display = 'none';
+
+    const tanggal = this.container.querySelector('#inp-terra-tanggal').value;
+    const file    = this.container.querySelector('#file-terra').files[0];
+
+    if (!tanggal) {
+      errEl.textContent = 'Pilih tanggal data terlebih dahulu.';
+      errEl.style.display = 'block';
+      return;
+    }
+    if (!file) {
+      errEl.textContent = 'Pilih file Terra Ads CSV terlebih dahulu.';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Memproses…';
+
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await apiUpload(`/upload/terra?tanggal=${tanggal}`, fd);
+      successEl.textContent = `Upload berhasil! ${res?.baris_diproses ?? 0} placement tersimpan dengan kalkulasi budget rupiah.`;
+      successEl.style.display = 'block';
+    } catch (err) {
+      errEl.textContent = err.message;
+      errEl.style.display = 'block';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Upload Terra';
     }
   }
 
