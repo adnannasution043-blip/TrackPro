@@ -11,6 +11,8 @@ from app.models.terra import TerraPlacement
 from app.models.adu import AduPlacement
 from app.models.adu_account import AduAccount
 from app.models.adu_sync_log import AduSyncLog
+from app.models.terra_account import TerraAccount
+from app.models.terra_sync_log import TerraSyncLog
 from app.models.user import User
 
 __all__ = [
@@ -34,4 +36,6 @@ __all__ = [
     "AduPlacement",
     "AduAccount",
     "AduSyncLog",
+    "TerraAccount",
+    "TerraSyncLog",
 ]

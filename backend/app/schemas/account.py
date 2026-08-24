@@ -88,6 +88,33 @@ class AduAccountResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Terra Account (Adsterra API)
+# ---------------------------------------------------------------------------
+
+class TerraAccountCreate(BaseModel):
+    nama_tampilan: str
+
+
+class TerraAccountUpdate(BaseModel):
+    nama_tampilan: str | None = None
+    status_koneksi: str | None = None
+
+
+class TerraApiKeyUpdate(BaseModel):
+    api_key: str
+
+
+class TerraAccountResponse(BaseModel):
+    id: UUID
+    nama_tampilan: str
+    status_koneksi: str
+    has_api_key: bool = False
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ---------------------------------------------------------------------------
 # Account Link (relasi meta <-> shopee)
 # ---------------------------------------------------------------------------
 

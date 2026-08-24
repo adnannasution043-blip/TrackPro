@@ -6,6 +6,7 @@ export class MetaAccountPage {
     this._tree = { meta_accounts: [], shopee_unlinked: [] };
     this._metaInfo = {}; // id → { has_token, token_expires_at, status_koneksi }
     this._aduAccounts = [];
+    this._terraAccounts = [];
   }
 
   async render() {
@@ -26,6 +27,7 @@ export class MetaAccountPage {
           <button class="btn btn-primary" id="btn-show-form-meta">+ Tambah Akun Meta</button>
           <button class="btn btn-primary" id="btn-show-form-shopee">+ Tambah Akun Shopee</button>
           <button class="btn btn-primary" id="btn-show-form-adu">+ Tambah Akun Adu</button>
+          <button class="btn btn-primary" id="btn-show-form-terra">+ Tambah Akun Terra</button>
         </div>
       </div>
 
@@ -134,8 +136,23 @@ export class MetaAccountPage {
         </div>
       </div>
 
+      <div id="form-terra" style="display:none;" class="card" style="margin-bottom:16px;">
+        <div style="font-size:13px;font-weight:600;margin-bottom:12px;">Tambah Akun Terra Ads (Adsterra)</div>
+        <div style="margin-bottom:12px;">
+          <div class="form-label">NAMA TAMPILAN</div>
+          <input id="terra-nama" type="text" class="form-input" placeholder="Contoh: Terra Utama">
+          <div class="form-hint">Nama bebas untuk identifikasi akun ini di TrackPro. API Key dipasang setelah akun dibuat.</div>
+        </div>
+        <div id="terra-error" class="alert alert-error" style="display:none;margin-bottom:10px;"></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;">
+          <button class="btn" id="btn-batal-terra">Batal</button>
+          <button class="btn btn-primary" id="btn-simpan-terra">Simpan</button>
+        </div>
+      </div>
+
       <div id="content"><div class="loading">Memuat data…</div></div>
       <div id="content-adu"></div>
+      <div id="content-terra"></div>
     `;
 
     this._bindFormEvents();
@@ -252,16 +269,29 @@ export class MetaAccountPage {
     });
     this.container.querySelector('#btn-simpan-adu')?.addEventListener('click', () => this._simpanAdu());
     this.container.querySelector('#adu-nama')?.addEventListener('keydown', e => { if (e.key === 'Enter') this._simpanAdu(); });
+
+    this.container.querySelector('#btn-show-form-terra')?.addEventListener('click', () => {
+      const f = this.container.querySelector('#form-terra');
+      f.style.display = f.style.display === 'none' ? 'block' : 'none';
+      if (f.style.display === 'block') this.container.querySelector('#terra-nama')?.focus();
+    });
+    this.container.querySelector('#btn-batal-terra')?.addEventListener('click', () => {
+      this.container.querySelector('#form-terra').style.display = 'none';
+    });
+    this.container.querySelector('#btn-simpan-terra')?.addEventListener('click', () => this._simpanTerra());
+    this.container.querySelector('#terra-nama')?.addEventListener('keydown', e => { if (e.key === 'Enter') this._simpanTerra(); });
   }
 
   async _load() {
     const el = this.container.querySelector('#content');
     const elAdu = this.container.querySelector('#content-adu');
+    const elTerra = this.container.querySelector('#content-terra');
     try {
-      const [tree, metaList, aduList] = await Promise.all([
+      const [tree, metaList, aduList, terraList] = await Promise.all([
         apiFetch('/accounts/tree'),
         apiFetch('/accounts/meta'),
         apiFetch('/accounts/adu'),
+        apiFetch('/accounts/terra'),
       ]);
       this._tree = tree || { meta_accounts: [], shopee_unlinked: [] };
       this._metaInfo = {};
@@ -269,8 +299,10 @@ export class MetaAccountPage {
         this._metaInfo[m.id] = m;
       }
       this._aduAccounts = aduList || [];
+      this._terraAccounts = terraList || [];
       this._render(el);
       this._renderAdu(elAdu);
+      this._renderTerra(elTerra);
     } catch (e) {
       el.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
     }
@@ -943,6 +975,266 @@ export class MetaAccountPage {
       await this._load();
     } catch (e) {
       errEl.textContent = e.message || 'Gagal menyimpan akun Adu.';
+      errEl.style.display = 'block';
+    } finally {
+      btn.disabled = false; btn.textContent = 'Simpan';
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Terra Ads (Adsterra API)
+  // ---------------------------------------------------------------------------
+
+  _renderTerra(el) {
+    if (!el) return;
+    const header = `<div style="font-size:11px;font-weight:700;color:var(--text-muted);margin:20px 0 10px;text-transform:uppercase;letter-spacing:0.5px;">
+      Akun Terra Ads / Adsterra (${this._terraAccounts.length})
+    </div>`;
+    const cards = this._terraAccounts.length === 0
+      ? `<div style="text-align:center;padding:24px;color:var(--text-muted);font-size:13px;border:1px solid var(--border);border-radius:8px;">Belum ada akun Terra. Klik "+ Tambah Akun Terra" di atas.</div>`
+      : this._terraAccounts.map(a => this._renderTerraCard(a)).join('');
+    el.innerHTML = header + cards;
+    this._bindTerraEvents(el);
+  }
+
+  _renderTerraCard(a) {
+    const hasKey = a.has_api_key;
+    let keyBadge = hasKey
+      ? (a.status_koneksi === 'token_expired'
+          ? `<span class="badge badge-red">API Key Invalid</span>`
+          : `<span class="badge badge-green">API Key Aktif</span>`)
+      : `<span class="badge badge-yellow">Belum Ada API Key</span>`;
+
+    const today = new Date().toISOString().slice(0, 10);
+    const firstDay = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
+
+    return `
+      <div class="card" style="margin-bottom:12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="width:36px;height:36px;background:#fef3c7;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;">🌍</div>
+            <div>
+              <div style="font-size:14px;font-weight:700;">${a.nama_tampilan}</div>
+              <div style="font-size:11.5px;color:var(--text-muted);">Adsterra Advertiser</div>
+            </div>
+          </div>
+          <button class="btn btn-sm" style="color:#dc2626;border-color:#dc2626;" data-delete-terra="${a.id}">Hapus</button>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;margin-bottom:12px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15" style="flex-shrink:0;color:var(--text-muted);"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+          <span style="font-size:12px;color:var(--text-muted);flex:1;">API Key Adsterra</span>
+          ${keyBadge}
+          <button class="btn btn-sm" data-toggle-terra-key="${a.id}" style="font-size:11px;">
+            ${hasKey ? 'Ganti' : 'Pasang API Key'}
+          </button>
+        </div>
+
+        <div id="terra-key-panel-${a.id}" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:12px;">
+          <div class="form-label">API KEY ADSTERRA</div>
+          <input id="terra-key-input-${a.id}" type="text" class="form-input"
+            placeholder="Paste API Key di sini"
+            style="font-family:monospace;font-size:11.5px;">
+          <div class="form-hint" style="margin-bottom:10px;">
+            Ambil dari Adsterra Advertiser Dashboard → Advertisers API documentation → X-API-Key.
+          </div>
+          <div id="terra-key-msg-${a.id}" style="display:none;font-size:12px;margin-bottom:8px;padding:8px 10px;border-radius:6px;"></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn btn-primary btn-sm" data-save-terra-key="${a.id}">Simpan API Key</button>
+            ${hasKey ? `<button class="btn btn-sm" style="color:#dc2626;border-color:#dc2626;" data-delete-terra-key="${a.id}">Hapus API Key</button>` : ''}
+            <button class="btn btn-sm" data-close-terra-key="${a.id}">Batal</button>
+          </div>
+        </div>
+
+        <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+          <button data-toggle-terra-sync="${a.id}"
+            style="width:100%;display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--bg);border:none;cursor:pointer;font-size:13px;font-weight:600;color:var(--text);">
+            <span style="display:flex;align-items:center;gap:7px;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              Sync Data dari Adsterra API
+            </span>
+            <svg id="terra-sync-chevron-${a.id}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="transition:transform 0.2s;"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div id="terra-sync-panel-${a.id}" style="display:none;padding:14px;border-top:1px solid var(--border);">
+            ${!hasKey ? `<div class="alert alert-error" style="margin-bottom:0;font-size:12px;">Pasang API Key dulu sebelum bisa sync.</div>` : `
+            <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end;">
+              <div>
+                <div class="form-label">DARI</div>
+                <input type="date" class="form-input" id="terra-sync-dari-${a.id}" value="${firstDay}">
+              </div>
+              <div>
+                <div class="form-label">SAMPAI</div>
+                <input type="date" class="form-input" id="terra-sync-sampai-${a.id}" value="${today}">
+              </div>
+              <button class="btn btn-primary btn-sm" data-do-terra-sync="${a.id}" style="white-space:nowrap;">
+                Sync Sekarang
+              </button>
+            </div>
+            <div class="form-hint" style="margin-top:6px;">Satu kali sync mencakup seluruh rentang tanggal (breakdown per hari per placement langsung dari API).</div>
+            <div id="terra-sync-result-${a.id}" style="display:none;margin-top:10px;"></div>
+            <div id="terra-sync-logs-${a.id}" style="margin-top:12px;"></div>
+            `}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  _bindTerraEvents(el) {
+    el.querySelectorAll('[data-toggle-terra-key]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.toggleTerraKey;
+        const panel = el.querySelector(`#terra-key-panel-${id}`);
+        panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        if (panel.style.display === 'block') el.querySelector(`#terra-key-input-${id}`)?.focus();
+      });
+    });
+    el.querySelectorAll('[data-close-terra-key]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        el.querySelector(`#terra-key-panel-${btn.dataset.closeTerraKey}`).style.display = 'none';
+      });
+    });
+    el.querySelectorAll('[data-save-terra-key]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.saveTerraKey;
+        const key = el.querySelector(`#terra-key-input-${id}`)?.value.trim();
+        const msgEl = el.querySelector(`#terra-key-msg-${id}`);
+        if (!key) {
+          _showMsg(msgEl, 'API Key tidak boleh kosong.', 'error');
+          return;
+        }
+        const orig = btn.textContent;
+        btn.disabled = true; btn.textContent = 'Menyimpan…';
+        try {
+          await apiFetch(`/accounts/terra/${id}/api-key`, {
+            method: 'PATCH',
+            body: JSON.stringify({ api_key: key }),
+          });
+          _showMsg(msgEl, 'API Key berhasil disimpan.', 'success');
+          await this._load();
+        } catch (e) {
+          _showMsg(msgEl, e.message || 'Gagal menyimpan API Key.', 'error');
+        } finally {
+          btn.disabled = false; btn.textContent = orig;
+        }
+      });
+    });
+    el.querySelectorAll('[data-delete-terra-key]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Hapus API Key Terra dari akun ini?')) return;
+        const id = btn.dataset.deleteTerraKey;
+        btn.disabled = true;
+        try {
+          await apiFetch(`/accounts/terra/${id}/api-key`, { method: 'DELETE' });
+          await this._load();
+        } catch (e) {
+          alert(e.message);
+          btn.disabled = false;
+        }
+      });
+    });
+    el.querySelectorAll('[data-delete-terra]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Hapus akun Terra ini beserta riwayat sync-nya?')) return;
+        const id = btn.dataset.deleteTerra;
+        btn.disabled = true;
+        try {
+          await apiFetch(`/accounts/terra/${id}`, { method: 'DELETE' });
+          await this._load();
+        } catch (e) {
+          alert(e.message);
+          btn.disabled = false;
+        }
+      });
+    });
+    el.querySelectorAll('[data-toggle-terra-sync]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.toggleTerraSync;
+        const panel = el.querySelector(`#terra-sync-panel-${id}`);
+        const chevron = el.querySelector(`#terra-sync-chevron-${id}`);
+        const open = panel.style.display === 'none';
+        panel.style.display = open ? 'block' : 'none';
+        if (chevron) chevron.style.transform = open ? 'rotate(180deg)' : '';
+        if (open) this._loadTerraSyncLogs(id, el);
+      });
+    });
+    el.querySelectorAll('[data-do-terra-sync]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.doTerraSync;
+        const dari = el.querySelector(`#terra-sync-dari-${id}`)?.value;
+        const sampai = el.querySelector(`#terra-sync-sampai-${id}`)?.value;
+        const resultEl = el.querySelector(`#terra-sync-result-${id}`);
+        if (!dari || !sampai) { _showResult(resultEl, 'Isi rentang tanggal dulu.', 'error'); return; }
+        if (dari > sampai) { _showResult(resultEl, 'Tanggal dari tidak boleh lebih dari sampai.', 'error'); return; }
+
+        const orig = btn.textContent;
+        btn.disabled = true; btn.textContent = 'Menyinkronkan…';
+        resultEl.style.display = 'none';
+        try {
+          const res = await apiFetch(`/terra-sync/${id}`, {
+            method: 'POST',
+            body: JSON.stringify({ tanggal_dari: dari, tanggal_sampai: sampai }),
+          });
+          _showResult(resultEl,
+            `Selesai — ${res.rows_fetched} baris dari Adsterra, ${res.rows_upserted} berhasil diupsert${res.rows_gagal > 0 ? `, ${res.rows_gagal} gagal` : ''}.`,
+            'success'
+          );
+          this._loadTerraSyncLogs(id, el);
+        } catch (e) {
+          _showResult(resultEl, e.message || 'Sync gagal.', 'error');
+        } finally {
+          btn.disabled = false; btn.textContent = orig;
+        }
+      });
+    });
+  }
+
+  async _loadTerraSyncLogs(accountId, el) {
+    const logsEl = el.querySelector(`#terra-sync-logs-${accountId}`);
+    if (!logsEl) return;
+    try {
+      const logs = await apiFetch(`/terra-sync/${accountId}/logs?limit=5`);
+      if (!logs || logs.length === 0) {
+        logsEl.innerHTML = `<div style="font-size:11.5px;color:var(--text-muted);">Belum ada riwayat sync.</div>`;
+        return;
+      }
+      logsEl.innerHTML = `
+        <div style="font-size:11px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px;">Riwayat Sync</div>
+        ${logs.map(l => `
+          <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px;">
+            <span class="badge ${l.status === 'selesai' ? 'badge-green' : 'badge-red'}" style="font-size:10px;padding:2px 6px;">${l.status}</span>
+            <span style="color:var(--text-muted);">${l.tanggal_dari} – ${l.tanggal_sampai}</span>
+            <span style="flex:1;text-align:right;color:var(--text-muted);">${l.rows_upserted} upsert${l.rows_gagal > 0 ? ` · ${l.rows_gagal} gagal` : ''}</span>
+            <span style="color:var(--text-muted);font-size:10.5px;">${_fmtDt(l.synced_at)}</span>
+          </div>
+        `).join('')}
+      `;
+    } catch (_) {}
+  }
+
+  async _simpanTerra() {
+    const nama = this.container.querySelector('#terra-nama').value.trim();
+    const errEl = this.container.querySelector('#terra-error');
+    errEl.style.display = 'none';
+
+    if (!nama) {
+      errEl.textContent = 'Nama tampilan wajib diisi.';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    const btn = this.container.querySelector('#btn-simpan-terra');
+    btn.disabled = true; btn.textContent = 'Menyimpan…';
+    try {
+      await apiFetch('/accounts/terra', {
+        method: 'POST',
+        body: JSON.stringify({ nama_tampilan: nama }),
+      });
+      this.container.querySelector('#form-terra').style.display = 'none';
+      this.container.querySelector('#terra-nama').value = '';
+      await this._load();
+    } catch (e) {
+      errEl.textContent = e.message || 'Gagal menyimpan akun Terra.';
       errEl.style.display = 'block';
     } finally {
       btn.disabled = false; btn.textContent = 'Simpan';

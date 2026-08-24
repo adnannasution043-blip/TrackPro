@@ -7,6 +7,7 @@ from sqlalchemy import delete, select
 from app.core.deps import DB, CurrentUser
 from app.models.account import AccountLink, MetaAccount, ShopeeAccount
 from app.models.adu_account import AduAccount
+from app.models.terra_account import TerraAccount
 from datetime import datetime, timedelta, timezone
 
 from app.schemas.account import (
@@ -24,6 +25,10 @@ from app.schemas.account import (
     ShopeeAccountCreate,
     ShopeeAccountResponse,
     ShopeeAccountUpdate,
+    TerraAccountCreate,
+    TerraAccountResponse,
+    TerraAccountUpdate,
+    TerraApiKeyUpdate,
 )
 
 router = APIRouter()
@@ -335,6 +340,70 @@ async def delete_adu_account(account_id: UUID, current_user: CurrentUser, db: DB
 
 
 # ===========================================================================
+# Terra Accounts (Adsterra API)
+# ===========================================================================
+
+@router.get("/terra", response_model=list[TerraAccountResponse])
+async def list_terra_accounts(current_user: CurrentUser, db: DB):
+    result = await db.execute(
+        select(TerraAccount)
+        .where(TerraAccount.user_id == current_user.id)
+        .order_by(TerraAccount.created_at)
+    )
+    return [_to_terra_response(a) for a in result.scalars().all()]
+
+
+@router.post("/terra", response_model=TerraAccountResponse, status_code=status.HTTP_201_CREATED)
+async def create_terra_account(body: TerraAccountCreate, current_user: CurrentUser, db: DB):
+    existing = await db.execute(
+        select(TerraAccount).where(
+            TerraAccount.user_id == current_user.id,
+            TerraAccount.nama_tampilan == body.nama_tampilan,
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="Nama akun Terra sudah ada.")
+
+    account = TerraAccount(user_id=current_user.id, **body.model_dump())
+    db.add(account)
+    await db.commit()
+    await db.refresh(account)
+    return _to_terra_response(account)
+
+
+@router.patch("/terra/{account_id}", response_model=TerraAccountResponse)
+async def update_terra_account(account_id: UUID, body: TerraAccountUpdate, current_user: CurrentUser, db: DB):
+    account = await _get_terra_account(account_id, current_user.id, db)
+    for field, value in body.model_dump(exclude_none=True).items():
+        setattr(account, field, value)
+    await db.commit()
+    await db.refresh(account)
+    return _to_terra_response(account)
+
+
+@router.patch("/terra/{account_id}/api-key", status_code=status.HTTP_204_NO_CONTENT)
+async def update_terra_api_key(account_id: UUID, body: TerraApiKeyUpdate, current_user: CurrentUser, db: DB):
+    account = await _get_terra_account(account_id, current_user.id, db)
+    account.api_key_enc = body.api_key.strip()
+    account.status_koneksi = "terhubung"
+    await db.commit()
+
+
+@router.delete("/terra/{account_id}/api-key", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_terra_api_key(account_id: UUID, current_user: CurrentUser, db: DB):
+    account = await _get_terra_account(account_id, current_user.id, db)
+    account.api_key_enc = None
+    await db.commit()
+
+
+@router.delete("/terra/{account_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_terra_account(account_id: UUID, current_user: CurrentUser, db: DB):
+    account = await _get_terra_account(account_id, current_user.id, db)
+    await db.delete(account)
+    await db.commit()
+
+
+# ===========================================================================
 # Helper privat
 # ===========================================================================
 
@@ -378,6 +447,26 @@ async def _get_adu_account(account_id: UUID, user_id, db: DB) -> AduAccount:
 
 def _to_adu_response(a: AduAccount) -> AduAccountResponse:
     return AduAccountResponse(
+        id=a.id,
+        nama_tampilan=a.nama_tampilan,
+        status_koneksi=a.status_koneksi,
+        has_api_key=bool(a.api_key_enc),
+        created_at=a.created_at,
+    )
+
+
+async def _get_terra_account(account_id: UUID, user_id, db: DB) -> TerraAccount:
+    result = await db.execute(
+        select(TerraAccount).where(TerraAccount.id == account_id, TerraAccount.user_id == user_id)
+    )
+    account = result.scalar_one_or_none()
+    if not account:
+        raise HTTPException(status_code=404, detail="Akun Terra tidak ditemukan.")
+    return account
+
+
+def _to_terra_response(a: TerraAccount) -> TerraAccountResponse:
+    return TerraAccountResponse(
         id=a.id,
         nama_tampilan=a.nama_tampilan,
         status_koneksi=a.status_koneksi,

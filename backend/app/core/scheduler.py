@@ -9,6 +9,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from app.core.meta_sync_worker import sync_all_active_accounts
 from app.core.adu_sync_worker import sync_all_active_accounts as sync_all_adu_accounts
+from app.core.terra_sync_worker import sync_all_active_accounts as sync_all_terra_accounts
 
 log = logging.getLogger(__name__)
 
@@ -43,6 +44,10 @@ async def _loop():
             await sync_all_adu_accounts(dari=kemarin, sampai=kemarin)
         except Exception as e:
             log.exception("auto-sync harian Adu gagal: %s", e)
+        try:
+            await sync_all_terra_accounts(dari=kemarin, sampai=kemarin)
+        except Exception as e:
+            log.exception("auto-sync harian Terra gagal: %s", e)
 
 
 def _seconds_until_next_run(hour: int, minute: int) -> float:
