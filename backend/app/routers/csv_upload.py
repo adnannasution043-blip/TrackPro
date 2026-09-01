@@ -118,16 +118,20 @@ async def upload_shopee_commission(
 
     for (tag, tanggal), group in grouped.items():
         try:
-            tag_link = await _get_or_create_tag_link(tag, shopee_account_id, db)
-            selesai = sum(1 for r in group if r.status == "completed")
-            # pending dan unpaid digabung ke tertunda (skema tidak pisahkan keduanya)
-            tertunda = sum(1 for r in group if r.status in ("pending", "unpaid"))
-            batal = sum(1 for r in group if r.status == "cancelled")
-            commission = sum(r.commission_idr for r in group)
-            sales = sum(r.sales_idr for r in group)
-            await _upsert_commission_metric(
-                tag_link.id, tanggal, selesai, tertunda, batal, commission, sales, db
-            )
+            # SAVEPOINT per grup — kalau satu grup gagal (mis. constraint DB),
+            # transaksi utama tidak ikut ke status aborted sehingga grup
+            # berikutnya (dan flush snapshot di bawah) tetap bisa jalan.
+            async with db.begin_nested():
+                tag_link = await _get_or_create_tag_link(tag, shopee_account_id, db)
+                selesai = sum(1 for r in group if r.status == "completed")
+                # pending dan unpaid digabung ke tertunda (skema tidak pisahkan keduanya)
+                tertunda = sum(1 for r in group if r.status in ("pending", "unpaid"))
+                batal = sum(1 for r in group if r.status == "cancelled")
+                commission = sum(r.commission_idr for r in group)
+                sales = sum(r.sales_idr for r in group)
+                await _upsert_commission_metric(
+                    tag_link.id, tanggal, selesai, tertunda, batal, commission, sales, db
+                )
             ok += len(group)
         except Exception:
             fail += len(group)
@@ -136,24 +140,25 @@ async def upload_shopee_commission(
     # Order snapshots — append-only per order_id
     for row in rows:
         try:
-            tag_link = await _get_or_create_tag_link(row.tag, shopee_account_id, db)
-            snapshot = OrderSnapshot(
-                shopee_account_id=shopee_account_id,
-                order_id=row.order_id,
-                tanggal_snapshot=row.tanggal_order,
-                status=row.status,
-                commission_from_idr=None,
-                commission_to_idr=row.commission_idr,
-                nama_produk=row.nama_produk,
-                nama_toko=row.nama_toko,
-                qty=row.qty,
-                sales_idr=row.sales_idr,
-            )
-            db.add(snapshot)
+            async with db.begin_nested():
+                tag_link = await _get_or_create_tag_link(row.tag, shopee_account_id, db)
+                snapshot = OrderSnapshot(
+                    shopee_account_id=shopee_account_id,
+                    order_id=row.order_id,
+                    tanggal_snapshot=row.tanggal_order,
+                    status=row.status,
+                    commission_from_idr=None,
+                    commission_to_idr=row.commission_idr,
+                    nama_produk=row.nama_produk,
+                    nama_toko=row.nama_toko,
+                    qty=row.qty,
+                    sales_idr=row.sales_idr,
+                )
+                db.add(snapshot)
+                await db.flush()
         except Exception:
             pass
 
-    await db.flush()
     return await _finish_import(import_log, ok, fail, db)
 
 
@@ -244,16 +249,18 @@ async def upload_shopee_click(
 
     for (tag, tanggal), total_clicks in grouped.items():
         try:
-            tag_link = await _get_or_create_tag_link(tag, shopee_account_id, db)
-            await _upsert_click_metric(tag_link.id, tanggal, total_clicks, db)
+            async with db.begin_nested():
+                tag_link = await _get_or_create_tag_link(tag, shopee_account_id, db)
+                await _upsert_click_metric(tag_link.id, tanggal, total_clicks, db)
             ok += 1
         except Exception:
             fail += 1
 
     for (tag, tanggal, sumber), clicks in grouped_src.items():
         try:
-            tag_link = await _get_or_create_tag_link(tag, shopee_account_id, db)
-            await _upsert_click_by_source(tag_link.id, tanggal, sumber, clicks, db)
+            async with db.begin_nested():
+                tag_link = await _get_or_create_tag_link(tag, shopee_account_id, db)
+                await _upsert_click_by_source(tag_link.id, tanggal, sumber, clicks, db)
         except Exception:
             pass
 
