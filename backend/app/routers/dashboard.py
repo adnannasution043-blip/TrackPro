@@ -522,17 +522,46 @@ async def get_laporan_harian2(
             Decimal("0"),
         )
 
+    # Tag_link1 kosong di CSV Shopee di-fallback jadi literal "non-meta" oleh
+    # csv_parser._get_or_create_tag_link — order organic yang tidak ditag sama
+    # sekali. Nilainya harus masuk hitungan Feed (Organic), BUKAN Meta — meski
+    # secara substring "non-meta" mengandung kata "meta".
+    _TAG_BLANK = "non-meta"
+
+    def _sum_feed_or_blank():
+        """Sum komisi dari tag 'feed' (bukan IG) ATAU tag kosong (non-meta)."""
+        return sa.func.coalesce(
+            sa.func.sum(
+                sa.case(
+                    (
+                        sa.and_(
+                            sa.or_(
+                                TagLink.tag.ilike("%feed%"),
+                                TagLink.tag.ilike(_TAG_BLANK),
+                            ),
+                            ~TagLink.tag.ilike("%ig%"),
+                        ),
+                        DailyMetric.commission_idr,
+                    ),
+                    else_=sa.literal(Decimal("0")),
+                )
+            ),
+            Decimal("0"),
+        )
+
     # Meta Pribadi: tag berformat "meta+namaOrang" tanpa spasi, contoh METAPRAS, METASANT
     _PRIBADI_PATTERN = r'^meta[a-zA-Z]+$'
 
     def _sum_meta_generic():
-        """Tag mengandung 'meta' tapi BUKAN pola meta+nama (e.g. bukan METAPRAS)."""
+        """Tag mengandung 'meta' tapi BUKAN pola meta+nama (e.g. bukan METAPRAS)
+        dan BUKAN tag kosong ("non-meta")."""
         return sa.func.coalesce(
             sa.func.sum(
                 sa.case(
                     (
                         sa.and_(
                             TagLink.tag.ilike("%meta%"),
+                            ~TagLink.tag.ilike(_TAG_BLANK),
                             TagLink.tag.op("!~*")(_PRIBADI_PATTERN),
                         ),
                         DailyMetric.commission_idr,
@@ -562,7 +591,7 @@ async def get_laporan_harian2(
         sa.select(
             DailyMetric.tanggal,
             _sum_excl("story", "ig").label("komisi_story"),
-            _sum_excl("feed",  "ig").label("komisi_feed"),
+            _sum_feed_or_blank().label("komisi_feed"),
             _sum_and("story", "ig").label("komisi_story_ig"),
             _sum_and("feed",  "ig").label("komisi_feed_ig"),
             _sum_meta_generic().label("komisi_meta"),
