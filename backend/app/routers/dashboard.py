@@ -20,7 +20,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import DB, CurrentUser
-from app.models.account import MetaAccount, ShopeeAccount
+from app.models.account import AccountLink, MetaAccount, ShopeeAccount
 from app.models.campaign import Campaign, CampaignTagMap, TagLink
 from app.models.campaign_note import CampaignNote
 from app.models.metrics import DailyMetric, MetaBreakdown, OrderSnapshot
@@ -46,7 +46,7 @@ async def get_dashboard(
     meta_account_id: UUID | None = Query(None),
     shopee_account_id: UUID | None = Query(None),
 ):
-    meta_rows = await _query_meta(db, current_user.id, tanggal_dari, tanggal_sampai, meta_account_id)
+    meta_rows = await _query_meta(db, current_user.id, tanggal_dari, tanggal_sampai, meta_account_id, shopee_account_id)
     shopee_rows = await _query_shopee(db, current_user.id, tanggal_dari, tanggal_sampai, shopee_account_id)
     komisi_nonmeta = await _query_nonmeta_commission(db, current_user.id, tanggal_dari, tanggal_sampai, shopee_account_id)
 
@@ -614,7 +614,9 @@ async def get_laporan_harian2(
 
     rows = (await db.execute(q)).all()
 
-    # Budget Meta: total spend Meta Ads (spend_idr) per tanggal
+    # Budget Meta: total spend Meta Ads (spend_idr) per tanggal — kalau
+    # filter di-set ke satu akun Shopee, scope ke akun Meta yang terhubung
+    # (account_links) ke Shopee itu saja, bukan semua akun Meta milik user.
     q_bm = (
         sa.select(
             DailyMetric.tanggal,
@@ -629,6 +631,8 @@ async def get_laporan_harian2(
         )
         .group_by(DailyMetric.tanggal)
     )
+    if shopee_account_id:
+        q_bm = q_bm.where(Campaign.meta_account_id.in_(_linked_meta_ids_subquery(shopee_account_id)))
     budget_meta_map = {r.tanggal: r.budget for r in (await db.execute(q_bm)).all()}
 
     # Budget Adu: sum budget_rupiah dari adu_placements
@@ -897,7 +901,19 @@ async def update_campaign_jenis_iklan(
 # Query helpers
 # ---------------------------------------------------------------------------
 
-async def _query_meta(db: AsyncSession, user_id, dari: date, sampai: date, meta_account_id=None):
+def _linked_meta_ids_subquery(shopee_account_id: UUID):
+    """Subquery meta_account_id yang terhubung (account_links) ke satu akun
+    Shopee — dipakai buat nge-scope biaya/budget Meta pas filter di-set ke
+    akun Shopee tertentu, bukan cuma nge-scope komisinya doang."""
+    return sa.select(AccountLink.meta_account_id).where(
+        AccountLink.shopee_account_id == shopee_account_id
+    ).scalar_subquery()
+
+
+async def _query_meta(
+    db: AsyncSession, user_id, dari: date, sampai: date,
+    meta_account_id=None, shopee_account_id=None,
+):
     q = (
         sa.select(
             DailyMetric.tanggal,
@@ -916,6 +932,8 @@ async def _query_meta(db: AsyncSession, user_id, dari: date, sampai: date, meta_
     )
     if meta_account_id:
         q = q.where(Campaign.meta_account_id == meta_account_id)
+    elif shopee_account_id:
+        q = q.where(Campaign.meta_account_id.in_(_linked_meta_ids_subquery(shopee_account_id)))
     return (await db.execute(q)).all()
 
 
