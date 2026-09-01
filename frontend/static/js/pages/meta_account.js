@@ -309,49 +309,124 @@ export class MetaAccountPage {
   }
 
   _render(el) {
-    const { meta_accounts, shopee_unlinked, shopee_all } = this._tree;
-
-    // Opsi dropdown per kartu Meta: SEMUA akun Shopee dikurangi yang sudah
-    // terhubung ke kartu Meta itu SENDIRI — bukan dikurangi semua yang
-    // sudah ke-link ke akun Meta manapun. Satu akun Shopee memang boleh
-    // terhubung ke banyak akun Meta sekaligus (relasi many-to-many).
-    const allShopee = shopee_all || shopee_unlinked;
+    const { meta_accounts, shopee_all } = this._tree;
+    const allShopee = shopee_all || [];
 
     const metaCards = meta_accounts.length === 0
       ? `<div style="text-align:center;padding:32px;color:var(--text-muted);font-size:13px;">Belum ada akun Meta. Klik "+ Tambah Akun Meta" di atas.</div>`
-      : meta_accounts.map(m => {
-          const linkedIds = new Set(m.shopee_accounts.map(s => s.id));
-          const availableOptions = allShopee
-            .filter(s => !linkedIds.has(s.id))
-            .map(s => `<option value="${s.id}">${s.nama}</option>`)
+      : meta_accounts.map(m => this._renderMetaCard(m)).join('');
+
+    // Kartu per akun Shopee — dari sini satu akun Shopee bisa dihubungkan
+    // ke banyak akun Meta sekaligus (kebalikan dari kartu Meta di atas
+    // yang cuma nampilin ringkasan read-only).
+    const shopeeHeader = `<div style="font-size:11px;font-weight:700;color:var(--text-muted);margin:24px 0 10px;text-transform:uppercase;letter-spacing:0.5px;">
+      Akun Shopee Affiliate (${allShopee.length}) — hubungkan tiap akun ke satu atau banyak akun Meta
+    </div>`;
+
+    const shopeeCards = allShopee.length === 0
+      ? `<div style="text-align:center;padding:24px;color:var(--text-muted);font-size:13px;border:1px solid var(--border);border-radius:8px;">Belum ada akun Shopee. Klik "+ Tambah Akun Shopee" di atas.</div>`
+      : allShopee.map(s => {
+          const connected = meta_accounts.filter(m => m.shopee_accounts.some(x => x.id === s.id));
+          const connectedIds = new Set(connected.map(m => m.id));
+          const availableOptions = meta_accounts
+            .filter(m => !connectedIds.has(m.id))
+            .map(m => `<option value="${m.id}">${m.nama}</option>`)
             .join('');
-          return this._renderMetaCard(m, availableOptions);
+          return this._renderShopeeCard(s, connected, availableOptions);
         }).join('');
 
-    const unlinkedSection = shopee_unlinked.length > 0
-      ? `<div style="font-size:11px;font-weight:700;color:var(--text-muted);margin:20px 0 10px;text-transform:uppercase;letter-spacing:0.5px;">
-           Akun Shopee Belum Terhubung (${shopee_unlinked.length})
-         </div>
-         <div style="display:flex;flex-direction:column;gap:8px;">
-           ${shopee_unlinked.map(s => `
-             <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--surface);">
-               <div style="width:32px;height:32px;background:#f0fdf4;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:16px;">🛒</div>
-               <div>
-                 <div style="font-size:13px;font-weight:600;">${s.nama}</div>
-                 <div style="font-size:11.5px;color:var(--text-muted);">Belum dihubungkan ke akun Meta</div>
-               </div>
-             </div>
-           `).join('')}
-         </div>`
-      : '';
-
-    el.innerHTML = `<div id="tree-content">${metaCards}${unlinkedSection}</div>`;
-    this._bindTreeEvents(el);
+    el.innerHTML = `<div id="tree-content">${metaCards}</div>${shopeeHeader}<div id="shopee-tree-content">${shopeeCards}</div>`;
+    this._bindShopeeTreeEvents(el);
     this._bindTokenEvents(el);
     this._bindSyncEvents(el);
   }
 
-  _renderMetaCard(m, unlinkedOptions) {
+  _renderShopeeCard(s, connected, availableOptions) {
+    const metaRows = connected.length === 0
+      ? `<div style="font-size:12px;color:var(--text-muted);padding:8px 0;">Belum ada akun Meta terhubung.</div>`
+      : connected.map(m => `
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:6px;margin-bottom:6px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div style="width:26px;height:26px;background:#fef3c7;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:13px;">📊</div>
+              <span style="font-size:13px;font-weight:500;">${m.nama}</span>
+              <span style="font-size:11px;color:var(--text-muted);">ID: ${m.account_id}</span>
+            </div>
+            <button class="btn btn-sm" style="font-size:11px;color:#dc2626;border-color:#dc2626;"
+              data-shopee-unlink-meta="${m.id}" data-shopee-unlink-shopee="${s.id}">Lepas</button>
+          </div>
+        `).join('');
+
+    const linkRow = availableOptions
+      ? `<div style="display:flex;gap:8px;align-items:center;margin-top:10px;">
+           <select class="form-select" id="sel-shopee-link-${s.id}" style="flex:1;font-size:12px;">
+             <option value="">Pilih akun Meta…</option>
+             ${availableOptions}
+           </select>
+           <button class="btn btn-primary btn-sm" data-shopee-link="${s.id}" style="white-space:nowrap;">Hubungkan</button>
+         </div>`
+      : `<div style="font-size:11.5px;color:var(--text-muted);margin-top:8px;">Semua akun Meta sudah terhubung.</div>`;
+
+    return `
+      <div class="card" style="margin-bottom:12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="width:36px;height:36px;background:#f0fdf4;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;">🛒</div>
+            <div>
+              <div style="font-size:14px;font-weight:700;">${s.nama}</div>
+              <div style="font-size:11.5px;color:var(--text-muted);">Akun Shopee Affiliate</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="border-top:1px solid var(--border);padding-top:12px;">
+          <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">
+            Meta terhubung (${connected.length})
+          </div>
+          ${metaRows}
+          ${linkRow}
+        </div>
+      </div>
+    `;
+  }
+
+  _bindShopeeTreeEvents(el) {
+    el.querySelectorAll('[data-shopee-unlink-meta]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const metaId = btn.dataset.shopeeUnlinkMeta;
+        const shopeeId = btn.dataset.shopeeUnlinkShopee;
+        btn.disabled = true;
+        try {
+          await apiFetch(`/accounts/meta/${metaId}/links/${shopeeId}`, { method: 'DELETE' });
+          await this._load();
+        } catch (e) {
+          alert(e.message);
+          btn.disabled = false;
+        }
+      });
+    });
+
+    el.querySelectorAll('[data-shopee-link]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const shopeeId = btn.dataset.shopeeLink;
+        const sel = el.querySelector(`#sel-shopee-link-${shopeeId}`);
+        const metaId = sel?.value;
+        if (!metaId) return;
+        btn.disabled = true;
+        try {
+          await apiFetch(`/accounts/meta/${metaId}/links`, {
+            method: 'POST',
+            body: JSON.stringify({ shopee_account_id: shopeeId }),
+          });
+          await this._load();
+        } catch (e) {
+          alert(e.message);
+          btn.disabled = false;
+        }
+      });
+    });
+  }
+
+  _renderMetaCard(m) {
     const info = this._metaInfo[m.id] || {};
     const hasToken = info.has_token || false;
     const expiresAt = info.token_expires_at;
@@ -376,28 +451,12 @@ export class MetaAccountPage {
       tokenBadge = `<span class="badge badge-yellow">Belum Ada Token</span>`;
     }
 
-    const shopeeRows = m.shopee_accounts.length === 0
-      ? `<div style="font-size:12px;color:var(--text-muted);padding:8px 0;">Belum ada akun Shopee terhubung.</div>`
-      : m.shopee_accounts.map(s => `
-          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:6px;margin-bottom:6px;">
-            <div style="display:flex;align-items:center;gap:8px;">
-              <div style="width:26px;height:26px;background:#f0fdf4;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:13px;">🛒</div>
-              <span style="font-size:13px;font-weight:500;">${s.nama}</span>
-            </div>
-            <button class="btn btn-sm" style="font-size:11px;color:#dc2626;border-color:#dc2626;"
-              data-unlink-meta="${m.id}" data-unlink-shopee="${s.id}">Lepas</button>
-          </div>
-        `).join('');
-
-    const linkRow = unlinkedOptions
-      ? `<div style="display:flex;gap:8px;align-items:center;margin-top:10px;">
-           <select class="form-select" id="sel-link-${m.id}" style="flex:1;font-size:12px;">
-             <option value="">Pilih akun Shopee…</option>
-             ${unlinkedOptions}
-           </select>
-           <button class="btn btn-primary btn-sm" data-link-meta="${m.id}" style="white-space:nowrap;">Hubungkan</button>
-         </div>`
-      : `<div style="font-size:11.5px;color:var(--text-muted);margin-top:8px;">Semua akun Shopee sudah terhubung.</div>`;
+    // Ringkasan read-only — pengelolaan koneksi (hubung/lepas) dipindah ke
+    // kartu "Akun Shopee Affiliate" di bawah, supaya satu akun Shopee bisa
+    // dihubungkan ke banyak akun Meta dari satu tempat yang sama.
+    const shopeeSummary = m.shopee_accounts.length === 0
+      ? `Belum ada akun Shopee terhubung.`
+      : m.shopee_accounts.map(s => s.nama).join(', ');
 
     const today = new Date().toISOString().slice(0, 10);
     const firstDay = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
@@ -477,13 +536,12 @@ export class MetaAccountPage {
           </div>
         </div>
 
-        <!-- Shopee links -->
+        <!-- Shopee links (read-only, kelola di kartu Akun Shopee Affiliate) -->
         <div style="border-top:1px solid var(--border);padding-top:12px;">
           <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">
             Shopee terhubung (${m.shopee_accounts.length})
           </div>
-          ${shopeeRows}
-          ${linkRow}
+          <div style="font-size:12.5px;color:var(--text);">${shopeeSummary}</div>
         </div>
       </div>
     `;
@@ -631,43 +689,6 @@ export class MetaAccountPage {
         `).join('')}
       `;
     } catch (_) {}
-  }
-
-  _bindTreeEvents(el) {
-    el.querySelectorAll('[data-unlink-meta]').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const metaId = btn.dataset.unlinkMeta;
-        const shopeeId = btn.dataset.unlinkShopee;
-        btn.disabled = true;
-        try {
-          await apiFetch(`/accounts/meta/${metaId}/links/${shopeeId}`, { method: 'DELETE' });
-          await this._load();
-        } catch (e) {
-          alert(e.message);
-          btn.disabled = false;
-        }
-      });
-    });
-
-    el.querySelectorAll('[data-link-meta]').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const metaId = btn.dataset.linkMeta;
-        const sel = el.querySelector(`#sel-link-${metaId}`);
-        const shopeeId = sel?.value;
-        if (!shopeeId) return;
-        btn.disabled = true;
-        try {
-          await apiFetch(`/accounts/meta/${metaId}/links`, {
-            method: 'POST',
-            body: JSON.stringify({ shopee_account_id: shopeeId }),
-          });
-          await this._load();
-        } catch (e) {
-          alert(e.message);
-          btn.disabled = false;
-        }
-      });
-    });
   }
 
   async _simpanMeta() {
