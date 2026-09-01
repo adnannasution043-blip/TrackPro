@@ -77,11 +77,30 @@ def _to_date(raw: str) -> date:
 
 def _read_rows(file_bytes: bytes) -> Iterable[dict]:
     text = file_bytes.decode("utf-8-sig")  # utf-8-sig untuk handle BOM dari Excel
-    reader = csv.DictReader(io.StringIO(text))
+    if not text.strip():
+        raise CsvParseError("File CSV kosong atau tidak punya header.")
+
+    # Excel di regional Windows Indonesia nyimpen ".csv" pakai titik-koma
+    # (karena koma dipakai sebagai pemisah desimal), bukan koma asli. Deteksi
+    # dari baris header supaya file hasil "Save As" dari Excel tetap kebaca.
+    first_line = text.split("\n", 1)[0]
+    delimiter = ";" if first_line.count(";") > first_line.count(",") else ","
+
+    reader = csv.DictReader(io.StringIO(text), delimiter=delimiter)
     if reader.fieldnames is None:
         raise CsvParseError("File CSV kosong atau tidak punya header.")
-    for row in reader:
-        yield {(k or "").strip(): (v or "").strip() for k, v in row.items()}
+    n_cols = len(reader.fieldnames)
+    for i, row in enumerate(reader, start=2):
+        # Baris dengan jumlah kolom tidak sesuai header (mis. ada delimiter
+        # nyasar di dalam data) masuk sebagai list di key None oleh
+        # DictReader — lewati field itu daripada nge-crash di .strip().
+        if None in row:
+            raise CsvParseError(
+                f"Baris {i}: jumlah kolom lebih dari header ({n_cols} kolom). "
+                f"Kemungkinan file rusak saat di-save ulang lewat Excel — coba export ulang "
+                f"langsung dari Shopee Affiliate, jangan lewat Excel dulu."
+            )
+        yield {(k or "").strip(): (v or "").strip() for k, v in row.items() if v is not None}
 
 
 # ---------------------------------------------------------------------------
