@@ -171,7 +171,7 @@ export class UploadPage {
 
         <!-- input tersembunyi untuk slot & pembeda (tetap fungsional) -->
         <select id="sel-slot" style="display:none">
-          <option value="2" selected>Slot 2 / Tag_link2</option>
+          <option value="1" selected>Slot 1 / Tag_link1</option>
         </select>
         <select id="sel-pembeda" style="display:none">
           <option value="campaign" selected>Nama Campaign</option>
