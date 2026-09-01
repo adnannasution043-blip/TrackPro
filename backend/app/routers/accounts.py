@@ -122,8 +122,9 @@ async def get_accounts_tree(current_user: CurrentUser, db: DB):
         for s in all_shopee
         if s.id not in linked_ids
     ]
+    shopee_all = [{"id": s.id, "nama": s.nama_akun} for s in all_shopee]
 
-    return {"meta_accounts": meta_with_shopee, "shopee_unlinked": unlinked}
+    return {"meta_accounts": meta_with_shopee, "shopee_unlinked": unlinked, "shopee_all": shopee_all}
 
 
 # ===========================================================================

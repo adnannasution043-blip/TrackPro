@@ -153,3 +153,7 @@ class MetaWithShopee(BaseModel):
 class AccountsTree(BaseModel):
     meta_accounts: list[MetaWithShopee]
     shopee_unlinked: list[ShopeeLinked]
+    shopee_all: list[ShopeeLinked]  # seluruh akun Shopee milik user, dipakai frontend
+    # untuk nawarin opsi "hubungkan" per kartu Meta (satu akun Shopee boleh
+    # terhubung ke banyak akun Meta sekaligus, jadi TIDAK boleh difilter
+    # cuma yang belum ke-link ke akun manapun)

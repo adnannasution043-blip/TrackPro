@@ -3,7 +3,7 @@ import { apiFetch } from '../api.js';
 export class MetaAccountPage {
   constructor(container) {
     this.container = container;
-    this._tree = { meta_accounts: [], shopee_unlinked: [] };
+    this._tree = { meta_accounts: [], shopee_unlinked: [], shopee_all: [] };
     this._metaInfo = {}; // id → { has_token, token_expires_at, status_koneksi }
     this._aduAccounts = [];
     this._terraAccounts = [];
@@ -293,7 +293,7 @@ export class MetaAccountPage {
         apiFetch('/accounts/adu'),
         apiFetch('/accounts/terra'),
       ]);
-      this._tree = tree || { meta_accounts: [], shopee_unlinked: [] };
+      this._tree = tree || { meta_accounts: [], shopee_unlinked: [], shopee_all: [] };
       this._metaInfo = {};
       for (const m of (metaList || [])) {
         this._metaInfo[m.id] = m;
@@ -309,15 +309,24 @@ export class MetaAccountPage {
   }
 
   _render(el) {
-    const { meta_accounts, shopee_unlinked } = this._tree;
+    const { meta_accounts, shopee_unlinked, shopee_all } = this._tree;
 
-    const unlinkedOptions = shopee_unlinked.map(s =>
-      `<option value="${s.id}">${s.nama}</option>`
-    ).join('');
+    // Opsi dropdown per kartu Meta: SEMUA akun Shopee dikurangi yang sudah
+    // terhubung ke kartu Meta itu SENDIRI — bukan dikurangi semua yang
+    // sudah ke-link ke akun Meta manapun. Satu akun Shopee memang boleh
+    // terhubung ke banyak akun Meta sekaligus (relasi many-to-many).
+    const allShopee = shopee_all || shopee_unlinked;
 
     const metaCards = meta_accounts.length === 0
       ? `<div style="text-align:center;padding:32px;color:var(--text-muted);font-size:13px;">Belum ada akun Meta. Klik "+ Tambah Akun Meta" di atas.</div>`
-      : meta_accounts.map(m => this._renderMetaCard(m, unlinkedOptions)).join('');
+      : meta_accounts.map(m => {
+          const linkedIds = new Set(m.shopee_accounts.map(s => s.id));
+          const availableOptions = allShopee
+            .filter(s => !linkedIds.has(s.id))
+            .map(s => `<option value="${s.id}">${s.nama}</option>`)
+            .join('');
+          return this._renderMetaCard(m, availableOptions);
+        }).join('');
 
     const unlinkedSection = shopee_unlinked.length > 0
       ? `<div style="font-size:11px;font-weight:700;color:var(--text-muted);margin:20px 0 10px;text-transform:uppercase;letter-spacing:0.5px;">
