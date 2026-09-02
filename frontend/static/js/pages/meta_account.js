@@ -402,6 +402,7 @@ export class MetaAccountPage {
               <div style="font-size:11.5px;color:var(--text-muted);">Akun Shopee Affiliate</div>
             </div>
           </div>
+          <button class="btn btn-sm" style="color:#dc2626;border-color:#dc2626;" data-delete-shopee="${s.id}">Hapus</button>
         </div>
 
         <div style="border-top:1px solid var(--border);padding-top:12px;">
@@ -416,6 +417,21 @@ export class MetaAccountPage {
   }
 
   _bindShopeeTreeEvents(el) {
+    el.querySelectorAll('[data-delete-shopee]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.deleteShopee;
+        if (!confirm('Hapus akun Shopee ini beserta seluruh data komisi, klik, dan koneksi Meta-nya?')) return;
+        btn.disabled = true;
+        try {
+          await apiFetch(`/accounts/shopee/${id}`, { method: 'DELETE' });
+          await this._load();
+        } catch (e) {
+          alert(e.message);
+          btn.disabled = false;
+        }
+      });
+    });
+
     el.querySelectorAll('[data-shopee-unlink-meta]').forEach(btn => {
       btn.addEventListener('click', async () => {
         const metaId = btn.dataset.shopeeUnlinkMeta;
