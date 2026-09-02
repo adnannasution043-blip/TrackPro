@@ -7,6 +7,7 @@ export class MetaAccountPage {
     this._metaInfo = {}; // id → { has_token, token_expires_at, status_koneksi }
     this._aduAccounts = [];
     this._terraAccounts = [];
+    this._metaSectionOpen = false; // kartu akun Meta di-collapse default, dibuka manual kalau perlu
   }
 
   async render() {
@@ -316,6 +317,22 @@ export class MetaAccountPage {
       ? `<div style="text-align:center;padding:32px;color:var(--text-muted);font-size:13px;">Belum ada akun Meta. Klik "+ Tambah Akun Meta" di atas.</div>`
       : meta_accounts.map(m => this._renderMetaCard(m)).join('');
 
+    // Kartu akun Meta di-collapse jadi satu grup (token & sync jarang
+    // dipakai harian sejak pengelolaan koneksi pindah ke kartu Shopee di
+    // bawah) — dibuka manual kalau memang lagi butuh.
+    const metaOpen = this._metaSectionOpen;
+    const metaSection = `
+      <button id="toggle-meta-section"
+        style="width:100%;display:flex;align-items:center;justify-content:space-between;padding:10px 14px;
+               background:var(--bg);border:1px solid var(--border);border-radius:8px;cursor:pointer;
+               font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">
+        <span>Akun Meta Ads (${meta_accounts.length})</span>
+        <svg id="meta-section-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"
+          style="transition:transform 0.2s;transform:${metaOpen ? 'rotate(180deg)' : ''};"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div id="tree-content" style="display:${metaOpen ? 'block' : 'none'};margin-top:12px;">${metaCards}</div>
+    `;
+
     // Kartu per akun Shopee — dari sini satu akun Shopee bisa dihubungkan
     // ke banyak akun Meta sekaligus (kebalikan dari kartu Meta di atas
     // yang cuma nampilin ringkasan read-only).
@@ -335,7 +352,16 @@ export class MetaAccountPage {
           return this._renderShopeeCard(s, connected, availableOptions);
         }).join('');
 
-    el.innerHTML = `<div id="tree-content">${metaCards}</div>${shopeeHeader}<div id="shopee-tree-content">${shopeeCards}</div>`;
+    el.innerHTML = `${metaSection}${shopeeHeader}<div id="shopee-tree-content">${shopeeCards}</div>`;
+
+    el.querySelector('#toggle-meta-section')?.addEventListener('click', () => {
+      this._metaSectionOpen = !this._metaSectionOpen;
+      const panel = el.querySelector('#tree-content');
+      const chevron = el.querySelector('#meta-section-chevron');
+      panel.style.display = this._metaSectionOpen ? 'block' : 'none';
+      if (chevron) chevron.style.transform = this._metaSectionOpen ? 'rotate(180deg)' : '';
+    });
+
     this._bindShopeeTreeEvents(el);
     this._bindTokenEvents(el);
     this._bindSyncEvents(el);
