@@ -442,15 +442,15 @@ async function _initSidebarFilter() {
     let html = `<div style="padding:16px 16px 8px;font-size:14px;font-weight:700;color:var(--text);">Pilih Akun</div>`;
     html += opt('', '#fee2e2', icoGroup, 'Semua Akun', `${metaCount} akun Meta aktif`, '', !cur);
 
-    if (metaCount > 0) {
-      html += `<div style="padding:8px 16px 4px;font-size:10.5px;font-weight:700;letter-spacing:0.7px;color:#9ca3af;text-transform:uppercase;">Meta Ads</div>`;
-      for (const m of tree.meta_accounts)
-        html += opt(`meta:${m.id}`, '#eff6ff', icoMeta, m.nama, m.account_id, bdg('Meta', '#eff6ff', '#3b82f6'), cur === `meta:${m.id}`);
-    }
     if (allShopees.length > 0) {
       html += `<div style="padding:8px 16px 4px;font-size:10.5px;font-weight:700;letter-spacing:0.7px;color:#9ca3af;text-transform:uppercase;">Shopee Affiliate</div>`;
       for (const s of allShopees)
         html += opt(`shopee:${s.id}`, '#fff7ed', icoShopee, s.nama, s.unlinked ? 'Belum terhubung' : `${s.metaCount} Meta terkait`, bdg('Shopee', '#fff7ed', '#f97316'), cur === `shopee:${s.id}`);
+    }
+    if (metaCount > 0) {
+      html += `<div style="padding:8px 16px 4px;font-size:10.5px;font-weight:700;letter-spacing:0.7px;color:#9ca3af;text-transform:uppercase;">Meta Ads</div>`;
+      for (const m of tree.meta_accounts)
+        html += opt(`meta:${m.id}`, '#eff6ff', icoMeta, m.nama, m.account_id, bdg('Meta', '#eff6ff', '#3b82f6'), cur === `meta:${m.id}`);
     }
     panel.innerHTML = html;
 
