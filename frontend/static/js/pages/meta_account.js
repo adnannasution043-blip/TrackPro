@@ -345,11 +345,8 @@ export class MetaAccountPage {
       : allShopee.map(s => {
           const connected = meta_accounts.filter(m => m.shopee_accounts.some(x => x.id === s.id));
           const connectedIds = new Set(connected.map(m => m.id));
-          const availableOptions = meta_accounts
-            .filter(m => !connectedIds.has(m.id))
-            .map(m => `<option value="${m.id}">${m.nama}</option>`)
-            .join('');
-          return this._renderShopeeCard(s, connected, availableOptions);
+          const availableMeta = meta_accounts.filter(m => !connectedIds.has(m.id));
+          return this._renderShopeeCard(s, connected, availableMeta);
         }).join('');
 
     el.innerHTML = `${metaSection}${shopeeHeader}<div id="shopee-tree-content">${shopeeCards}</div>`;
@@ -363,11 +360,12 @@ export class MetaAccountPage {
     });
 
     this._bindShopeeTreeEvents(el);
+    this._bindComboboxes(el);
     this._bindTokenEvents(el);
     this._bindSyncEvents(el);
   }
 
-  _renderShopeeCard(s, connected, availableOptions) {
+  _renderShopeeCard(s, connected, availableMeta) {
     const metaRows = connected.length === 0
       ? `<div style="font-size:12px;color:var(--text-muted);padding:8px 0;">Belum ada akun Meta terhubung.</div>`
       : connected.map(m => `
@@ -382,12 +380,25 @@ export class MetaAccountPage {
           </div>
         `).join('');
 
-    const linkRow = availableOptions
-      ? `<div style="display:flex;gap:8px;align-items:center;margin-top:10px;">
-           <select class="form-select" id="sel-shopee-link-${s.id}" style="flex:1;font-size:12px;">
-             <option value="">Pilih akun Meta…</option>
-             ${availableOptions}
-           </select>
+    const linkRow = availableMeta.length > 0
+      ? `<div style="display:flex;gap:8px;align-items:flex-start;margin-top:10px;">
+           <div style="flex:1;position:relative;">
+             <input type="text" class="form-input" id="combo-input-${s.id}" placeholder="Pilih akun Meta…"
+               autocomplete="off" style="font-size:12px;width:100%;">
+             <input type="hidden" id="combo-value-${s.id}">
+             <div id="combo-list-${s.id}" data-combo-list="${s.id}"
+               style="display:none;position:absolute;top:100%;left:0;right:0;margin-top:4px;background:var(--surface,#fff);
+                      border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.14);
+                      max-height:240px;overflow-y:auto;z-index:50;">
+               ${availableMeta.map(m => `
+                 <div class="combo-opt" data-val="${m.id}" data-label="${m.nama}"
+                   style="padding:8px 12px;cursor:pointer;font-size:12.5px;">
+                   ${m.nama} <span style="color:var(--text-muted);font-size:11px;">ID: ${m.account_id}</span>
+                 </div>
+               `).join('')}
+               <div class="combo-empty" style="display:none;padding:10px 12px;font-size:12px;color:var(--text-muted);">Tidak ada akun yang cocok.</div>
+             </div>
+           </div>
            <button class="btn btn-primary btn-sm" data-shopee-link="${s.id}" style="white-space:nowrap;">Hubungkan</button>
          </div>`
       : `<div style="font-size:11.5px;color:var(--text-muted);margin-top:8px;">Semua akun Meta sudah terhubung.</div>`;
@@ -450,9 +461,12 @@ export class MetaAccountPage {
     el.querySelectorAll('[data-shopee-link]').forEach(btn => {
       btn.addEventListener('click', async () => {
         const shopeeId = btn.dataset.shopeeLink;
-        const sel = el.querySelector(`#sel-shopee-link-${shopeeId}`);
-        const metaId = sel?.value;
-        if (!metaId) return;
+        const hidden = el.querySelector(`#combo-value-${shopeeId}`);
+        const metaId = hidden?.value;
+        if (!metaId) {
+          el.querySelector(`#combo-input-${shopeeId}`)?.focus();
+          return;
+        }
         btn.disabled = true;
         try {
           await apiFetch(`/accounts/meta/${metaId}/links`, {
@@ -464,6 +478,54 @@ export class MetaAccountPage {
           alert(e.message);
           btn.disabled = false;
         }
+      });
+    });
+  }
+
+  // Combobox "Pilih akun Meta…" dengan search — dipakai di kartu Shopee.
+  // Input teks + daftar filter di bawahnya, nilai terpilih disimpan di
+  // input hidden yang dibaca tombol "Hubungkan".
+  _bindComboboxes(el) {
+    el.querySelectorAll('[data-combo-list]').forEach(list => {
+      const id     = list.dataset.comboList;
+      const input  = el.querySelector(`#combo-input-${id}`);
+      const hidden = el.querySelector(`#combo-value-${id}`);
+      if (!input || !hidden) return;
+
+      const opts  = Array.from(list.querySelectorAll('.combo-opt'));
+      const empty = list.querySelector('.combo-empty');
+
+      const filterList = () => {
+        const q = input.value.trim().toLowerCase();
+        let anyVisible = false;
+        opts.forEach(o => {
+          const match = !q || o.dataset.label.toLowerCase().includes(q);
+          o.style.display = match ? 'block' : 'none';
+          if (match) anyVisible = true;
+        });
+        if (empty) empty.style.display = anyVisible ? 'none' : 'block';
+      };
+
+      input.addEventListener('focus', () => { filterList(); list.style.display = 'block'; });
+      input.addEventListener('input', () => {
+        hidden.value = '';
+        filterList();
+        list.style.display = 'block';
+      });
+      input.addEventListener('blur', () => {
+        setTimeout(() => { list.style.display = 'none'; }, 150);
+      });
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Escape') input.blur();
+      });
+
+      opts.forEach(o => {
+        o.addEventListener('mousedown', e => {
+          e.preventDefault(); // biar input gak keburu blur sebelum klik ke-handle
+          hidden.value = o.dataset.val;
+          input.value = o.dataset.label;
+          list.style.display = 'none';
+        });
       });
     });
   }
