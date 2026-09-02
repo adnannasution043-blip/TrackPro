@@ -151,6 +151,20 @@ export class LaporanHarian2Page {
     return c;
   }
 
+  // Total Kotor mengikuti tab yang aktif — cuma jumlahin kategori yang
+  // lagi ditampilkan (kolom komisi, bukan budget). Kalau "Semua" dipilih
+  // (semua kolom visible) hasilnya sama dengan total_kotor dari backend.
+  _kotorVisible(bd, c) {
+    let k = 0;
+    if (c.fp)          k += Number(bd.total_fp            || 0);
+    if (c.ig)          k += Number(bd.total_ig            || 0);
+    if (c.meta)        k += Number(bd.komisi_meta         || 0);
+    if (c.adu)         k += Number(bd.komisi_adu          || 0);
+    if (c.terra)       k += Number(bd.komisi_terra        || 0);
+    if (c.metaPribadi) k += Number(bd.komisi_meta_pribadi || 0);
+    return k;
+  }
+
   _render() {
     const wrap   = this.container.querySelector('#tbl-wrap');
     const pgWrap = this.container.querySelector('#pagination-wrap');
@@ -187,7 +201,7 @@ export class LaporanHarian2Page {
       tot.budgetTerra += Number(bd.budget_terra        || 0);
       tot.metaPribadi += Number(bd.komisi_meta_pribadi || 0);
       tot.iklan       += Number(bd.total_iklan         || 0);
-      tot.kotor       += Number(bd.total_kotor         || 0);
+      tot.kotor       += this._kotorVisible(bd, c);
     });
 
     const thBase   = 'padding:8px 10px;font-size:11px;font-weight:700;white-space:nowrap;text-transform:uppercase;letter-spacing:.4px;background:#f1f5f9;border-bottom:2px solid var(--border);';
@@ -241,7 +255,7 @@ export class LaporanHarian2Page {
       const budgetTerra = Number(bd.budget_terra        || 0);
       const metaPribadi = Number(bd.komisi_meta_pribadi || 0);
       const iklan       = Number(bd.total_iklan         || 0);
-      const kotor       = Number(bd.total_kotor         || 0);
+      const kotor       = this._kotorVisible(bd, c);
       const bgRow       = i % 2 === 0 ? '' : 'background:var(--bg-muted);';
       const tdBg        = i % 2 === 0 ? '#f8fafc' : 'var(--bg-muted)';
 
