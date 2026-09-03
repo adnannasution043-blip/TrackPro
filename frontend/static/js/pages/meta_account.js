@@ -1418,9 +1418,9 @@ export class MetaAccountPage {
       const overlay = document.createElement('div');
       overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;';
       overlay.innerHTML = `
-        <div style="background:var(--bg-card);border-radius:10px;padding:24px;width:400px;max-width:90vw;box-shadow:0 10px 40px rgba(0,0,0,0.2);">
+        <div style="background:#fff;border-radius:10px;padding:24px;width:400px;max-width:90vw;box-shadow:0 10px 40px rgba(0,0,0,0.3);">
           <h3 style="margin:0 0 10px;color:#dc2626;font-size:16px;">Konfirmasi Hapus</h3>
-          <p style="font-size:13.5px;color:var(--text-muted);margin:0 0 20px;">${message}</p>
+          <p style="font-size:13.5px;color:#6b7280;margin:0 0 20px;">${message}</p>
           <div style="display:flex;gap:10px;justify-content:flex-end;">
             <button id="confirm-cancel" class="btn">Batal</button>
             <button id="confirm-ok" class="btn" style="background:#dc2626;color:white;border-color:#dc2626;">${confirmLabel}</button>
