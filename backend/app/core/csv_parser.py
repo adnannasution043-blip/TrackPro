@@ -191,9 +191,10 @@ _COMMISSION_ALIAS: dict[str, list[str]] = {
 }
 
 # Kolom opsional — nama bervariasi tergantung bahasa Shopee Affiliate
-_PRODUK_COLS = ("Product Name", "Nama Produk", "Product", "Nama Barange", "Nama Barang")
-_TOKO_COLS   = ("Shop Name", "Seller Name", "Nama Toko", "Toko")
-_QTY_COLS    = ("Quantity", "Qty", "Jumlah")
+_PRODUK_COLS   = ("Product Name", "Nama Produk", "Product", "Nama Barange", "Nama Barang")
+_TOKO_COLS     = ("Shop Name", "Seller Name", "Nama Toko", "Toko")
+_QTY_COLS      = ("Quantity", "Qty", "Jumlah")
+_PLATFORM_COLS = ("Platform",)
 
 
 def _find_col(row: dict, candidates: tuple) -> str | None:
@@ -214,6 +215,7 @@ class ShopeeCommissionRow:
     nama_produk: str | None = None
     nama_toko: str | None = None
     qty: int = 1
+    platform: str | None = None  # kolom "Platform" — sumber traffic, mis. "ShopeeLive-Shopee"
 
 
 _STATUS_MAP = {
@@ -235,6 +237,12 @@ def _normalize_status(raw: str) -> str:
     if key not in _STATUS_MAP:
         raise CsvParseError(f"Status order tidak dikenali: {raw!r}")
     return _STATUS_MAP[key]
+
+
+def is_live_platform(platform: str | None) -> bool:
+    """Order dianggap dari Shopee Live kalau kolom Platform mengandung 'live'
+    (mis. "ShopeeLive-Shopee"), case-insensitive."""
+    return bool(platform) and "live" in platform.strip().lower()
 
 
 def parse_shopee_commission_csv(file_bytes: bytes, tag_slot: int = 1) -> list[ShopeeCommissionRow]:
@@ -280,6 +288,7 @@ def parse_shopee_commission_csv(file_bytes: bytes, tag_slot: int = 1) -> list[Sh
                     nama_produk=_find_col(row, _PRODUK_COLS),
                     nama_toko=_find_col(row, _TOKO_COLS),
                     qty=int(qty_raw) if qty_raw and qty_raw.isdigit() else 1,
+                    platform=_find_col(row, _PLATFORM_COLS),
                 )
             )
         except CsvParseError as exc:

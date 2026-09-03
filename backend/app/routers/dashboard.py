@@ -598,6 +598,7 @@ async def get_laporan_harian2(
             _sum_if("adu").label("komisi_adu"),
             _sum_if("terra").label("komisi_terra"),
             _sum_meta_pribadi().label("komisi_meta_pribadi"),
+            sa.func.coalesce(sa.func.sum(DailyMetric.commission_live_idr), Decimal("0")).label("komisi_live"),
         )
         .join(TagLink, DailyMetric.tag_link_id == TagLink.id)
         .join(ShopeeAccount, TagLink.shopee_account_id == ShopeeAccount.id)
@@ -679,6 +680,7 @@ async def get_laporan_harian2(
         adu          = (r.komisi_adu          or _ZERO) if r else _ZERO
         terra        = (r.komisi_terra        or _ZERO) if r else _ZERO
         meta_pribadi = (r.komisi_meta_pribadi or _ZERO) if r else _ZERO
+        live         = (r.komisi_live         or _ZERO) if r else _ZERO
         budget_meta  = budget_meta_map.get(tgl,  _ZERO)
         budget_adu   = budget_adu_map.get(tgl,   _ZERO)
         budget_terra = budget_terra_map.get(tgl, _ZERO)
@@ -701,6 +703,7 @@ async def get_laporan_harian2(
             "budget_terra":         float(budget_terra),
             "komisi_meta_pribadi":  float(meta_pribadi),
             "total_iklan":          float(total_iklan),
+            "komisi_live":          float(live),
             "total_kotor":          float(total_fp + total_ig + total_iklan),
         })
     return result

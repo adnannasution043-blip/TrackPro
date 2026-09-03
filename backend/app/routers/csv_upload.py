@@ -30,6 +30,7 @@ from app.core.csv_parser import (
     MetaBreakdownRow,
     ShopeeClickRow,
     ShopeeCommissionRow,
+    is_live_platform,
     parse_meta_ads_csv,
     parse_meta_breakdown_csv,
     parse_shopee_click_csv,
@@ -128,9 +129,10 @@ async def upload_shopee_commission(
                 tertunda = sum(1 for r in group if r.status in ("pending", "unpaid"))
                 batal = sum(1 for r in group if r.status == "cancelled")
                 commission = sum(r.commission_idr for r in group)
+                commission_live = sum(r.commission_idr for r in group if is_live_platform(r.platform))
                 sales = sum(r.sales_idr for r in group)
                 await _upsert_commission_metric(
-                    tag_link.id, tanggal, selesai, tertunda, batal, commission, sales, db
+                    tag_link.id, tanggal, selesai, tertunda, batal, commission, commission_live, sales, db
                 )
             ok += len(group)
         except Exception:
@@ -667,7 +669,7 @@ async def _upsert_meta_metric(
 
 async def _upsert_commission_metric(
     tag_link_id: UUID, tanggal: date,
-    selesai: int, tertunda: int, batal: int, commission_idr, sales_idr,
+    selesai: int, tertunda: int, batal: int, commission_idr, commission_live_idr, sales_idr,
     db: AsyncSession,
 ) -> None:
     stmt = pg_insert(DailyMetric).values(
@@ -677,6 +679,7 @@ async def _upsert_commission_metric(
         orders_tertunda=tertunda,
         orders_batal=batal,
         commission_idr=commission_idr,
+        commission_live_idr=commission_live_idr,
         sales_idr=sales_idr,
     )
     stmt = stmt.on_conflict_do_update(
@@ -687,6 +690,7 @@ async def _upsert_commission_metric(
             "orders_tertunda": stmt.excluded.orders_tertunda,
             "orders_batal": stmt.excluded.orders_batal,
             "commission_idr": stmt.excluded.commission_idr,
+            "commission_live_idr": stmt.excluded.commission_live_idr,
             "sales_idr": stmt.excluded.sales_idr,
         },
     )

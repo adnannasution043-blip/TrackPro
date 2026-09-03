@@ -23,6 +23,7 @@ class DailyMetric(Base):
     orders_tertunda: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     orders_batal: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     commission_idr: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False, server_default="0")
+    commission_live_idr: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False, server_default="0")
     sales_idr: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False, server_default="0")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

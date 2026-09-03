@@ -23,6 +23,7 @@ const FILTERS = [
   { key: 'adu',          label: 'Adu' },
   { key: 'terra',        label: 'Terra' },
   { key: 'meta_pribadi', label: 'Meta Pribadi' },
+  { key: 'live',         label: 'Live' },
 ];
 
 export class LaporanHarian2Page {
@@ -133,21 +134,27 @@ export class LaporanHarian2Page {
         if (f === 'adu')          return Number(bd.komisi_adu || 0) > 0 || Number(bd.budget_adu || 0) > 0;
         if (f === 'terra')        return Number(bd.komisi_terra || 0) > 0 || Number(bd.budget_terra || 0) > 0;
         if (f === 'meta_pribadi') return Number(bd.komisi_meta_pribadi || 0) > 0;
+        if (f === 'live')         return Number(bd.komisi_live || 0) > 0;
         return false;
       });
     });
   }
 
+  // "Live" dihitung dari kolom Platform (bukan dari tag link seperti kategori
+  // lain), jadi ordernya bisa tumpang tindih dengan FP/IG/Meta/Adu/Terra —
+  // sengaja TIDAK ikut default "Semua" biar TOTAL KOTOR "Semua" tidak dobel
+  // hitung. Live hanya muncul kalau tab-nya dipilih eksplisit.
   _getVisibleCols() {
     if (this._filters.size === 0) {
-      return { fp: true, ig: true, meta: true, adu: true, terra: true, metaPribadi: true };
+      return { fp: true, ig: true, meta: true, adu: true, terra: true, metaPribadi: true, live: false };
     }
-    const c = { fp: false, ig: false, meta: false, adu: false, terra: false, metaPribadi: false };
+    const c = { fp: false, ig: false, meta: false, adu: false, terra: false, metaPribadi: false, live: false };
     if (this._filters.has('organic'))      { c.fp = true; c.ig = true; }
     if (this._filters.has('meta'))           c.meta = true;
     if (this._filters.has('adu'))            c.adu = true;
     if (this._filters.has('terra'))          c.terra = true;
     if (this._filters.has('meta_pribadi'))   c.metaPribadi = true;
+    if (this._filters.has('live'))           c.live = true;
     return c;
   }
 
@@ -162,6 +169,7 @@ export class LaporanHarian2Page {
     if (c.adu)         k += Number(bd.komisi_adu          || 0);
     if (c.terra)       k += Number(bd.komisi_terra        || 0);
     if (c.metaPribadi) k += Number(bd.komisi_meta_pribadi || 0);
+    if (c.live)        k += Number(bd.komisi_live         || 0);
     return k;
   }
 
@@ -184,7 +192,7 @@ export class LaporanHarian2Page {
     const pageRows = rows.slice(startIdx, endIdx);
 
     // Aggregat totals (semua rows, bukan hanya halaman ini)
-    const tot = { story:0, feed:0, fp:0, storyIg:0, feedIg:0, ig:0, meta:0, budgetMeta:0, adu:0, budgetAdu:0, terra:0, budgetTerra:0, metaPribadi:0, iklan:0, kotor:0 };
+    const tot = { story:0, feed:0, fp:0, storyIg:0, feedIg:0, ig:0, meta:0, budgetMeta:0, adu:0, budgetAdu:0, terra:0, budgetTerra:0, metaPribadi:0, iklan:0, live:0, kotor:0 };
     rows.forEach(r => {
       const bd = this._bdMap[r.tanggal] || {};
       tot.story       += Number(bd.komisi_story        || 0);
@@ -201,6 +209,7 @@ export class LaporanHarian2Page {
       tot.budgetTerra += Number(bd.budget_terra        || 0);
       tot.metaPribadi += Number(bd.komisi_meta_pribadi || 0);
       tot.iklan       += Number(bd.total_iklan         || 0);
+      tot.live        += Number(bd.komisi_live         || 0);
       tot.kotor       += this._kotorVisible(bd, c);
     });
 
@@ -210,6 +219,7 @@ export class LaporanHarian2Page {
     const thIklan  = thBase + 'background:#fef2f2;color:#dc2626;';
     const thMeta   = thBase + 'background:#fff7ed;color:#c2410c;';
     const thBudget = thBase + 'background:#f8fafc;color:#64748b;font-style:italic;';
+    const thLive   = thBase + 'background:#fdf2f8;color:#db2777;';
 
     // colspan IKLAN: meta/adu/terra masing-masing 2 kolom (komisi + budget), meta_pribadi 1 kolom
     const iklanIndiv    = (c.meta ? 2 : 0) + (c.adu ? 2 : 0) + (c.terra ? 2 : 0) + (c.metaPribadi ? 1 : 0);
@@ -222,6 +232,7 @@ export class LaporanHarian2Page {
     const h1Fp    = c.fp      ? `<th colspan="3" style="${thFP}text-align:center;">KOMISI FP</th>` : '';
     const h1Ig    = c.ig      ? `<th colspan="3" style="${thIG}text-align:center;border-left:2px solid #bfdbfe;">KOMISI IG</th>` : '';
     const h1Iklan = hasIklan  ? `<th colspan="${iklanColspan}" style="${thIklan}text-align:center;border-left:2px solid #fecaca;">KOMISI IKLAN</th>` : '';
+    const h1Live  = c.live    ? `<th rowspan="2" style="${thLive}border-left:2px solid #fbcfe8;">KOMISI LIVE</th>` : '';
 
     // Header baris 2
     const h2Fp = c.fp ? `
@@ -255,6 +266,7 @@ export class LaporanHarian2Page {
       const budgetTerra = Number(bd.budget_terra        || 0);
       const metaPribadi = Number(bd.komisi_meta_pribadi || 0);
       const iklan       = Number(bd.total_iklan         || 0);
+      const live        = Number(bd.komisi_live         || 0);
       const kotor       = this._kotorVisible(bd, c);
       const bgRow       = i % 2 === 0 ? '' : 'background:var(--bg-muted);';
       const tdBg        = i % 2 === 0 ? '#f8fafc' : 'var(--bg-muted)';
@@ -274,6 +286,7 @@ export class LaporanHarian2Page {
       const tdIklan = hasIklan      ? `<td style="font-weight:700;color:#dc2626;background:#fef2f2;">${rp(Math.round(iklan))}</td>` : '';
       const rowTotalBudget = (c.meta ? budgetMeta : 0) + (c.adu ? budgetAdu : 0) + (c.terra ? budgetTerra : 0);
       const tdTotBudget = hasTotalBudget ? `<td style="font-weight:700;color:#64748b;font-style:italic;background:#f8fafc;">${rp(Math.round(rowTotalBudget))}</td>` : '';
+      const tdLive = c.live ? `<td style="font-weight:700;color:#db2777;background:#fdf2f8;border-left:2px solid #fbcfe8;">${rp(Math.round(live))}</td>` : '';
 
       return `<tr style="${bgRow}font-size:12.5px;">
         <td style="white-space:nowrap;padding:7px 10px;">
@@ -282,7 +295,7 @@ export class LaporanHarian2Page {
             ${fmtDate(r.tanggal)}
           </button>
         </td>
-        ${tdFp}${tdIg}${tdMeta}${tdAdu}${tdTerra}${tdPrib}${tdIklan}${tdTotBudget}
+        ${tdFp}${tdIg}${tdMeta}${tdAdu}${tdTerra}${tdPrib}${tdIklan}${tdTotBudget}${tdLive}
         <td style="font-weight:700;color:#10b981;border-left:2px solid #bbf7d0;">${rp(Math.round(kotor))}</td>
       </tr>`;
     }).join('');
@@ -297,13 +310,14 @@ export class LaporanHarian2Page {
     const tfIklan = hasIklan      ? `<td style="color:#dc2626;font-weight:800;">${rp(Math.round(tot.iklan))}</td>` : '';
     const totTotalBudget = (c.meta ? tot.budgetMeta : 0) + (c.adu ? tot.budgetAdu : 0) + (c.terra ? tot.budgetTerra : 0);
     const tfTotBudget = hasTotalBudget ? `<td style="color:#64748b;font-style:italic;font-weight:800;">${rp(Math.round(totTotalBudget))}</td>` : '';
+    const tfLive = c.live ? `<td style="color:#db2777;font-weight:800;">${rp(Math.round(tot.live))}</td>` : '';
 
     wrap.innerHTML = `
       <table class="data-table" style="font-size:12.5px;min-width:700px;border-collapse:collapse;">
         <thead>
           <tr style="background:#f8fafc;">
             <th rowspan="2" style="${thBase}min-width:80px;">TGL</th>
-            ${h1Fp}${h1Ig}${h1Iklan}
+            ${h1Fp}${h1Ig}${h1Iklan}${h1Live}
             <th rowspan="2" style="${thBase}background:#f0fdf4;color:#15803d;white-space:nowrap;border-left:2px solid #bbf7d0;">TOTAL KOTOR</th>
           </tr>
           <tr>${h2Fp}${h2Ig}${h2IklanMeta}${h2IklanAdu}${h2IklanTerra}${h2IklanPrib}${h2IklanTot}${h2TotBudget}</tr>
@@ -312,7 +326,7 @@ export class LaporanHarian2Page {
         <tfoot>
           <tr style="font-weight:700;background:var(--bg-muted);border-top:2px solid var(--border);font-size:12px;">
             <td style="font-weight:800;white-space:nowrap;padding:8px 10px;">TOTAL (${rows.length} hari)</td>
-            ${tfFp}${tfIg}${tfMeta}${tfAdu}${tfTerra}${tfPrib}${tfIklan}${tfTotBudget}
+            ${tfFp}${tfIg}${tfMeta}${tfAdu}${tfTerra}${tfPrib}${tfIklan}${tfTotBudget}${tfLive}
             <td style="color:#10b981;font-weight:800;">${rp(Math.round(tot.kotor))}</td>
           </tr>
         </tfoot>
