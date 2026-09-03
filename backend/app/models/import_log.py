@@ -15,7 +15,7 @@ class CsvImport(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    shopee_account_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("shopee_accounts.id"))
+    shopee_account_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("shopee_accounts.id", ondelete="CASCADE"))
     tipe: Mapped[str] = mapped_column(TipeImport, nullable=False)
     nama_file: Mapped[str] = mapped_column(String(255), nullable=False)
     file_ref: Mapped[str] = mapped_column(Text, nullable=False)
