@@ -475,8 +475,15 @@ async def get_laporan_harian2(
 ):
     """Laporan harian komisi dikelompokkan per keyword tag link."""
 
+    # Komisi Live (dari kolom Platform, lihat commission_live_idr) dikeluarkan
+    # dari SEMUA kategori berbasis tag di bawah ini, supaya "Live" jadi bucket
+    # sendiri yang tidak dobel hitung dengan Organic/Meta/Adu/Terra/Meta
+    # Pribadi — satu order yang tag-nya, katakanlah, "feed" tapi platform-nya
+    # ShopeeLive tetap kehitung sekali: di Live, bukan di Feed.
+    _NON_LIVE = DailyMetric.commission_idr - DailyMetric.commission_live_idr
+
     def _sum_excl(keyword: str, exclude: str):
-        """Sum komisi dari tag yang mengandung keyword tapi TIDAK mengandung exclude."""
+        """Sum komisi (non-live) dari tag yang mengandung keyword tapi TIDAK mengandung exclude."""
         return sa.func.coalesce(
             sa.func.sum(
                 sa.case(
@@ -485,7 +492,7 @@ async def get_laporan_harian2(
                             TagLink.tag.ilike(f"%{keyword}%"),
                             ~TagLink.tag.ilike(f"%{exclude}%"),
                         ),
-                        DailyMetric.commission_idr,
+                        _NON_LIVE,
                     ),
                     else_=sa.literal(Decimal("0")),
                 )
@@ -494,7 +501,7 @@ async def get_laporan_harian2(
         )
 
     def _sum_and(kw1: str, kw2: str):
-        """Sum komisi dari tag yang mengandung KEDUA keyword."""
+        """Sum komisi (non-live) dari tag yang mengandung KEDUA keyword."""
         return sa.func.coalesce(
             sa.func.sum(
                 sa.case(
@@ -503,7 +510,7 @@ async def get_laporan_harian2(
                             TagLink.tag.ilike(f"%{kw1}%"),
                             TagLink.tag.ilike(f"%{kw2}%"),
                         ),
-                        DailyMetric.commission_idr,
+                        _NON_LIVE,
                     ),
                     else_=sa.literal(Decimal("0")),
                 )
@@ -515,7 +522,7 @@ async def get_laporan_harian2(
         return sa.func.coalesce(
             sa.func.sum(
                 sa.case(
-                    (TagLink.tag.ilike(f"%{keyword}%"), DailyMetric.commission_idr),
+                    (TagLink.tag.ilike(f"%{keyword}%"), _NON_LIVE),
                     else_=sa.literal(Decimal("0")),
                 )
             ),
@@ -529,7 +536,7 @@ async def get_laporan_harian2(
     _TAG_BLANK = "non-meta"
 
     def _sum_feed_or_blank():
-        """Sum komisi dari tag 'feed' (bukan IG) ATAU tag kosong (non-meta)."""
+        """Sum komisi (non-live) dari tag 'feed' (bukan IG) ATAU tag kosong (non-meta)."""
         return sa.func.coalesce(
             sa.func.sum(
                 sa.case(
@@ -541,7 +548,7 @@ async def get_laporan_harian2(
                             ),
                             ~TagLink.tag.ilike("%ig%"),
                         ),
-                        DailyMetric.commission_idr,
+                        _NON_LIVE,
                     ),
                     else_=sa.literal(Decimal("0")),
                 )
@@ -564,7 +571,7 @@ async def get_laporan_harian2(
                             ~TagLink.tag.ilike(_TAG_BLANK),
                             TagLink.tag.op("!~*")(_PRIBADI_PATTERN),
                         ),
-                        DailyMetric.commission_idr,
+                        _NON_LIVE,
                     ),
                     else_=sa.literal(Decimal("0")),
                 )
@@ -579,7 +586,7 @@ async def get_laporan_harian2(
                 sa.case(
                     (
                         TagLink.tag.op("~*")(_PRIBADI_PATTERN),
-                        DailyMetric.commission_idr,
+                        _NON_LIVE,
                     ),
                     else_=sa.literal(Decimal("0")),
                 )
@@ -704,7 +711,7 @@ async def get_laporan_harian2(
             "komisi_meta_pribadi":  float(meta_pribadi),
             "total_iklan":          float(total_iklan),
             "komisi_live":          float(live),
-            "total_kotor":          float(total_fp + total_ig + total_iklan),
+            "total_kotor":          float(total_fp + total_ig + total_iklan + live),
         })
     return result
 

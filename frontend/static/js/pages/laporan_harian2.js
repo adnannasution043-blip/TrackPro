@@ -140,13 +140,13 @@ export class LaporanHarian2Page {
     });
   }
 
-  // "Live" dihitung dari kolom Platform (bukan dari tag link seperti kategori
-  // lain), jadi ordernya bisa tumpang tindih dengan FP/IG/Meta/Adu/Terra —
-  // sengaja TIDAK ikut default "Semua" biar TOTAL KOTOR "Semua" tidak dobel
-  // hitung. Live hanya muncul kalau tab-nya dipilih eksplisit.
+  // "Live" dihitung dari kolom Platform (bukan tag link seperti kategori
+  // lain) — tapi backend sudah mengeluarkan porsi Live dari kategori lain
+  // (lihat dashboard.py _NON_LIVE), jadi aman ikut ditampilkan & dijumlah di
+  // tab "Semua" tanpa dobel hitung.
   _getVisibleCols() {
     if (this._filters.size === 0) {
-      return { fp: true, ig: true, meta: true, adu: true, terra: true, metaPribadi: true, live: false };
+      return { fp: true, ig: true, meta: true, adu: true, terra: true, metaPribadi: true, live: true };
     }
     const c = { fp: false, ig: false, meta: false, adu: false, terra: false, metaPribadi: false, live: false };
     if (this._filters.has('organic'))      { c.fp = true; c.ig = true; }
