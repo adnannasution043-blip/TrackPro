@@ -85,7 +85,7 @@ export class UploadPage {
               <p><strong>Pilih file CSV</strong> atau drag & drop</p>
               <p style="font-size:12px;margin-top:4px;">Laporan komisi affiliate dari Shopee</p>
             </div>
-            <input type="file" id="file-commission" accept=".csv" style="display:none">
+            <input type="file" id="file-commission" accept=".csv" multiple style="display:none">
             <div id="name-commission" style="font-size:12px;color:#6b7280;margin-top:4px;"></div>
           </div>
           <div>
@@ -98,7 +98,7 @@ export class UploadPage {
               <p><strong>Pilih file CSV</strong> atau drag & drop</p>
               <p style="font-size:12px;margin-top:4px;">Laporan klik affiliate dari Shopee</p>
             </div>
-            <input type="file" id="file-click" accept=".csv" style="display:none">
+            <input type="file" id="file-click" accept=".csv" multiple style="display:none">
             <div id="name-click" style="font-size:12px;color:#6b7280;margin-top:4px;"></div>
           </div>
         </div>
@@ -121,7 +121,7 @@ export class UploadPage {
                 <p><strong>Pilih file CSV</strong> atau drag & drop</p>
                 <p style="font-size:12px;margin-top:4px;">Data performa iklan dari Meta Ads Manager</p>
               </div>
-              <input type="file" id="file-meta" accept=".csv" style="display:none">
+              <input type="file" id="file-meta" accept=".csv" multiple style="display:none">
               <div id="name-meta" style="font-size:12px;color:#6b7280;margin-top:4px;"></div>
             </div>
 
@@ -141,7 +141,7 @@ export class UploadPage {
                     <p style="font-size:12px;margin-top:6px;"><strong>Pilih file</strong></p>
                     <p style="font-size:11px;color:#9ca3af;">kolom: Placement</p>
                   </div>
-                  <input type="file" id="file-breakdown-placement" accept=".csv" style="display:none">
+                  <input type="file" id="file-breakdown-placement" accept=".csv" multiple style="display:none">
                   <div id="name-breakdown-placement" style="font-size:11px;color:#6b7280;margin-top:4px;"></div>
                 </div>
                 <div>
@@ -151,7 +151,7 @@ export class UploadPage {
                     <p style="font-size:12px;margin-top:6px;"><strong>Pilih file</strong></p>
                     <p style="font-size:11px;color:#9ca3af;">kolom: Platform</p>
                   </div>
-                  <input type="file" id="file-breakdown-platform" accept=".csv" style="display:none">
+                  <input type="file" id="file-breakdown-platform" accept=".csv" multiple style="display:none">
                   <div id="name-breakdown-platform" style="font-size:11px;color:#6b7280;margin-top:4px;"></div>
                 </div>
                 <div>
@@ -161,7 +161,7 @@ export class UploadPage {
                     <p style="font-size:12px;margin-top:6px;"><strong>Pilih file</strong></p>
                     <p style="font-size:11px;color:#9ca3af;">kolom: Age + Gender</p>
                   </div>
-                  <input type="file" id="file-breakdown-age" accept=".csv" style="display:none">
+                  <input type="file" id="file-breakdown-age" accept=".csv" multiple style="display:none">
                   <div id="name-breakdown-age" style="font-size:11px;color:#6b7280;margin-top:4px;"></div>
                 </div>
               </div>
@@ -319,11 +319,7 @@ export class UploadPage {
     zone.addEventListener('click', () => input.click());
 
     input.addEventListener('change', () => {
-      if (input.files[0]) {
-        nameEl.textContent = `✓ ${input.files[0].name}`;
-        zone.style.borderColor = '#dc2626';
-        zone.style.background = '#fef2f2';
-      }
+      this._showSelectedFiles(input, zone, nameEl);
     });
 
     zone.addEventListener('dragover', (e) => {
@@ -336,16 +332,23 @@ export class UploadPage {
     zone.addEventListener('drop', (e) => {
       e.preventDefault();
       zone.classList.remove('active');
-      const file = e.dataTransfer.files[0];
-      if (file) {
+      if (e.dataTransfer.files.length) {
         const dt = new DataTransfer();
-        dt.items.add(file);
+        for (const f of e.dataTransfer.files) dt.items.add(f);
         input.files = dt.files;
-        nameEl.textContent = `✓ ${file.name}`;
-        zone.style.borderColor = '#dc2626';
-        zone.style.background = '#fef2f2';
+        this._showSelectedFiles(input, zone, nameEl);
       }
     });
+  }
+
+  _showSelectedFiles(input, zone, nameEl) {
+    const files = Array.from(input.files || []);
+    if (!files.length) return;
+    nameEl.textContent = files.length === 1
+      ? `✓ ${files[0].name}`
+      : `✓ ${files.length} file dipilih: ${files.map(f => f.name).join(', ')}`;
+    zone.style.borderColor = '#dc2626';
+    zone.style.background = '#fef2f2';
   }
 
   async _submit() {
@@ -357,21 +360,21 @@ export class UploadPage {
 
     const shopeeId = this.container.querySelector('#sel-shopee').value;
     const tagSlot  = this.container.querySelector('#sel-slot').value || '1';
-    const commFile = this.container.querySelector('#file-commission').files[0];
-    const clickFile = this.container.querySelector('#file-click').files[0];
-    const metaFile  = this.container.querySelector('#file-meta').files[0];
-    const bdPlacement = this.container.querySelector('#file-breakdown-placement').files[0];
-    const bdPlatform  = this.container.querySelector('#file-breakdown-platform').files[0];
-    const bdAge       = this.container.querySelector('#file-breakdown-age').files[0];
-    const anyBreakdown = bdPlacement || bdPlatform || bdAge;
+    const commFiles = Array.from(this.container.querySelector('#file-commission').files);
+    const clickFiles = Array.from(this.container.querySelector('#file-click').files);
+    const metaFiles  = Array.from(this.container.querySelector('#file-meta').files);
+    const bdPlacementFiles = Array.from(this.container.querySelector('#file-breakdown-placement').files);
+    const bdPlatformFiles  = Array.from(this.container.querySelector('#file-breakdown-platform').files);
+    const bdAgeFiles       = Array.from(this.container.querySelector('#file-breakdown-age').files);
+    const anyBreakdown = bdPlacementFiles.length || bdPlatformFiles.length || bdAgeFiles.length;
 
-    const needsShopee = commFile || clickFile;
+    const needsShopee = commFiles.length || clickFiles.length;
     if (needsShopee && !shopeeId) {
       errEl.textContent = 'Pilih akun Shopee terlebih dahulu.';
       errEl.style.display = 'block';
       return;
     }
-    if (!commFile && !metaFile && !anyBreakdown) {
+    if (!commFiles.length && !metaFiles.length && !anyBreakdown) {
       errEl.textContent = 'Upload minimal satu file CSV.';
       errEl.style.display = 'block';
       return;
@@ -381,54 +384,64 @@ export class UploadPage {
     btn.textContent = 'Memproses…';
 
     const results = [];
+    const errors = [];
+
+    // Upload N file ke endpoint yang sama satu per satu (backend hanya terima 1 file/request),
+    // lalu jumlahkan baris_diproses dan kumpulkan error per file agar file lain tetap diproses.
+    const uploadMany = async (files, path, label) => {
+      let total = 0;
+      for (const f of files) {
+        try {
+          const fd = new FormData();
+          fd.append('file', f);
+          const res = await apiUpload(path, fd);
+          total += res?.baris_diproses ?? 0;
+        } catch (err) {
+          errors.push(`${label} (${f.name}): ${err.message}`);
+        }
+      }
+      const suffix = files.length > 1 ? ` (${files.length} file)` : '';
+      results.push(`${label}: ${total} baris berhasil${suffix}`);
+    };
 
     try {
-      if (commFile) {
-        const fd = new FormData();
-        fd.append('file', commFile);
-        const res = await apiUpload(`/upload/shopee-commission?shopee_account_id=${shopeeId}&tag_slot=${tagSlot}`, fd);
-        results.push(`Komisi: ${res?.baris_diproses ?? 0} baris berhasil`);
+      if (commFiles.length) {
+        await uploadMany(commFiles, `/upload/shopee-commission?shopee_account_id=${shopeeId}&tag_slot=${tagSlot}`, 'Komisi');
       }
 
-      if (clickFile) {
-        const fd = new FormData();
-        fd.append('file', clickFile);
-        const res = await apiUpload(`/upload/shopee-click?shopee_account_id=${shopeeId}&tag_slot=${tagSlot}`, fd);
-        results.push(`Klik: ${res?.baris_diproses ?? 0} baris berhasil`);
+      if (clickFiles.length) {
+        await uploadMany(clickFiles, `/upload/shopee-click?shopee_account_id=${shopeeId}&tag_slot=${tagSlot}`, 'Klik');
       }
 
-      if (metaFile) {
+      if (metaFiles.length) {
         const metaAccounts = this._accounts.filter(a => a.tipe === 'meta');
         if (metaAccounts.length === 0) {
-          errEl.textContent = 'Tambah akun Meta Ads dulu di Pengaturan → Akun Meta.';
-          errEl.style.display = 'block';
+          errors.push('Tambah akun Meta Ads dulu di Pengaturan → Akun Meta.');
         } else {
           const metaId = metaAccounts[0].id;
-          const fd = new FormData();
-          fd.append('file', metaFile);
-          const res = await apiUpload(`/upload/meta-ads?meta_account_id=${metaId}`, fd);
-          results.push(`Meta Ads: ${res?.baris_diproses ?? 0} baris berhasil`);
+          await uploadMany(metaFiles, `/upload/meta-ads?meta_account_id=${metaId}`, 'Meta Ads');
         }
       }
 
       const metaAccounts = this._accounts.filter(a => a.tipe === 'meta');
       const metaId = metaAccounts[0]?.id;
-      for (const [f, label] of [
-        [bdPlacement, 'Breakdown Penempatan'],
-        [bdPlatform,  'Breakdown Platform'],
-        [bdAge,       'Breakdown Usia & Gender'],
+      for (const [files, label] of [
+        [bdPlacementFiles, 'Breakdown Penempatan'],
+        [bdPlatformFiles,  'Breakdown Platform'],
+        [bdAgeFiles,       'Breakdown Usia & Gender'],
       ]) {
-        if (f && metaId) {
-          const fdBd = new FormData();
-          fdBd.append('file', f);
-          const res = await apiUpload(`/upload/meta-breakdown?meta_account_id=${metaId}`, fdBd);
-          results.push(`${label}: ${res?.baris_diproses ?? 0} baris berhasil`);
+        if (files.length && metaId) {
+          await uploadMany(files, `/upload/meta-breakdown?meta_account_id=${metaId}`, label);
         }
       }
 
       if (results.length > 0) {
         successEl.textContent = 'Upload berhasil! ' + results.join(' · ');
         successEl.style.display = 'block';
+      }
+      if (errors.length > 0) {
+        errEl.textContent = errors.join(' · ');
+        errEl.style.display = 'block';
       }
     } catch (err) {
       errEl.textContent = err.message;
