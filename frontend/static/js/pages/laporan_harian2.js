@@ -141,12 +141,12 @@ export class LaporanHarian2Page {
   }
 
   // "Live" dihitung dari kolom Platform (bukan tag link seperti kategori
-  // lain) — tapi backend sudah mengeluarkan porsi Live dari kategori lain
-  // (lihat dashboard.py _NON_LIVE), jadi aman ikut ditampilkan & dijumlah di
-  // tab "Semua" tanpa dobel hitung.
+  // lain). Kolom KOMISI LIVE TIDAK ditampilkan di tab "Semua" dan TIDAK ikut
+  // dijumlah ke Total Kotor di sana — cuma nongol & dihitung kalau tab Live
+  // dipilih eksplisit, persis kayak kategori lain.
   _getVisibleCols() {
     if (this._filters.size === 0) {
-      return { fp: true, ig: true, meta: true, adu: true, terra: true, metaPribadi: true, live: true };
+      return { fp: true, ig: true, meta: true, adu: true, terra: true, metaPribadi: true, live: false };
     }
     const c = { fp: false, ig: false, meta: false, adu: false, terra: false, metaPribadi: false, live: false };
     if (this._filters.has('organic'))      { c.fp = true; c.ig = true; }
