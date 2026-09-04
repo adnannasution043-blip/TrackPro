@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import csv
 import io
+import re
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
@@ -243,6 +244,32 @@ def is_live_platform(platform: str | None) -> bool:
     """Order dianggap dari Shopee Live kalau kolom Platform mengandung 'live'
     (mis. "ShopeeLive-Shopee"), case-insensitive."""
     return bool(platform) and "live" in platform.strip().lower()
+
+
+_TAG_BLANK = "non-meta"
+_PRIBADI_PATTERN = re.compile(r'^meta[a-zA-Z]+$', re.IGNORECASE)
+
+
+def classify_tag(tag: str | None) -> dict[str, bool]:
+    """Klasifikasi tag link ke kategori (Organic Story/Feed, Meta, Adu, Terra,
+    Meta Pribadi) — replika Python dari CASE expression SQL di
+    dashboard.py get_laporan_harian2, dipakai buat kategorisasi commission
+    yang dihitung di sisi Python (bukan query SQL), mis. upload WD Payment.
+    Satu tag BISA match lebih dari satu kategori sekaligus (mis. tag
+    "metaadu" match meta & adu) — sengaja disamakan dengan perilaku SQL asli,
+    yang juga tidak saling eksklusif antar kategori non-story/feed."""
+    t = (tag or "").strip()
+    tl = t.lower()
+    is_blank = (not t) or (tl == _TAG_BLANK)
+    has_ig = "ig" in tl
+    return {
+        "story": "story" in tl and not has_ig,
+        "feed": ("feed" in tl or is_blank) and not has_ig,
+        "meta": "meta" in tl and not is_blank and not bool(_PRIBADI_PATTERN.match(t)),
+        "adu": "adu" in tl,
+        "terra": "terra" in tl,
+        "meta_pribadi": bool(_PRIBADI_PATTERN.match(t)),
+    }
 
 
 def parse_shopee_commission_csv(file_bytes: bytes, tag_slot: int = 1) -> list[ShopeeCommissionRow]:

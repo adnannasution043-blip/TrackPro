@@ -30,6 +30,7 @@ from app.core.csv_parser import (
     MetaBreakdownRow,
     ShopeeClickRow,
     ShopeeCommissionRow,
+    classify_tag,
     is_live_platform,
     parse_meta_ads_csv,
     parse_meta_breakdown_csv,
@@ -376,6 +377,9 @@ async def upload_wd_payment(
         "Total Komisi per Pesanan(Rp)", "Komisi (Rp)")
 
     col_platform = _find_col(sample, "Platform")  # opsional — buat pisahin Komisi Live
+    # opsional — buat kategorisasi Organik/Iklan (Story, Feed, Meta, Adu, Terra, Meta Pribadi).
+    # Prioritaskan Tag_link1 (slot yang selalu dipakai di form Upload saat ini).
+    col_tag = _find_col(sample, "Tag_link1", "Tag_link2", "Tag_link3", "Tag_link4", "Tag_link5", "Sub ID")
 
     all_headers = list(sample.keys())
     if not all([col_status, col_tgl, col_komisi]):
@@ -427,7 +431,15 @@ async def upload_wd_payment(
     STATUS_SELESAI = {"selesai", "completed", "complete", "sukses"}
 
     # ── Agregasi per tanggal ──────────────────────────────────────────────────
-    agg: dict[date_type, dict] = defaultdict(lambda: {"komisi": Decimal("0"), "komisi_live": Decimal("0"), "n": 0})
+    def _zero_agg():
+        return {
+            "komisi": Decimal("0"), "komisi_live": Decimal("0"),
+            "komisi_story": Decimal("0"), "komisi_feed": Decimal("0"),
+            "komisi_meta": Decimal("0"), "komisi_adu": Decimal("0"),
+            "komisi_terra": Decimal("0"), "komisi_meta_pribadi": Decimal("0"),
+            "n": 0,
+        }
+    agg: dict[date_type, dict] = defaultdict(_zero_agg)
     status_sample: list[str] = []
 
     ok, fail = 0, 0
@@ -446,11 +458,24 @@ async def upload_wd_payment(
         except (InvalidOperation, Exception):
             fail += 1
             continue
-        agg[tgl]["komisi"] += k
+        a = agg[tgl]
+        a["komisi"] += k
         platform_val = str(r.get(col_platform) or "").strip() if col_platform else ""
-        if "live" in platform_val.lower():
-            agg[tgl]["komisi_live"] += k
-        agg[tgl]["n"] += 1
+        if is_live_platform(platform_val):
+            # Live itu bucket sendiri — TIDAK ikut dihitung lagi ke kategori
+            # tag manapun (story/feed/meta/adu/terra/meta_pribadi), biar
+            # Komisi Organik/Iklan tidak dobel hitung sama Komisi Live.
+            a["komisi_live"] += k
+        else:
+            tag_val = str(r.get(col_tag) or "").strip() if col_tag else ""
+            cats = classify_tag(tag_val)
+            if cats["story"]: a["komisi_story"] += k
+            if cats["feed"]: a["komisi_feed"] += k
+            if cats["meta"]: a["komisi_meta"] += k
+            if cats["adu"]: a["komisi_adu"] += k
+            if cats["terra"]: a["komisi_terra"] += k
+            if cats["meta_pribadi"]: a["komisi_meta_pribadi"] += k
+        a["n"] += 1
         ok += 1
 
     if not agg:
@@ -470,10 +495,19 @@ async def upload_wd_payment(
             tanggal=tgl,
             total_komisi=val["komisi"],
             komisi_live=val["komisi_live"],
+            komisi_story=val["komisi_story"],
+            komisi_feed=val["komisi_feed"],
+            komisi_meta=val["komisi_meta"],
+            komisi_adu=val["komisi_adu"],
+            komisi_terra=val["komisi_terra"],
+            komisi_meta_pribadi=val["komisi_meta_pribadi"],
             jumlah_orders=val["n"],
         ).on_conflict_do_update(
             constraint="uq_wd_payments_account_tanggal",
             set_={"total_komisi": val["komisi"], "komisi_live": val["komisi_live"],
+                  "komisi_story": val["komisi_story"], "komisi_feed": val["komisi_feed"],
+                  "komisi_meta": val["komisi_meta"], "komisi_adu": val["komisi_adu"],
+                  "komisi_terra": val["komisi_terra"], "komisi_meta_pribadi": val["komisi_meta_pribadi"],
                   "jumlah_orders": val["n"], "updated_at": sa.text("now()")},
         )
         await db.execute(stmt)
@@ -493,10 +527,21 @@ async def get_wd_payments(
     """Ambil data WD payment per tanggal untuk Komisi Bersih."""
     from app.models.wd_payment import WdPayment
 
+    # Komisi Organik = Story + Feed, Komisi Iklan = Meta + Adu + Terra + Meta Pribadi
+    # (sama definisi kategori kayak dashboard.py /laporan-harian2, tapi
+    # dihitung murni dari file WD Payment — lihat classify_tag di csv_parser.py)
     q = (
-        sa.select(WdPayment.tanggal, sa.func.sum(WdPayment.total_komisi).label("total_komisi"),
-                  sa.func.sum(WdPayment.komisi_live).label("komisi_live"),
-                  sa.func.sum(WdPayment.jumlah_orders).label("jumlah_orders"))
+        sa.select(
+            WdPayment.tanggal,
+            sa.func.sum(WdPayment.total_komisi).label("total_komisi"),
+            sa.func.sum(WdPayment.komisi_live).label("komisi_live"),
+            sa.func.sum(WdPayment.komisi_story + WdPayment.komisi_feed).label("komisi_organik"),
+            sa.func.sum(
+                WdPayment.komisi_meta + WdPayment.komisi_adu
+                + WdPayment.komisi_terra + WdPayment.komisi_meta_pribadi
+            ).label("komisi_iklan"),
+            sa.func.sum(WdPayment.jumlah_orders).label("jumlah_orders"),
+        )
         .join(ShopeeAccount, WdPayment.shopee_account_id == ShopeeAccount.id)
         .where(
             ShopeeAccount.user_id == current_user.id,
@@ -511,6 +556,8 @@ async def get_wd_payments(
     rows = (await db.execute(q)).all()
     return [{"tanggal": str(r.tanggal), "total_komisi": float(r.total_komisi),
              "komisi_live": float(r.komisi_live or 0),
+             "komisi_organik": float(r.komisi_organik or 0),
+             "komisi_iklan": float(r.komisi_iklan or 0),
              "jumlah_orders": r.jumlah_orders} for r in rows]
 
 

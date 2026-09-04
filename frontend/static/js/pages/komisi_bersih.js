@@ -55,7 +55,6 @@ export class KomisiBersihPage {
     this.container = container;
     this.dari      = firstOfMonth();
     this.sampai    = todayStr();
-    this._bdMap    = {};
     this._spendMap = {};
     this._dates    = [];
     this._wdRows   = [];
@@ -173,30 +172,30 @@ export class KomisiBersihPage {
     wrap.innerHTML = '<div class="loading" style="padding:32px;text-align:center;">Memuat…</div>';
     try {
       const qs = filterQS ? filterQS() : '';
-      const [dash, bd, wd] = await Promise.all([
+      const [dash, wd] = await Promise.all([
         apiFetch(`/dashboard?tanggal_dari=${this.dari}&tanggal_sampai=${this.sampai}${qs}`),
-        apiFetch(`/dashboard/laporan-harian2?tanggal_dari=${this.dari}&tanggal_sampai=${this.sampai}${qs}`),
         apiFetch(`/upload/wd-payment?tanggal_dari=${this.dari}&tanggal_sampai=${this.sampai}`),
       ]);
 
-      this._bdMap     = {};
-      this._spendMap  = {};
-      this._wdLiveMap = {};
-      const dateSet   = new Set();
+      this._spendMap     = {};
+      this._wdLiveMap    = {};
+      this._wdOrganikMap = {};
+      this._wdIklanMap   = {};
+      const dateSet      = new Set();
 
-      for (const row of (bd || [])) {
-        this._bdMap[row.tanggal] = row;
-        dateSet.add(row.tanggal);
-      }
       for (const row of (dash?.harian || [])) {
         this._spendMap[row.tanggal] = Number(row.spend_idr || 0);
         dateSet.add(row.tanggal);
       }
-      // Komisi Live di tab "Komisi & Profit" sumbernya file WD Payment
-      // (kolom Platform="Shopeelive-Shopee"), BUKAN dari CSV Komisi Shopee —
-      // basis tanggalnya "Waktu Terselesaikan", beda dari tanggal order di bd.
+      // Komisi Live/Organik/Iklan di tab "Komisi & Profit" semuanya dari
+      // file WD Payment (kategorisasi Tag_link + Platform di file itu
+      // sendiri) — BUKAN dari CSV Komisi Shopee. Hanya Budget Iklan (spend)
+      // yang tetap dari CSV Meta Ads, karena WD Payment tidak punya data
+      // belanja iklan sama sekali. Basis tanggalnya "Waktu Terselesaikan".
       for (const row of (wd || [])) {
-        this._wdLiveMap[row.tanggal] = Number(row.komisi_live || 0);
+        this._wdLiveMap[row.tanggal]    = Number(row.komisi_live || 0);
+        this._wdOrganikMap[row.tanggal] = Number(row.komisi_organik || 0);
+        this._wdIklanMap[row.tanggal]   = Number(row.komisi_iklan || 0);
         dateSet.add(row.tanggal);
       }
       this._dates  = [...dateSet].sort();
@@ -262,12 +261,13 @@ export class KomisiBersihPage {
     // Hitung pajak progresif kumulatif per bulan dari data harian
     const cumByMonth = {};
     const rows = this._dates.map(tgl => {
-      const bd    = this._bdMap[tgl]    || {};
       const spend = this._spendMap[tgl] || 0;
       const live  = this._wdLiveMap[tgl] || 0;
 
-      const grossOrganik = live + Number(bd.komisi_story||0) + Number(bd.komisi_feed||0);
-      const grossIklan   = Number(bd.komisi_meta||0) + Number(bd.komisi_adu||0) + Number(bd.komisi_terra||0);
+      // Organik & Iklan murni dari file WD Payment (lihat _load) — Live
+      // sudah dikeluarkan dari dua-duanya di backend, jadi aman dijumlah.
+      const grossOrganik = live + (this._wdOrganikMap[tgl] || 0);
+      const grossIklan   = this._wdIklanMap[tgl] || 0;
       const grossTotal   = grossOrganik + grossIklan;
 
       const bulan  = tgl.slice(0, 7);
