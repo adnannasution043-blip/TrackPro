@@ -514,6 +514,19 @@ async def get_wd_payments(
              "jumlah_orders": r.jumlah_orders} for r in rows]
 
 
+@router.delete("/wd-payment", status_code=status.HTTP_204_NO_CONTENT)
+async def reset_wd_payments(current_user: CurrentUser, db: DB):
+    """Hapus semua data WD Payment (semua akun Shopee) milik user, biar bisa
+    upload ulang dari nol — dipakai tombol "Reset Data WD" di halaman
+    Pembayaran WD. Ikut hapus riwayat import tipe wd_payment."""
+    from app.models.wd_payment import WdPayment
+    await db.execute(sa.delete(WdPayment).where(WdPayment.user_id == current_user.id))
+    await db.execute(sa.delete(CsvImport).where(
+        CsvImport.user_id == current_user.id, CsvImport.tipe == "wd_payment"
+    ))
+    await db.commit()
+
+
 # ===========================================================================
 # Terra Ads — placement spend dengan konversi USD → IDR
 # ===========================================================================

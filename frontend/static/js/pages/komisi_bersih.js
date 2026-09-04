@@ -79,7 +79,7 @@ export class KomisiBersihPage {
         </div>
       </div>
 
-      <div style="display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:16px;" id="tab-bar">
+      <div style="display:flex;gap:0;align-items:center;border-bottom:2px solid var(--border);margin-bottom:16px;" id="tab-bar">
         ${TABS.map((t,i) => `
           <button class="kb-tab" data-tab="${t.key}"
             style="padding:10px 20px;border:none;background:none;cursor:pointer;font-size:13.5px;font-weight:600;
@@ -87,6 +87,9 @@ export class KomisiBersihPage {
             border-bottom:${i===0?'2px solid #dc2626':'2px solid transparent'};margin-bottom:-2px;">
             ${t.label}
           </button>`).join('')}
+        <button id="btn-reset-wd" class="btn btn-sm" style="margin-left:auto;margin-bottom:8px;color:#dc2626;border-color:#dc2626;">
+          Reset Data WD
+        </button>
       </div>
 
       <div class="card" style="padding:0;overflow:hidden;">
@@ -116,7 +119,53 @@ export class KomisiBersihPage {
       this._render();
     });
 
+    this.container.querySelector('#btn-reset-wd').addEventListener('click', () => this._resetWd());
+
     this._load();
+  }
+
+  async _resetWd() {
+    const ok = await this._confirmModal(
+      'Hapus SEMUA data Pembayaran WD (semua akun Shopee) yang sudah pernah diupload? Tindakan ini tidak bisa dibatalkan — Anda perlu upload ulang file BillConversionReport dari awal.'
+    );
+    if (!ok) return;
+
+    const btn = this.container.querySelector('#btn-reset-wd');
+    btn.disabled = true;
+    btn.textContent = 'Menghapus…';
+    try {
+      await apiFetch('/upload/wd-payment', { method: 'DELETE' });
+      await this._load();
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Reset Data WD';
+    }
+  }
+
+  // Modal konfirmasi generik — resolve(true) kalau user klik tombol aksi,
+  // resolve(false) kalau Batal / klik di luar modal.
+  _confirmModal(message, confirmLabel = 'Hapus') {
+    return new Promise(resolve => {
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;';
+      overlay.innerHTML = `
+        <div style="background:#fff;border-radius:10px;padding:24px;width:420px;max-width:90vw;box-shadow:0 10px 40px rgba(0,0,0,0.3);">
+          <h3 style="margin:0 0 10px;color:#dc2626;font-size:16px;">Konfirmasi Hapus</h3>
+          <p style="font-size:13.5px;color:#6b7280;margin:0 0 20px;">${message}</p>
+          <div style="display:flex;gap:10px;justify-content:flex-end;">
+            <button id="confirm-cancel" class="btn">Batal</button>
+            <button id="confirm-ok" class="btn" style="background:#dc2626;color:white;border-color:#dc2626;">${confirmLabel}</button>
+          </div>
+        </div>`;
+      document.body.appendChild(overlay);
+
+      const close = (result) => { overlay.remove(); resolve(result); };
+      overlay.querySelector('#confirm-cancel').onclick = () => close(false);
+      overlay.querySelector('#confirm-ok').onclick = () => close(true);
+      overlay.onclick = (e) => { if (e.target === overlay) close(false); };
+    });
   }
 
   async _load() {
