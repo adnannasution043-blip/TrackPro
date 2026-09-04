@@ -130,9 +130,10 @@ export class KomisiBersihPage {
         apiFetch(`/upload/wd-payment?tanggal_dari=${this.dari}&tanggal_sampai=${this.sampai}`),
       ]);
 
-      this._bdMap    = {};
-      this._spendMap = {};
-      const dateSet  = new Set();
+      this._bdMap     = {};
+      this._spendMap  = {};
+      this._wdLiveMap = {};
+      const dateSet   = new Set();
 
       for (const row of (bd || [])) {
         this._bdMap[row.tanggal] = row;
@@ -140,6 +141,13 @@ export class KomisiBersihPage {
       }
       for (const row of (dash?.harian || [])) {
         this._spendMap[row.tanggal] = Number(row.spend_idr || 0);
+        dateSet.add(row.tanggal);
+      }
+      // Komisi Live di tab "Komisi & Profit" sumbernya file WD Payment
+      // (kolom Platform="Shopeelive-Shopee"), BUKAN dari CSV Komisi Shopee —
+      // basis tanggalnya "Waktu Terselesaikan", beda dari tanggal order di bd.
+      for (const row of (wd || [])) {
+        this._wdLiveMap[row.tanggal] = Number(row.komisi_live || 0);
         dateSet.add(row.tanggal);
       }
       this._dates  = [...dateSet].sort();
@@ -207,8 +215,9 @@ export class KomisiBersihPage {
     const rows = this._dates.map(tgl => {
       const bd    = this._bdMap[tgl]    || {};
       const spend = this._spendMap[tgl] || 0;
+      const live  = this._wdLiveMap[tgl] || 0;
 
-      const grossOrganik = Number(bd.komisi_live||0) + Number(bd.komisi_story||0) + Number(bd.komisi_feed||0);
+      const grossOrganik = live + Number(bd.komisi_story||0) + Number(bd.komisi_feed||0);
       const grossIklan   = Number(bd.komisi_meta||0) + Number(bd.komisi_adu||0) + Number(bd.komisi_terra||0);
       const grossTotal   = grossOrganik + grossIklan;
 
@@ -228,10 +237,11 @@ export class KomisiBersihPage {
       const profitIklan = iklan - spend;
       const totalBersih = organik + profitIklan;
 
-      return { tgl, organik, iklan, totalMasuk, spend, profitIklan, totalBersih, pajak };
+      return { tgl, live, organik, iklan, totalMasuk, spend, profitIklan, totalBersih, pajak };
     });
 
     const tot = rows.reduce((a, r) => ({
+      live:         a.live        + r.live,
       organik:      a.organik     + r.organik,
       iklan:        a.iklan       + r.iklan,
       totalMasuk:   a.totalMasuk  + r.totalMasuk,
@@ -239,7 +249,7 @@ export class KomisiBersihPage {
       profitIklan:  a.profitIklan + r.profitIklan,
       totalBersih:  a.totalBersih + r.totalBersih,
       pajak:        a.pajak       + r.pajak,
-    }), { organik:0, iklan:0, totalMasuk:0, spend:0, profitIklan:0, totalBersih:0, pajak:0 });
+    }), { live:0, organik:0, iklan:0, totalMasuk:0, spend:0, profitIklan:0, totalBersih:0, pajak:0 });
 
     const totalPages = Math.ceil(rows.length / this._perPage);
     if (this._page > totalPages) this._page = Math.max(1, totalPages);
@@ -269,6 +279,7 @@ export class KomisiBersihPage {
         <td style="text-align:center;padding:7px 8px;">
           <span style="display:inline-block;padding:2px 7px;border-radius:9999px;font-size:11px;font-weight:700;background:#fef3c7;color:#92400e;">${tarif}</span>
         </td>
+        <td style="${tdBase}color:#7c3aed;">${rp(r.live)}</td>
         <td style="${tdBase}color:#7c3aed;">${rp(r.organik)}</td>
         <td style="${tdBase}color:#7c3aed;">${rp(r.iklan)}</td>
         <td style="${tdBase}font-weight:700;color:#7c3aed;">${rp(r.totalMasuk)}</td>
@@ -285,16 +296,17 @@ export class KomisiBersihPage {
     const tTotColor = tot.totalBersih >= 0 ? '#16a34a' : '#dc2626';
 
     wrap.innerHTML = `
-      <table class="data-table" style="min-width:900px;border-collapse:collapse;">
+      <table class="data-table" style="min-width:980px;border-collapse:collapse;">
         <thead>
           <tr style="border-bottom:none;">
             <th rowspan="2" style="${thBase}text-align:left;vertical-align:bottom;min-width:80px;">TGL</th>
             <th rowspan="2" style="${thBase}vertical-align:bottom;text-align:center;background:#fffbeb;color:#92400e;">TARIF</th>
-            ${grpHdr(GRP1, 'Komisi Bersih after Tax (PPh 21)', 3)}
+            ${grpHdr(GRP1, 'Komisi Bersih after Tax (PPh 21)', 4)}
             ${grpHdr(GRP2, 'Profit Iklan', 3)}
             ${grpHdr(GRP3, 'Komisi Bersih', 3)}
           </tr>
           <tr>
+            <th style="${thBase}background:${GRP1.bg};color:${GRP1.color};">Komisi Live</th>
             <th style="${thBase}background:${GRP1.bg};color:${GRP1.color};">Komisi Organik</th>
             <th style="${thBase}background:${GRP1.bg};color:${GRP1.color};">Komisi Iklan</th>
             <th style="${thBase}background:${GRP1.bg};color:${GRP1.color};">Total Komisi Masuk</th>
@@ -311,6 +323,7 @@ export class KomisiBersihPage {
           <tr style="font-weight:800;background:var(--bg-muted);border-top:2px solid var(--border);">
             <td style="padding:8px 10px;font-weight:800;">TOTAL</td>
             <td></td>
+            <td style="${tdBase}color:#7c3aed;">${rp(tot.live)}</td>
             <td style="${tdBase}color:#7c3aed;">${rp(tot.organik)}</td>
             <td style="${tdBase}color:#7c3aed;">${rp(tot.iklan)}</td>
             <td style="${tdBase}font-weight:800;color:#7c3aed;">${rp(tot.totalMasuk)}</td>

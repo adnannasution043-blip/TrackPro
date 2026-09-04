@@ -335,6 +335,8 @@ async def upload_wd_payment(
         "Komisi Bersih Affiliate (Rp)", "Komisi Anda (Rp)",
         "Total Komisi per Pesanan(Rp)", "Komisi (Rp)")
 
+    col_platform = _find_col(sample, "Platform")  # opsional — buat pisahin Komisi Live
+
     all_headers = list(sample.keys())
     if not all([col_status, col_tgl, col_komisi]):
         return await _fail_import(import_log, db,
@@ -385,7 +387,7 @@ async def upload_wd_payment(
     STATUS_SELESAI = {"selesai", "completed", "complete", "sukses"}
 
     # ── Agregasi per tanggal ──────────────────────────────────────────────────
-    agg: dict[date_type, dict] = defaultdict(lambda: {"komisi": Decimal("0"), "n": 0})
+    agg: dict[date_type, dict] = defaultdict(lambda: {"komisi": Decimal("0"), "komisi_live": Decimal("0"), "n": 0})
     status_sample: list[str] = []
 
     ok, fail = 0, 0
@@ -405,6 +407,9 @@ async def upload_wd_payment(
             fail += 1
             continue
         agg[tgl]["komisi"] += k
+        platform_val = str(r.get(col_platform) or "").strip() if col_platform else ""
+        if "live" in platform_val.lower():
+            agg[tgl]["komisi_live"] += k
         agg[tgl]["n"] += 1
         ok += 1
 
@@ -424,11 +429,12 @@ async def upload_wd_payment(
             user_id=current_user.id,
             tanggal=tgl,
             total_komisi=val["komisi"],
+            komisi_live=val["komisi_live"],
             jumlah_orders=val["n"],
         ).on_conflict_do_update(
             constraint="uq_wd_payments_account_tanggal",
-            set_={"total_komisi": val["komisi"], "jumlah_orders": val["n"],
-                  "updated_at": sa.text("now()")},
+            set_={"total_komisi": val["komisi"], "komisi_live": val["komisi_live"],
+                  "jumlah_orders": val["n"], "updated_at": sa.text("now()")},
         )
         await db.execute(stmt)
 
@@ -449,6 +455,7 @@ async def get_wd_payments(
 
     q = (
         sa.select(WdPayment.tanggal, sa.func.sum(WdPayment.total_komisi).label("total_komisi"),
+                  sa.func.sum(WdPayment.komisi_live).label("komisi_live"),
                   sa.func.sum(WdPayment.jumlah_orders).label("jumlah_orders"))
         .join(ShopeeAccount, WdPayment.shopee_account_id == ShopeeAccount.id)
         .where(
@@ -463,6 +470,7 @@ async def get_wd_payments(
 
     rows = (await db.execute(q)).all()
     return [{"tanggal": str(r.tanggal), "total_komisi": float(r.total_komisi),
+             "komisi_live": float(r.komisi_live or 0),
              "jumlah_orders": r.jumlah_orders} for r in rows]
 
 
