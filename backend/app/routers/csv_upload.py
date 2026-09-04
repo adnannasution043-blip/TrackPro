@@ -50,6 +50,26 @@ router = APIRouter()
 
 
 # ===========================================================================
+# Progress polling — dipakai frontend buat progress bar realtime
+# ===========================================================================
+
+@router.get("/imports/{import_id}")
+async def get_import_progress(import_id: UUID, current_user: CurrentUser, db: DB):
+    log = (await db.execute(
+        sa.select(CsvImport).where(CsvImport.id == import_id, CsvImport.user_id == current_user.id)
+    )).scalar_one_or_none()
+    if not log:
+        raise HTTPException(status_code=404, detail="Import tidak ditemukan.")
+    return {
+        "id": str(log.id),
+        "status": log.status,
+        "baris_diproses": log.baris_diproses,
+        "baris_gagal": log.baris_gagal,
+        "total_baris": log.total_baris,
+    }
+
+
+# ===========================================================================
 # Endpoint publik
 # ===========================================================================
 
@@ -59,29 +79,34 @@ async def upload_meta_ads(
     current_user: CurrentUser,
     db: DB,
     meta_account_id: UUID = Query(...),
+    import_id: UUID | None = Query(None),
 ):
     await _assert_meta_account_owned(meta_account_id, current_user.id, db)
     raw = await file.read()
 
-    import_log = _start_import(current_user.id, "meta_ads", file.filename, db)
+    import_log = await _start_import(current_user.id, "meta_ads", file.filename, db, import_id=import_id)
 
     try:
         rows = parse_meta_ads_csv(raw)
     except CsvParseError as exc:
         return await _fail_import(import_log, db, str(exc))
 
+    await _set_total_baris(import_log, len(rows), db)
+
     # Catat spend lama untuk tanggal yang akan diupload (sebelum upsert)
     dates = {r.tanggal for r in rows}
     spend_lama = await _get_meta_spend_for_dates(meta_account_id, dates, db)
 
     ok, fail = 0, 0
-    for row in rows:
+    for i, row in enumerate(rows):
         try:
             campaign = await _get_or_create_campaign(row, meta_account_id, db)
             await _upsert_meta_metric(campaign.id, row.tanggal, row.spend_idr, row.clicks_meta, db)
             ok += 1
         except Exception:
             fail += 1
+        if (i + 1) % 25 == 0:
+            await _bump_progress(import_log, ok, fail, db)
 
     # Kurangi saldo: delta = spend baru (dari CSV) - spend lama (yang diganti)
     if ok > 0:
@@ -98,17 +123,20 @@ async def upload_shopee_commission(
     db: DB,
     shopee_account_id: UUID = Query(...),
     tag_slot: int = Query(1, ge=1, le=5),
+    import_id: UUID | None = Query(None),
 ):
     await _assert_shopee_account_owned(shopee_account_id, current_user.id, db)
     raw = await file.read()
 
-    import_log = _start_import(current_user.id, "shopee_commission", file.filename, db,
-                               shopee_account_id=shopee_account_id)
+    import_log = await _start_import(current_user.id, "shopee_commission", file.filename, db,
+                               shopee_account_id=shopee_account_id, import_id=import_id)
 
     try:
         rows = parse_shopee_commission_csv(raw, tag_slot=tag_slot)
     except CsvParseError as exc:
         return await _fail_import(import_log, db, str(exc))
+
+    await _set_total_baris(import_log, len(rows), db)
 
     ok, fail = 0, 0
 
@@ -117,7 +145,7 @@ async def upload_shopee_commission(
     for row in rows:
         grouped[(row.tag, row.tanggal_order)].append(row)
 
-    for (tag, tanggal), group in grouped.items():
+    for i, ((tag, tanggal), group) in enumerate(grouped.items()):
         try:
             # SAVEPOINT per grup — kalau satu grup gagal (mis. constraint DB),
             # transaksi utama tidak ikut ke status aborted sehingga grup
@@ -138,6 +166,8 @@ async def upload_shopee_commission(
         except Exception:
             fail += len(group)
             continue
+        if (i + 1) % 10 == 0:
+            await _bump_progress(import_log, ok, fail, db)
 
     # Order snapshots — append-only per order_id
     for row in rows:
@@ -170,19 +200,22 @@ async def upload_meta_breakdown(
     current_user: CurrentUser,
     db: DB,
     meta_account_id: UUID = Query(...),
+    import_id: UUID | None = Query(None),
 ):
     await _assert_meta_account_owned(meta_account_id, current_user.id, db)
     raw = await file.read()
 
-    import_log = _start_import(current_user.id, "meta_breakdown", file.filename, db)
+    import_log = await _start_import(current_user.id, "meta_breakdown", file.filename, db, import_id=import_id)
 
     try:
         rows = parse_meta_breakdown_csv(raw)
     except CsvParseError as exc:
         return await _fail_import(import_log, db, str(exc))
 
+    await _set_total_baris(import_log, len(rows), db)
+
     ok, fail = 0, 0
-    for row in rows:
+    for i, row in enumerate(rows):
         try:
             campaign = await _get_or_create_campaign(
                 MetaAdsRow(
@@ -216,6 +249,8 @@ async def upload_meta_breakdown(
             ok += 1
         except Exception:
             fail += 1
+        if (i + 1) % 25 == 0:
+            await _bump_progress(import_log, ok, fail, db)
 
     return await _finish_import(import_log, ok, fail, db)
 
@@ -227,12 +262,13 @@ async def upload_shopee_click(
     db: DB,
     shopee_account_id: UUID = Query(...),
     tag_slot: int = Query(1, ge=1, le=5),
+    import_id: UUID | None = Query(None),
 ):
     await _assert_shopee_account_owned(shopee_account_id, current_user.id, db)
     raw = await file.read()
 
-    import_log = _start_import(current_user.id, "shopee_click", file.filename, db,
-                               shopee_account_id=shopee_account_id)
+    import_log = await _start_import(current_user.id, "shopee_click", file.filename, db,
+                               shopee_account_id=shopee_account_id, import_id=import_id)
 
     try:
         rows = parse_shopee_click_csv(raw)
@@ -249,7 +285,9 @@ async def upload_shopee_click(
         grouped[(row.tag, row.tanggal)] += row.clicks
         grouped_src[(row.tag, row.tanggal, row.sumber)] += row.clicks
 
-    for (tag, tanggal), total_clicks in grouped.items():
+    await _set_total_baris(import_log, len(grouped), db)
+
+    for i, ((tag, tanggal), total_clicks) in enumerate(grouped.items()):
         try:
             async with db.begin_nested():
                 tag_link = await _get_or_create_tag_link(tag, shopee_account_id, db)
@@ -257,6 +295,8 @@ async def upload_shopee_click(
             ok += 1
         except Exception:
             fail += 1
+        if (i + 1) % 10 == 0:
+            await _bump_progress(import_log, ok, fail, db)
 
     for (tag, tanggal, sumber), clicks in grouped_src.items():
         try:
@@ -290,7 +330,7 @@ async def upload_wd_payment(
     raw = await file.read()
     fname = (file.filename or "").lower()
 
-    import_log = _start_import(current_user.id, "wd_payment", file.filename, db)
+    import_log = await _start_import(current_user.id, "wd_payment", file.filename, db)
 
     # ── Parse file ────────────────────────────────────────────────────────────
     rows_raw: list[dict] = []
@@ -494,7 +534,7 @@ async def upload_terra(
     from decimal import Decimal, InvalidOperation
 
     raw = await file.read()
-    import_log = _start_import(current_user.id, "terra", file.filename, db)
+    import_log = await _start_import(current_user.id, "terra", file.filename, db)
 
     try:
         text = raw.decode("utf-8-sig", errors="replace")
@@ -581,7 +621,7 @@ async def upload_adu(
     from decimal import Decimal, InvalidOperation
 
     raw = await file.read()
-    import_log = _start_import(current_user.id, "adu", file.filename, db)
+    import_log = await _start_import(current_user.id, "adu", file.filename, db)
 
     try:
         text = raw.decode("utf-8-sig", errors="replace")
@@ -786,11 +826,17 @@ async def _get_or_create_tag_link(tag: str, shopee_account_id: UUID, db: AsyncSe
 # Import log helpers
 # ===========================================================================
 
-def _start_import(
+async def _start_import(
     user_id, tipe: str, nama_file: str, db: AsyncSession,
     shopee_account_id: UUID | None = None,
+    import_id: UUID | None = None,
 ) -> CsvImport:
+    """Commit langsung (bukan cuma db.add) supaya baris ini kebaca oleh request
+    polling GET /upload/imports/{id} yang terpisah selagi upload ini masih
+    berjalan — dipakai frontend buat progress bar."""
+    import uuid as uuid_mod
     log = CsvImport(
+        id=import_id or uuid_mod.uuid4(),
         user_id=user_id,
         shopee_account_id=shopee_account_id,
         tipe=tipe,
@@ -799,7 +845,23 @@ def _start_import(
         status="diproses",
     )
     db.add(log)
+    await db.commit()
+    await db.refresh(log)
     return log
+
+
+async def _set_total_baris(log: CsvImport, total: int, db: AsyncSession) -> None:
+    log.total_baris = total
+    await db.commit()
+
+
+async def _bump_progress(log: CsvImport, ok: int, fail: int, db: AsyncSession) -> None:
+    """Update progress baris_diproses/baris_gagal + commit — dipanggil berkala
+    (bukan tiap baris) selagi loop upload jalan, biar polling bisa lihat
+    progress real-time tanpa bikin commit tiap iterasi."""
+    log.baris_diproses = ok
+    log.baris_gagal = fail
+    await db.commit()
 
 
 async def _finish_import(log: CsvImport, ok: int, fail: int, db: AsyncSession) -> CsvImport:

@@ -23,6 +23,7 @@ class CsvImport(Base):
     catatan: Mapped[str | None] = mapped_column(Text)
     baris_diproses: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     baris_gagal: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    total_baris: Mapped[int | None] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="diproses")
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

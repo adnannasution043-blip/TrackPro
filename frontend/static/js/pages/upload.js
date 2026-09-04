@@ -177,6 +177,16 @@ export class UploadPage {
           <option value="campaign" selected>Nama Campaign</option>
         </select>
 
+        <div id="upload-progress" style="display:none;margin-top:12px;">
+          <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);margin-bottom:4px;">
+            <span id="upload-progress-label">Memproses…</span>
+            <span id="upload-progress-pct"></span>
+          </div>
+          <div style="height:8px;border-radius:999px;background:var(--bg-muted);overflow:hidden;">
+            <div id="upload-progress-bar" style="height:100%;width:0%;background:#dc2626;border-radius:999px;transition:width .25s ease;"></div>
+          </div>
+        </div>
+
         <div id="upload-error" class="alert alert-error" style="display:none;margin-top:12px;"></div>
         <div id="upload-success" class="alert alert-success" style="display:none;margin-top:12px;"></div>
 
@@ -383,8 +393,65 @@ export class UploadPage {
     btn.disabled = true;
     btn.textContent = 'Memproses…';
 
+    const progWrap  = this.container.querySelector('#upload-progress');
+    const progLabel = this.container.querySelector('#upload-progress-label');
+    const progPct   = this.container.querySelector('#upload-progress-pct');
+    const progBar   = this.container.querySelector('#upload-progress-bar');
+    progWrap.style.display = 'block';
+    progBar.style.width = '0%';
+    progPct.textContent = '';
+
     const results = [];
     const errors = [];
+
+    // Hitung total file yang bakal diupload (buat label "file X/N") — pakai
+    // kondisi yang sama kayak di bawah supaya angkanya akurat.
+    const metaAccountsPre = this._accounts.filter(a => a.tipe === 'meta');
+    const metaIdPre = metaAccountsPre[0]?.id;
+    let fileTotal = commFiles.length + clickFiles.length;
+    if (metaFiles.length && metaAccountsPre.length) fileTotal += metaFiles.length;
+    if (metaIdPre) fileTotal += bdPlacementFiles.length + bdPlatformFiles.length + bdAgeFiles.length;
+    let fileIndex = 0;
+
+    // Upload 1 file dengan progress bar realtime: generate import_id di
+    // client, kirim ke backend, lalu polling GET /upload/imports/{id} tiap
+    // 600ms selagi request upload masih berjalan di server (backend update
+    // baris_diproses/total_baris secara berkala selama parsing & insert).
+    const uploadOneWithProgress = async (file, path, label) => {
+      fileIndex++;
+      const importId = crypto.randomUUID();
+      const sep = path.includes('?') ? '&' : '?';
+
+      progLabel.textContent = `${label} — file ${fileIndex}/${fileTotal}: ${file.name}`;
+      progBar.style.width = '0%';
+      progPct.textContent = '';
+
+      let stopped = false;
+      const poll = async () => {
+        if (stopped) return;
+        try {
+          const st = await apiFetch(`/upload/imports/${importId}`);
+          if (st && st.total_baris) {
+            const done = (st.baris_diproses || 0) + (st.baris_gagal || 0);
+            const pct = Math.min(100, Math.round(done / st.total_baris * 100));
+            progBar.style.width = `${pct}%`;
+            progPct.textContent = `${done}/${st.total_baris}`;
+          }
+        } catch (_) { /* diam, coba lagi tick berikutnya */ }
+      };
+      const timer = setInterval(poll, 600);
+
+      try {
+        const fd = new FormData();
+        fd.append('file', file);
+        const res = await apiUpload(`${path}${sep}import_id=${importId}`, fd);
+        progBar.style.width = '100%';
+        return res;
+      } finally {
+        stopped = true;
+        clearInterval(timer);
+      }
+    };
 
     // Upload N file ke endpoint yang sama satu per satu (backend hanya terima 1 file/request),
     // lalu jumlahkan baris_diproses dan kumpulkan error per file agar file lain tetap diproses.
@@ -392,9 +459,7 @@ export class UploadPage {
       let total = 0;
       for (const f of files) {
         try {
-          const fd = new FormData();
-          fd.append('file', f);
-          const res = await apiUpload(path, fd);
+          const res = await uploadOneWithProgress(f, path, label);
           total += res?.baris_diproses ?? 0;
         } catch (err) {
           errors.push(`${label} (${f.name}): ${err.message}`);
@@ -449,6 +514,7 @@ export class UploadPage {
     } finally {
       btn.disabled = false;
       btn.textContent = 'Upload & Proses';
+      progWrap.style.display = 'none';
     }
   }
 
