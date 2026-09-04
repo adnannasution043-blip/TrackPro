@@ -424,19 +424,37 @@ async function _initSidebarFilter() {
       ...(tree.shopee_unlinked || []).map(s => ({ ...s, metaCount: 0, unlinked: true })),
     ];
 
+    // Per-Shopee: daftar akun Meta yang terhubung, buat expand/collapse di
+    // baris Shopee (sama data yang ditampilkan di Pengaturan → Akun Meta).
+    const shopeeToMetas = {};
+    for (const m of (tree.meta_accounts || []))
+      for (const s of (m.shopee_accounts || []))
+        (shopeeToMetas[s.id] || (shopeeToMetas[s.id] = [])).push(m);
+
     const icoMeta = `<svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" width="16" height="16"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`;
     const icoShopee = `<svg viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2" width="16" height="16"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>`;
     const icoGroup = `<svg viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2" width="16" height="16"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`;
     const chk = `<svg viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.5" width="16" height="16" style="flex-shrink:0;"><polyline points="20 6 9 17 4 12"/></svg>`;
+    const icoChevron = (open = false) =>
+      `<svg viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2.5" width="14" height="14" style="flex-shrink:0;transition:transform .15s;transform:${open ? 'rotate(180deg)' : ''};"><polyline points="6 9 12 15 18 9"/></svg>`;
     const bdg = (t, bg, c) => `<span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;background:${bg};color:${c};flex-shrink:0;">${t}</span>`;
-    const opt = (val, icoBg, ico, name, sub, badge, sel) =>
+    const opt = (val, icoBg, ico, name, sub, badge, sel, extra = '') =>
       `<div class="fp-opt ${sel ? 'fp-sel' : ''}" data-val="${val}">
         <div style="width:32px;height:32px;background:${icoBg};border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${ico}</div>
         <div style="flex:1;min-width:0;">
           <div style="font-size:13px;font-weight:${sel?'600':'500'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${name}</div>
           <div style="font-size:11px;color:#9ca3af;">${sub}</div>
         </div>
-        ${badge}${sel ? chk : ''}
+        ${badge}${sel ? chk : ''}${extra}
+      </div>`;
+    const metaSubOpt = (m, sel) =>
+      `<div class="fp-opt ${sel ? 'fp-sel' : ''}" data-val="meta:${m.id}" style="padding-left:40px;">
+        <div style="width:28px;height:28px;background:#eff6ff;border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${icoMeta}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:12.5px;font-weight:${sel?'600':'500'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${m.nama}</div>
+          <div style="font-size:10.5px;color:#9ca3af;">${m.account_id || ''}</div>
+        </div>
+        ${sel ? chk : ''}
       </div>`;
 
     let html = `<div style="padding:16px 16px 8px;font-size:14px;font-weight:700;color:var(--text);">Pilih Akun</div>`;
@@ -444,12 +462,26 @@ async function _initSidebarFilter() {
 
     if (allShopees.length > 0) {
       html += `<div style="padding:8px 16px 4px;font-size:10.5px;font-weight:700;letter-spacing:0.7px;color:#9ca3af;text-transform:uppercase;">Shopee Affiliate</div>`;
-      for (const s of allShopees)
-        html += opt(`shopee:${s.id}`, '#fff7ed', icoShopee, s.nama, s.unlinked ? 'Belum terhubung' : `${s.metaCount} Meta terkait`, bdg('Shopee', '#fff7ed', '#f97316'), cur === `shopee:${s.id}`);
+      for (const s of allShopees) {
+        const metas = shopeeToMetas[s.id] || [];
+        // Auto-expand kalau filter yang lagi aktif adalah salah satu Meta di
+        // bawah Shopee ini, biar checklist-nya kelihatan pas panel dibuka.
+        const containsCur = metas.some(m => cur === `meta:${m.id}`);
+        const expandBtn = metas.length > 0
+          ? `<button type="button" class="fp-expand" data-shopee-toggle="${s.id}" style="background:none;border:none;cursor:pointer;padding:2px;display:flex;align-items:center;flex-shrink:0;">${icoChevron(containsCur)}</button>`
+          : '';
+        html += opt(`shopee:${s.id}`, '#fff7ed', icoShopee, s.nama, s.unlinked ? 'Belum terhubung' : `${s.metaCount} Meta terkait`, bdg('Shopee', '#fff7ed', '#f97316'), cur === `shopee:${s.id}`, expandBtn);
+        if (metas.length > 0) {
+          html += `<div data-shopee-sub="${s.id}" style="display:${containsCur ? 'block' : 'none'};">${metas.map(m => metaSubOpt(m, cur === `meta:${m.id}`)).join('')}</div>`;
+        }
+      }
     }
-    if (metaCount > 0) {
-      html += `<div style="padding:8px 16px 4px;font-size:10.5px;font-weight:700;letter-spacing:0.7px;color:#9ca3af;text-transform:uppercase;">Meta Ads</div>`;
-      for (const m of tree.meta_accounts)
+    // Cuma akun Meta yang BELUM terhubung ke Shopee manapun — yang sudah
+    // terhubung diakses lewat expand di baris Shopee-nya masing-masing.
+    const unlinkedMetas = (tree.meta_accounts || []).filter(m => !(m.shopee_accounts || []).length);
+    if (unlinkedMetas.length > 0) {
+      html += `<div style="padding:8px 16px 4px;font-size:10.5px;font-weight:700;letter-spacing:0.7px;color:#9ca3af;text-transform:uppercase;">Meta Ads (belum terhubung)</div>`;
+      for (const m of unlinkedMetas)
         html += opt(`meta:${m.id}`, '#eff6ff', icoMeta, m.nama, m.account_id, bdg('Meta', '#eff6ff', '#3b82f6'), cur === `meta:${m.id}`);
     }
     panel.innerHTML = html;
@@ -473,6 +505,17 @@ async function _initSidebarFilter() {
         closePanel();
         if (!val) setFilter({ type: 'all' });
         else { const i = val.indexOf(':'); setFilter({ type: val.slice(0, i), id: val.slice(i + 1) }); }
+      });
+    });
+
+    panel.querySelectorAll('[data-shopee-toggle]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const sub = panel.querySelector(`[data-shopee-sub="${btn.dataset.shopeeToggle}"]`);
+        if (!sub) return;
+        const open = sub.style.display === 'none';
+        sub.style.display = open ? 'block' : 'none';
+        btn.querySelector('svg').style.transform = open ? 'rotate(180deg)' : '';
       });
     });
   } catch (_) {}
