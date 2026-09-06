@@ -86,7 +86,10 @@ export class KomisiBersihPage {
             border-bottom:${i===0?'2px solid #dc2626':'2px solid transparent'};margin-bottom:-2px;">
             ${t.label}
           </button>`).join('')}
-        <button id="btn-reset-wd" class="btn btn-sm" style="margin-left:auto;margin-bottom:8px;color:#dc2626;border-color:#dc2626;">
+        <button id="btn-biaya-layanan" class="btn btn-sm" style="margin-left:auto;margin-bottom:8px;">
+          + Biaya Layanan
+        </button>
+        <button id="btn-reset-wd" class="btn btn-sm" style="margin-bottom:8px;color:#dc2626;border-color:#dc2626;">
           Reset Data WD
         </button>
       </div>
@@ -119,8 +122,68 @@ export class KomisiBersihPage {
     });
 
     this.container.querySelector('#btn-reset-wd').addEventListener('click', () => this._resetWd());
+    this.container.querySelector('#btn-biaya-layanan').addEventListener('click', () => this._inputBiayaLayanan());
 
     this._load();
+  }
+
+  // Modal input manual Biaya Layanan (tanggal + nominal) — dikurangi dari
+  // komisi SEBELUM dihitung PPh 21 di tab "Komisi & Profit" (lihat _renderKomisi).
+  _inputBiayaLayanan() {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;';
+    overlay.innerHTML = `
+      <div style="background:#fff;border-radius:10px;padding:24px;width:360px;max-width:90vw;box-shadow:0 10px 40px rgba(0,0,0,0.3);">
+        <h3 style="margin:0 0 4px;font-size:16px;">Biaya Layanan</h3>
+        <p style="font-size:12.5px;color:#6b7280;margin:0 0 16px;">
+          Dikurangi dari komisi tanggal itu sebelum dihitung PPh 21. Kalau tanggalnya
+          sudah pernah diisi, nilainya akan diganti (bukan ditambah).
+        </p>
+        <div style="margin-bottom:12px;">
+          <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Tanggal</label>
+          <input type="date" id="bl-tanggal" class="form-input" style="width:100%;" value="${todayStr()}">
+        </div>
+        <div style="margin-bottom:18px;">
+          <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Nominal (Rp)</label>
+          <input type="number" id="bl-jumlah" class="form-input" style="width:100%;" min="0" step="1" placeholder="0">
+        </div>
+        <div id="bl-error" style="display:none;color:#dc2626;font-size:12.5px;margin-bottom:12px;"></div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;">
+          <button id="bl-cancel" class="btn">Batal</button>
+          <button id="bl-save" class="btn btn-primary">Simpan</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    const close = () => overlay.remove();
+    overlay.querySelector('#bl-cancel').onclick = close;
+    overlay.onclick = (e) => { if (e.target === overlay) close(); };
+    overlay.querySelector('#bl-save').onclick = async () => {
+      const errEl   = overlay.querySelector('#bl-error');
+      const saveBtn = overlay.querySelector('#bl-save');
+      const tanggal = overlay.querySelector('#bl-tanggal').value;
+      const jumlah  = Number(overlay.querySelector('#bl-jumlah').value);
+      errEl.style.display = 'none';
+
+      if (!tanggal) { errEl.textContent = 'Pilih tanggal dulu.'; errEl.style.display = 'block'; return; }
+      if (!(jumlah >= 0)) { errEl.textContent = 'Nominal tidak valid.'; errEl.style.display = 'block'; return; }
+
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Menyimpan…';
+      try {
+        await apiFetch('/biaya-layanan', {
+          method: 'POST',
+          body: JSON.stringify({ tanggal, jumlah }),
+        });
+        close();
+        await this._load();
+      } catch (e) {
+        errEl.textContent = e.message;
+        errEl.style.display = 'block';
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Simpan';
+      }
+    };
   }
 
   async _resetWd() {
@@ -172,16 +235,18 @@ export class KomisiBersihPage {
     wrap.innerHTML = '<div class="loading" style="padding:32px;text-align:center;">Memuat…</div>';
     try {
       const qs = filterQS ? filterQS() : '';
-      const [dash, wd] = await Promise.all([
+      const [dash, wd, biaya] = await Promise.all([
         apiFetch(`/dashboard?tanggal_dari=${this.dari}&tanggal_sampai=${this.sampai}${qs}`),
         apiFetch(`/upload/wd-payment?tanggal_dari=${this.dari}&tanggal_sampai=${this.sampai}`),
+        apiFetch(`/biaya-layanan?tanggal_dari=${this.dari}&tanggal_sampai=${this.sampai}`),
       ]);
 
-      this._spendMap     = {};
-      this._wdLiveMap    = {};
-      this._wdOrganikMap = {};
-      this._wdIklanMap   = {};
-      const dateSet      = new Set();
+      this._spendMap        = {};
+      this._wdLiveMap       = {};
+      this._wdOrganikMap    = {};
+      this._wdIklanMap      = {};
+      this._biayaLayananMap = {};
+      const dateSet         = new Set();
 
       for (const row of (dash?.harian || [])) {
         this._spendMap[row.tanggal] = Number(row.spend_idr || 0);
@@ -196,6 +261,12 @@ export class KomisiBersihPage {
         this._wdLiveMap[row.tanggal]    = Number(row.komisi_live || 0);
         this._wdOrganikMap[row.tanggal] = Number(row.komisi_organik || 0);
         this._wdIklanMap[row.tanggal]   = Number(row.komisi_iklan || 0);
+        dateSet.add(row.tanggal);
+      }
+      // Biaya Layanan — input manual, dikurangi dari komisi SEBELUM PPh 21
+      // dihitung (lihat _renderKomisi).
+      for (const row of (biaya || [])) {
+        this._biayaLayananMap[row.tanggal] = Number(row.jumlah || 0);
         dateSet.add(row.tanggal);
       }
       this._dates  = [...dateSet].sort();
@@ -269,28 +340,36 @@ export class KomisiBersihPage {
       const grossOrganik = live + (this._wdOrganikMap[tgl] || 0);
       const grossIklan   = this._wdIklanMap[tgl] || 0;
       const grossTotal   = grossOrganik + grossIklan;
+      const biaya        = this._biayaLayananMap[tgl] || 0;
 
+      // Biaya Layanan dikurangi dari komisi DULU, baru sisanya yang kena
+      // pajak PPh 21 (DPP = 50% dari komisi setelah dipotong Biaya Layanan).
+      const netKomisi = grossTotal - biaya;
       const bulan  = tgl.slice(0, 7);
-      const dpp    = grossTotal * 0.5;
+      const dpp    = netKomisi * 0.5;
       const prevCum = cumByMonth[bulan] || 0;
       const currCum = prevCum + dpp;
       cumByMonth[bulan] = currCum;
       const pajak  = progressiveTax(currCum) - progressiveTax(prevCum);
 
-      // distribusi pajak proporsional ke organik & iklan
+      // Pajak + Biaya Layanan didistribusi proporsional ke Organik & Iklan
+      // (sama seperti pajak sebelumnya) — Total Komisi Masuk jadinya
+      // otomatis = grossTotal - pajak - biaya.
+      const potongan = pajak + biaya;
       const ratio   = grossTotal > 0 ? grossOrganik / grossTotal : 0.5;
-      const organik = grossOrganik - pajak * ratio;
-      const iklan   = grossIklan   - pajak * (1 - ratio);
+      const organik = grossOrganik - potongan * ratio;
+      const iklan   = grossIklan   - potongan * (1 - ratio);
 
       const totalMasuk  = organik + iklan;
       const profitIklan = iklan - spend;
       const totalBersih = organik + profitIklan;
 
-      return { tgl, live, organik, iklan, totalMasuk, spend, profitIklan, totalBersih, pajak };
+      return { tgl, live, biaya, organik, iklan, totalMasuk, spend, profitIklan, totalBersih, pajak };
     });
 
     const tot = rows.reduce((a, r) => ({
       live:         a.live        + r.live,
+      biaya:        a.biaya       + r.biaya,
       organik:      a.organik     + r.organik,
       iklan:        a.iklan       + r.iklan,
       totalMasuk:   a.totalMasuk  + r.totalMasuk,
@@ -298,7 +377,7 @@ export class KomisiBersihPage {
       profitIklan:  a.profitIklan + r.profitIklan,
       totalBersih:  a.totalBersih + r.totalBersih,
       pajak:        a.pajak       + r.pajak,
-    }), { live:0, organik:0, iklan:0, totalMasuk:0, spend:0, profitIklan:0, totalBersih:0, pajak:0 });
+    }), { live:0, biaya:0, organik:0, iklan:0, totalMasuk:0, spend:0, profitIklan:0, totalBersih:0, pajak:0 });
 
     const totalPages = Math.ceil(rows.length / this._perPage);
     if (this._page > totalPages) this._page = Math.max(1, totalPages);
@@ -331,6 +410,7 @@ export class KomisiBersihPage {
         <td style="${tdBase}color:#7c3aed;">${rp(r.live)}</td>
         <td style="${tdBase}color:#7c3aed;">${rp(r.organik)}</td>
         <td style="${tdBase}color:#7c3aed;">${rp(r.iklan)}</td>
+        <td style="${tdBase}color:#dc2626;">${r.biaya ? '(' + rp(r.biaya) + ')' : rp(0)}</td>
         <td style="${tdBase}font-weight:700;color:#7c3aed;">${rp(r.totalMasuk)}</td>
         <td style="${tdBase}color:#dc2626;">${rp(r.iklan)}</td>
         <td style="${tdBase}color:#6b7280;">${rp(r.spend)}</td>
@@ -350,7 +430,7 @@ export class KomisiBersihPage {
           <tr style="border-bottom:none;">
             <th rowspan="2" style="${thBase}text-align:left;vertical-align:bottom;min-width:80px;">TGL</th>
             <th rowspan="2" style="${thBase}vertical-align:bottom;text-align:center;background:#fffbeb;color:#92400e;">TARIF</th>
-            ${grpHdr(GRP1, 'Komisi Bersih after Tax (PPh 21)', 4)}
+            ${grpHdr(GRP1, 'Komisi Bersih after Tax (PPh 21)', 5)}
             ${grpHdr(GRP2, 'Profit Iklan', 3)}
             ${grpHdr(GRP3, 'Komisi Bersih', 3)}
           </tr>
@@ -358,6 +438,7 @@ export class KomisiBersihPage {
             <th style="${thBase}background:${GRP1.bg};color:${GRP1.color};">Komisi Live</th>
             <th style="${thBase}background:${GRP1.bg};color:${GRP1.color};">Komisi Organik</th>
             <th style="${thBase}background:${GRP1.bg};color:${GRP1.color};">Komisi Iklan</th>
+            <th style="${thBase}background:${GRP1.bg};color:${GRP1.color};">Biaya Layanan</th>
             <th style="${thBase}background:${GRP1.bg};color:${GRP1.color};">Total Komisi Masuk</th>
             <th style="${thBase}background:${GRP2.bg};color:${GRP2.color};">Komisi Iklan</th>
             <th style="${thBase}background:${GRP2.bg};color:#6b7280;">Budget Iklan</th>
@@ -375,6 +456,7 @@ export class KomisiBersihPage {
             <td style="${tdBase}color:#7c3aed;">${rp(tot.live)}</td>
             <td style="${tdBase}color:#7c3aed;">${rp(tot.organik)}</td>
             <td style="${tdBase}color:#7c3aed;">${rp(tot.iklan)}</td>
+            <td style="${tdBase}color:#dc2626;">${tot.biaya ? '(' + rp(tot.biaya) + ')' : rp(0)}</td>
             <td style="${tdBase}font-weight:800;color:#7c3aed;">${rp(tot.totalMasuk)}</td>
             <td style="${tdBase}color:#dc2626;">${rp(tot.iklan)}</td>
             <td style="${tdBase}color:#6b7280;">${rp(tot.spend)}</td>
@@ -386,9 +468,10 @@ export class KomisiBersihPage {
         </tfoot>
       </table>
       <div style="padding:8px 14px;background:#fffbeb;border-top:1px solid var(--border);font-size:12px;color:#92400e;">
-        <strong>PPh 21 Progresif</strong> — DPP = Komisi × 50%, kumulatif per bulan:
+        <strong>PPh 21 Progresif</strong> — DPP = (Komisi − Biaya Layanan) × 50%, kumulatif per bulan:
         ≤60 jt → 5% · 60–250 jt → 15% · 250–500 jt → 25% · 500 jt–5 M → 30% · >5 M → 35%
         &nbsp;·&nbsp; Total pajak periode ini: <strong>Rp ${rp(tot.pajak)}</strong>
+        &nbsp;·&nbsp; Total Biaya Layanan: <strong>Rp ${rp(tot.biaya)}</strong>
       </div>`;
     this._pgHtml(rows.length, pgWrap);
   }

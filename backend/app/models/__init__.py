@@ -1,4 +1,5 @@
 from app.models.account import AccountLink, MetaAccount, ShopeeAccount
+from app.models.biaya_layanan import BiayaLayanan
 from app.models.campaign_note import CampaignNote
 from app.models.meta_app_config import MetaAppConfig
 from app.models.wd_payment import WdPayment
@@ -38,4 +39,5 @@ __all__ = [
     "AduSyncLog",
     "TerraAccount",
     "TerraSyncLog",
+    "BiayaLayanan",
 ]

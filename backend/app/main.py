@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.core.scheduler import start_scheduler, stop_scheduler
-from app.routers import accounts, adu_sync, auth, balance, clicks, csv_upload, dashboard, export_excel, meta_oauth, meta_sync, orders, taglink, terra_sync
+from app.routers import accounts, adu_sync, auth, balance, biaya_layanan, clicks, csv_upload, dashboard, export_excel, meta_oauth, meta_sync, orders, taglink, terra_sync
 
 _ALEMBIC_INI = Path(__file__).parent.parent / "alembic.ini"
 
@@ -51,6 +51,7 @@ app.include_router(meta_sync.router, prefix="/api/meta-sync", tags=["meta-sync"]
 app.include_router(meta_oauth.router, prefix="/api/meta-oauth", tags=["meta-oauth"])
 app.include_router(adu_sync.router, prefix="/api/adu-sync", tags=["adu-sync"])
 app.include_router(terra_sync.router, prefix="/api/terra-sync", tags=["terra-sync"])
+app.include_router(biaya_layanan.router, prefix="/api/biaya-layanan", tags=["biaya-layanan"])
 
 
 @app.get("/api/health")
