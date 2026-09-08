@@ -605,6 +605,7 @@ export class MetaAccountPage {
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <button class="btn btn-primary btn-sm" data-save-token="${m.id}">Simpan Token</button>
             ${hasToken ? `<button class="btn btn-sm" style="color:#dc2626;border-color:#dc2626;" data-delete-token="${m.id}">Hapus Token</button>` : ''}
+            ${hasToken ? `<button class="btn btn-sm" data-test-balance="${m.id}" title="Diagnostik — cek field balance dari Meta, tidak menyimpan apapun">Test Saldo dari Meta</button>` : ''}
             <button class="btn btn-sm" data-close-token="${m.id}">Batal</button>
           </div>
         </div>
@@ -697,6 +698,34 @@ export class MetaAccountPage {
           _showMsg(msgEl, e.message || 'Gagal menyimpan token.', 'error');
         } finally {
           btn.disabled = false; btn.textContent = orig;
+        }
+      });
+    });
+
+    // Test Saldo — diagnostik, tarik field balance/spend_cap/amount_spent
+    // langsung dari Meta Graph API, tidak nulis apapun ke DB.
+    el.querySelectorAll('[data-test-balance]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.testBalance;
+        const orig = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Mengecek…';
+        try {
+          const data = await apiFetch(`/meta-sync/${id}/test-balance`);
+          alert(
+            `Hasil dari Meta Graph API:\n\n` +
+            `Nama: ${data.name ?? '—'}\n` +
+            `Currency: ${data.currency ?? '—'}\n` +
+            `balance: ${data.balance ?? '—'}\n` +
+            `spend_cap: ${data.spend_cap ?? '—'}\n` +
+            `amount_spent: ${data.amount_spent ?? '—'}\n` +
+            `funding_source_details: ${data.funding_source_details ? JSON.stringify(data.funding_source_details) : '—'}`
+          );
+        } catch (e) {
+          alert('Gagal: ' + e.message);
+        } finally {
+          btn.disabled = false;
+          btn.textContent = orig;
         }
       });
     });

@@ -116,6 +116,33 @@ async def sync_meta_ads(
     return SyncResponse(rows_fetched=len(rows), rows_upserted=ok, rows_gagal=fail, status="selesai")
 
 
+@router.get("/{account_id}/test-balance")
+async def test_balance(account_id: UUID, current_user: CurrentUser, db: DB):
+    """DIAGNOSTIK — tarik field balance/spend_cap/amount_spent langsung dari
+    Graph API buat satu akun, tanpa nulis apapun ke DB. Dipakai buat ngecek
+    apakah field ini valid dipakai sebagai "Sisa Saldo" (banyak akun prepaid
+    Indonesia field balance-nya tidak merepresentasikan itu)."""
+    account = await _get_account(account_id, current_user.id, db)
+    if not account.access_token_enc:
+        raise HTTPException(422, "Akun ini belum punya token Meta.")
+
+    ad_acc = account.ad_account_id
+    if not ad_acc.startswith("act_"):
+        ad_acc = f"act_{ad_acc}"
+
+    params = {
+        "fields": "name,balance,spend_cap,amount_spent,currency,funding_source_details",
+        "access_token": account.access_token_enc,
+    }
+    async with httpx.AsyncClient(timeout=20) as client:
+        resp = await client.get(f"{META_API_BASE}/{ad_acc}", params=params)
+
+    if resp.status_code != 200:
+        raise HTTPException(502, f"Meta API error: {_parse_meta_error(resp.text)}")
+
+    return resp.json()
+
+
 @router.get("/{account_id}/logs")
 async def get_sync_logs(
     account_id: UUID,
