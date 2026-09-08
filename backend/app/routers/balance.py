@@ -125,6 +125,19 @@ async def list_balances(current_user: CurrentUser, db: DB):
     )
 
 
+@router.post("/refresh")
+async def refresh_balances(current_user: CurrentUser, db: DB):
+    """Sync ulang Sisa Saldo dari Meta API (spend_cap - amount_spent) untuk
+    semua akun Meta milik user yang punya token dan spend_cap ter-set.
+    Akun tanpa token/spend_cap dilewati, nilai manual yang ada dibiarkan."""
+    from app.core.meta_sync_worker import sync_all_balances
+
+    meta_ids = [r[0] for r in (await db.execute(
+        sa.select(MetaAccount.id).where(MetaAccount.user_id == current_user.id)
+    )).all()]
+    return await sync_all_balances(meta_account_ids=meta_ids)
+
+
 @router.post("/{meta_account_id}", response_model=BalanceItem, status_code=status.HTTP_200_OK)
 async def upsert_balance(meta_account_id: UUID, body: BalanceUpsert, current_user: CurrentUser, db: DB):
     meta = (await db.execute(

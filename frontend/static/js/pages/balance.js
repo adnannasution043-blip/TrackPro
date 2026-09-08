@@ -58,8 +58,30 @@ export class BalancePage {
       <div id="content"><div class="loading">Memuat data…</div></div>
     `;
 
-    this.container.querySelector('#btn-refresh').addEventListener('click', () => this._load());
+    this.container.querySelector('#btn-refresh').addEventListener('click', () => this._refreshSaldo());
     await this._load();
+  }
+
+  async _refreshSaldo() {
+    const btn = this.container.querySelector('#btn-refresh');
+    const orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.textContent = 'Menyinkron dari Meta…';
+    try {
+      // Sisa Saldo = spend_cap - amount_spent dari Meta Graph API — cuma
+      // berlaku buat akun yang punya spend_cap ter-set, sisanya dilewati
+      // (nilai manual yang sudah ada dibiarkan).
+      const res = await apiFetch('/balance/refresh', { method: 'POST' });
+      await this._load();
+      if (res) {
+        alert(`Sync saldo selesai: ${res.ok} akun ter-update, ${res.skip} dilewati (belum ada spend_cap/token), ${res.gagal} gagal — dari ${res.total} akun.`);
+      }
+    } catch (e) {
+      alert('Gagal sync saldo: ' + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = orig;
+    }
   }
 
   async _load() {

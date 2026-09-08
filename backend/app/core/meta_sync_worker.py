@@ -3,6 +3,7 @@ meta_sync_worker.py — fungsi sync Meta yang bisa dipanggil dari scheduler
 maupun OAuth callback (tanpa FastAPI dependency injection).
 """
 
+import asyncio
 import json
 import logging
 from datetime import date, datetime, timezone
@@ -15,11 +16,16 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.core.database import AsyncSessionLocal
 from app.models.account import MetaAccount
+from app.models.balance import AccountBalance
 from app.models.campaign import Campaign
 from app.models.meta_sync_log import MetaSyncLog
 from app.models.metrics import DailyMetric
 
 log = logging.getLogger(__name__)
+
+# Sentinel "unbounded" historis Meta buat spend_cap yang ga di-set eksplisit
+# oleh user — jauh lebih besar dari limit rupiah manapun yang masuk akal.
+_SPEND_CAP_UNBOUNDED = Decimal("1000000000000")  # Rp 1 triliun
 
 META_API_BASE = "https://graph.facebook.com/v19.0"
 META_FIELDS   = "campaign_id,campaign_name,spend,clicks,date_start"
@@ -185,3 +191,95 @@ async def _upsert_meta_metric(campaign_id: UUID, tanggal: date, spend_idr: Decim
         set_={"spend_idr": stmt.excluded.spend_idr, "clicks_meta": stmt.excluded.clicks_meta},
     )
     await db.execute(stmt)
+
+
+# ===========================================================================
+# Sisa Saldo — dihitung dari spend_cap - amount_spent (Graph API), BUKAN
+# field "balance" (itu tagihan yang belum di-charge untuk akun kartu kredit,
+# bukan sisa saldo — sudah divalidasi manual lewat endpoint test-balance).
+# Cuma berlaku buat akun yang beneran punya spend_cap ter-set; kalau tidak,
+# dilewati dan nilai manual yang sudah ada dibiarkan apa adanya.
+# ===========================================================================
+
+async def fetch_and_update_balance(account_id: UUID) -> dict:
+    """Tarik spend_cap & amount_spent dari Graph API buat satu akun, hitung
+    sisa_saldo = spend_cap - amount_spent, upsert ke account_balances.
+    Buat DB session sendiri (bisa dipanggil dari scheduler/batch)."""
+    async with AsyncSessionLocal() as db:
+        account = (await db.execute(
+            sa.select(MetaAccount).where(MetaAccount.id == account_id)
+        )).scalar_one_or_none()
+        if not account or not account.access_token_enc:
+            return {"status": "skip", "alasan": "tidak ada token"}
+
+        ad_acc = account.ad_account_id
+        if not ad_acc.startswith("act_"):
+            ad_acc = f"act_{ad_acc}"
+
+        params = {"fields": "spend_cap,amount_spent", "access_token": account.access_token_enc}
+        try:
+            async with httpx.AsyncClient(timeout=20) as client:
+                resp = await client.get(f"{META_API_BASE}/{ad_acc}", params=params)
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code in (400, 401):
+                account.status_koneksi = "token_expired"
+                await db.commit()
+            return {"status": "gagal", "alasan": _parse_meta_error(exc.response.text)}
+        except Exception as exc:
+            return {"status": "gagal", "alasan": str(exc)}
+
+        data = resp.json()
+        if data.get("spend_cap") is None or data.get("amount_spent") is None:
+            return {"status": "skip", "alasan": "spend_cap tidak diset di akun ini"}
+
+        try:
+            spend_cap = Decimal(str(data["spend_cap"]))
+            amount_spent = Decimal(str(data["amount_spent"]))
+        except Exception:
+            return {"status": "skip", "alasan": "format angka tidak dikenali"}
+
+        if spend_cap <= 0 or spend_cap >= _SPEND_CAP_UNBOUNDED:
+            return {"status": "skip", "alasan": "spend_cap tidak masuk akal / tidak diset"}
+
+        sisa = max(spend_cap - amount_spent, Decimal("0"))
+
+        stmt = pg_insert(AccountBalance).values(
+            meta_account_id=account_id,
+            sisa_saldo=sisa,
+            total_limit=spend_cap,
+        ).on_conflict_do_update(
+            index_elements=["meta_account_id"],
+            set_={"sisa_saldo": sisa, "total_limit": spend_cap, "updated_at": sa.text("now()")},
+        )
+        await db.execute(stmt)
+        await db.commit()
+        return {"status": "ok", "sisa_saldo": float(sisa), "total_limit": float(spend_cap)}
+
+
+async def sync_all_balances(meta_account_ids: list[UUID] | None = None) -> dict:
+    """Sync Sisa Saldo buat banyak akun sekaligus (default: semua akun yang
+    punya token), dengan concurrency terbatas biar tidak lama & tidak
+    langsung tembak 178 request bersamaan ke Meta."""
+    async with AsyncSessionLocal() as db:
+        q = sa.select(MetaAccount.id).where(MetaAccount.access_token_enc.isnot(None))
+        if meta_account_ids is not None:
+            q = q.where(MetaAccount.id.in_(meta_account_ids))
+        ids = [r[0] for r in (await db.execute(q)).all()]
+
+    sem = asyncio.Semaphore(8)
+
+    async def _one(acc_id):
+        async with sem:
+            try:
+                return await fetch_and_update_balance(acc_id)
+            except Exception as e:
+                log.exception("sync saldo akun %s gagal: %s", acc_id, e)
+                return {"status": "gagal", "alasan": str(e)}
+
+    results = await asyncio.gather(*(_one(i) for i in ids)) if ids else []
+    ok    = sum(1 for r in results if r["status"] == "ok")
+    skip  = sum(1 for r in results if r["status"] == "skip")
+    gagal = sum(1 for r in results if r["status"] == "gagal")
+    log.info("sync saldo: %d ok, %d skip, %d gagal (dari %d akun)", ok, skip, gagal, len(ids))
+    return {"ok": ok, "skip": skip, "gagal": gagal, "total": len(ids)}
