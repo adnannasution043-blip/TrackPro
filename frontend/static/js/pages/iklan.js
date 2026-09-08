@@ -1,5 +1,5 @@
 import { apiFetch, getToken } from '../api.js';
-import { filterQS } from '../filter-state.js';
+import { filterQS, getFilter } from '../filter-state.js';
 
 const rp  = n => 'Rp ' + Number(n || 0).toLocaleString('id-ID');
 const num = n => n != null ? Number(n).toLocaleString('id-ID') : '—';
@@ -44,9 +44,33 @@ export class IklanPage {
     this._page   = 1;
     this._perPage = 10;
     this._boundClose = this._closePanels.bind(this);
+    // Filter Meta lokal khusus halaman ini — cuma aktif kalau Filter Akun di
+    // sidebar lagi di-set ke satu akun Shopee, buat mempersempit ke satu
+    // Meta account yang terhubung ke Shopee itu. Tidak disimpan ke filter
+    // global (localStorage), jadi tidak mempengaruhi halaman lain.
+    this._localMetaId = null;
+    this._shopeeMetas = []; // Meta accounts terhubung ke Shopee yang lagi difilter
   }
 
   async render() {
+    const f = getFilter ? getFilter() : { type: 'all' };
+    if (f.type === 'shopee' && f.id) {
+      try {
+        const tree = await apiFetch('/accounts/tree');
+        this._shopeeMetas = (tree?.meta_accounts || [])
+          .filter(m => (m.shopee_accounts || []).some(s => s.id === f.id));
+      } catch (_) { this._shopeeMetas = []; }
+    } else {
+      this._shopeeMetas = [];
+    }
+    if (!this._shopeeMetas.some(m => m.id === this._localMetaId)) this._localMetaId = null;
+
+    const metaFilterHtml = this._shopeeMetas.length > 0 ? `
+      <select id="sel-meta-filter" class="form-select" style="font-size:12px;max-width:200px;">
+        <option value="">Semua Meta (${this._shopeeMetas.length})</option>
+        ${this._shopeeMetas.map(m => `<option value="${m.id}"${this._localMetaId===m.id?' selected':''}>${m.nama}</option>`).join('')}
+      </select>` : '';
+
     this.container.innerHTML = `
       <div class="page-header">
         <div class="page-header-left">
@@ -80,6 +104,7 @@ export class IklanPage {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
             Auto Link
           </button>
+          ${metaFilterHtml}
           <div style="display:flex;gap:6px;align-items:center;">
             <input type="date" id="inp-dari"   class="form-input" style="width:135px;font-size:12px;" value="${this.dari}">
             <span style="color:var(--text-muted);">–</span>
@@ -120,6 +145,12 @@ export class IklanPage {
 
     this.container.querySelector('#btn-auto-link').addEventListener('click', () => this._autoLink());
 
+    this.container.querySelector('#sel-meta-filter')?.addEventListener('change', e => {
+      this._localMetaId = e.target.value || null;
+      this._page = 1;
+      this._load();
+    });
+
     document.addEventListener('click', this._boundClose);
     await this._load();
   }
@@ -156,7 +187,12 @@ export class IklanPage {
     const el = this.container.querySelector('#content');
     el.innerHTML = '<div class="loading">Memuat data…</div>';
     try {
-      const qs   = filterQS ? filterQS() : '';
+      // Filter Meta lokal (kalau dipilih) menang atas filterQS() — filterQS
+      // di sini paling cuma balikin &shopee_account_id (endpoint ini belum
+      // dukung itu) jadi aman ditimpa dengan &meta_account_id yang dipilih.
+      const qs = this._localMetaId
+        ? `&meta_account_id=${this._localMetaId}`
+        : (filterQS ? filterQS() : '');
       const data = await apiFetch(
         `/dashboard/campaigns?tanggal_dari=${this.dari}&tanggal_sampai=${this.sampai}${qs}`
       );
@@ -752,7 +788,9 @@ export class IklanPage {
   }
 
   async _export(key) {
-    const qs  = filterQS ? filterQS() : '';
+    const qs = this._localMetaId
+      ? `&meta_account_id=${this._localMetaId}`
+      : (filterQS ? filterQS() : '');
     const base = `/api/export`;
     const map  = {
       pra:           [`${base}/laporan-pra-filter`,     'PRA FILTER ADV.xlsx'],
