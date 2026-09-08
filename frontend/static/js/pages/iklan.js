@@ -51,7 +51,7 @@ export class IklanPage {
       <div class="page-header">
         <div class="page-header-left">
           <h1>Iklan</h1>
-          <p>Pantau performa dan tahap setiap iklan. Klik baris untuk rincian harian & breakdown.</p>
+          <p>Pantau performa dan tahap setiap iklan. Klik baris untuk rincian harian.</p>
         </div>
         <div class="page-header-right" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
           <div style="position:relative;">
@@ -594,14 +594,6 @@ export class IklanPage {
           </div>
           <button class="modal-close" id="modal-close">×</button>
         </div>
-        <div style="display:flex;gap:0;border-bottom:2px solid var(--border);flex-shrink:0;padding:0 20px;">
-          ${['Harian','Penempatan','Platform','Usia & Gender'].map((t,i)=>
-            `<button class="camp-modal-tab${i===0?' active':''}" data-tab="${i}"
-              style="padding:10px 16px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:600;
-              color:${i===0?'#dc2626':'var(--text-muted)'};
-              border-bottom:${i===0?'2px solid #dc2626':'2px solid transparent'};margin-bottom:-2px;white-space:nowrap;">${t}</button>`
-          ).join('')}
-        </div>
         <div class="modal-body" style="flex:1;overflow-y:auto;padding:16px 20px;">
           <div id="modal-content"><div class="loading">Memuat…</div></div>
         </div>
@@ -610,33 +602,13 @@ export class IklanPage {
     overlay.querySelector('#modal-close').addEventListener('click', () => overlay.remove());
     overlay.addEventListener('click', e => { if(e.target===overlay) overlay.remove(); });
 
-    let harianData = null;
-    const renderTab = async tab => {
-      const content = overlay.querySelector('#modal-content');
-      if (tab === 0) {
-        if (!harianData) {
-          content.innerHTML = '<div class="loading">Memuat…</div>';
-          try { harianData = await apiFetch(`/dashboard/campaigns/${r.id}/harian?tanggal_dari=${this.dari}&tanggal_sampai=${this.sampai}`); }
-          catch(e) { content.innerHTML=`<div class="alert alert-error">${e.message}</div>`; return; }
-        }
-        this._renderHarianTab(content, harianData, r);
-      } else {
-        this._renderBreakdownTab(content, tab, r);
-      }
-    };
-
-    overlay.querySelectorAll('.camp-modal-tab').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const tab = Number(btn.dataset.tab);
-        overlay.querySelectorAll('.camp-modal-tab').forEach((b,i) => {
-          const on = i === tab;
-          b.style.color = on ? '#dc2626' : 'var(--text-muted)';
-          b.style.borderBottom = on ? '2px solid #dc2626' : '2px solid transparent';
-        });
-        renderTab(tab);
-      });
-    });
-    renderTab(0);
+    const content = overlay.querySelector('#modal-content');
+    try {
+      const harianData = await apiFetch(`/dashboard/campaigns/${r.id}/harian?tanggal_dari=${this.dari}&tanggal_sampai=${this.sampai}`);
+      this._renderHarianTab(content, harianData, r);
+    } catch(e) {
+      content.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+    }
   }
 
   _renderHarianTab(el, data, r) {
@@ -777,44 +749,6 @@ export class IklanPage {
       if (!popup.contains(e.target)) { popup.remove(); document.removeEventListener('click', outsideClick); }
     };
     setTimeout(() => document.addEventListener('click', outsideClick), 10);
-  }
-
-  async _renderBreakdownTab(el, tab, r) {
-    const TIPES  = ['','placement','platform','age_gender'];
-    const LABELS = ['','Penempatan','Platform','Usia & Gender'];
-    el.innerHTML = '<div class="loading">Memuat…</div>';
-    try {
-      const data = await apiFetch(`/dashboard/campaigns/${r.id}/breakdown?tipe=${TIPES[tab]}`);
-      if (!data||data.length===0) {
-        el.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-muted);">
-          <div style="font-size:14px;font-weight:600;margin-bottom:8px;">Data ${LABELS[tab]} belum tersedia</div>
-          <div style="font-size:12px;">Upload CSV breakdown Meta Ads di halaman Upload Data Harian.</div>
-        </div>`;
-        return;
-      }
-      const totalSpend = data.reduce((s,x)=>s+x.spend_idr,0);
-      el.innerHTML = `<div style="overflow-x:auto;"><table class="data-table" style="font-size:12px;">
-        <thead><tr><th>${LABELS[tab].toUpperCase()}</th><th>BIAYA</th><th>% BIAYA</th><th>IMPRESI</th><th>KLIK</th><th>CPM</th><th>CPC</th><th>CTR</th></tr></thead>
-        <tbody>${data.map(row => {
-          const barW = totalSpend>0?Math.round(row.spend_idr/totalSpend*100):0;
-          return `<tr>
-            <td style="font-weight:600;">${row.nilai}</td>
-            <td><div style="display:flex;align-items:center;gap:8px;">
-              <div style="width:60px;height:4px;background:var(--bg-muted);border-radius:2px;flex-shrink:0;">
-                <div style="width:${barW}%;height:100%;background:#dc2626;border-radius:2px;"></div>
-              </div>${rp(Math.round(row.spend_idr))}</div></td>
-            <td>${row.persen_spend.toFixed(1)}%</td>
-            <td>${num(row.impressions)}</td>
-            <td>${num(row.clicks)}</td>
-            <td>${row.cpm_idr!=null?rp(Math.round(row.cpm_idr)):'—'}</td>
-            <td>${row.cpc_idr!=null?rp(Math.round(row.cpc_idr)):'—'}</td>
-            <td>${row.ctr_persen!=null?row.ctr_persen.toFixed(2)+'%':'—'}</td>
-          </tr>`;
-        }).join('')}</tbody>
-      </table></div>`;
-    } catch(e) {
-      el.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
-    }
   }
 
   async _export(key) {
