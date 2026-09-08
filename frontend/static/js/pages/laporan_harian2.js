@@ -114,7 +114,8 @@ export class LaporanHarian2Page {
         apiFetch(`/dashboard?tanggal_dari=${this.dari}&tanggal_sampai=${this.sampai}${qs}`),
         apiFetch(`/dashboard/laporan-harian2?tanggal_dari=${this.dari}&tanggal_sampai=${this.sampai}${qs}`),
       ]);
-      this._rows  = dash?.harian || [];
+      // Tanggal terbaru di paling atas
+      this._rows  = (dash?.harian || []).slice().sort((a, b) => b.tanggal.localeCompare(a.tanggal));
       this._bdMap = {};
       for (const row of (bd || [])) this._bdMap[row.tanggal] = row;
       this._page = 1;
