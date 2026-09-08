@@ -616,7 +616,7 @@ export class IklanPage {
       if (tab === 0) {
         if (!harianData) {
           content.innerHTML = '<div class="loading">Memuat…</div>';
-          try { harianData = await apiFetch(`/dashboard/campaigns/${r.id}/harian`); }
+          try { harianData = await apiFetch(`/dashboard/campaigns/${r.id}/harian?tanggal_dari=${this.dari}&tanggal_sampai=${this.sampai}`); }
           catch(e) { content.innerHTML=`<div class="alert alert-error">${e.message}</div>`; return; }
         }
         this._renderHarianTab(content, harianData, r);

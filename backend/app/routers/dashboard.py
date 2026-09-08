@@ -314,6 +314,8 @@ async def get_campaign_harian(
     campaign_id: UUID,
     current_user: CurrentUser,
     db: DB,
+    tanggal_dari: date | None = Query(None),
+    tanggal_sampai: date | None = Query(None),
 ):
     # Verify ownership
     camp = (await db.execute(
@@ -325,12 +327,13 @@ async def get_campaign_harian(
         from fastapi import HTTPException
         raise HTTPException(404, "Campaign tidak ditemukan.")
 
-    # Meta daily data
-    meta_rows = (await db.execute(
-        sa.select(DailyMetric)
-        .where(DailyMetric.campaign_id == campaign_id)
-        .order_by(DailyMetric.tanggal.desc())
-    )).scalars().all()
+    # Meta daily data — kalau tanggal_dari/sampai dikirim (dari filter tanggal
+    # di halaman Iklan), scope ke rentang itu supaya TOTAL BIAYA di modal
+    # match dengan kolom SPEND di tabel. Tanpa param = histori penuh (lama).
+    meta_q = sa.select(DailyMetric).where(DailyMetric.campaign_id == campaign_id)
+    if tanggal_dari and tanggal_sampai:
+        meta_q = meta_q.where(DailyMetric.tanggal.between(tanggal_dari, tanggal_sampai))
+    meta_rows = (await db.execute(meta_q.order_by(DailyMetric.tanggal.desc()))).scalars().all()
 
     # Tag link IDs for this campaign
     tag_ids = [r[0] for r in (await db.execute(
@@ -340,7 +343,7 @@ async def get_campaign_harian(
     # Shopee daily data grouped by date
     shopee_by_date: dict[date, dict] = {}
     if tag_ids:
-        shopee_rows = (await db.execute(
+        shopee_q = (
             sa.select(
                 DailyMetric.tanggal,
                 sa.func.sum(DailyMetric.clicks_shopee).label("clicks_shopee"),
@@ -351,7 +354,10 @@ async def get_campaign_harian(
             )
             .where(DailyMetric.tag_link_id.in_(tag_ids))
             .group_by(DailyMetric.tanggal)
-        )).all()
+        )
+        if tanggal_dari and tanggal_sampai:
+            shopee_q = shopee_q.where(DailyMetric.tanggal.between(tanggal_dari, tanggal_sampai))
+        shopee_rows = (await db.execute(shopee_q)).all()
         for r in shopee_rows:
             shopee_by_date[r.tanggal] = {
                 "clicks_shopee": r.clicks_shopee or 0,
