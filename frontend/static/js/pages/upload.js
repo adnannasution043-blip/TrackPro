@@ -68,6 +68,52 @@ export class UploadPage {
         </div>
       </div>
 
+      <div class="card" style="margin-bottom:16px;padding:0;border-color:#fed7aa;">
+        <button id="btn-toggle-repair" style="width:100%;display:flex;align-items:center;justify-content:space-between;padding:14px 20px;background:#fff7ed;border:none;cursor:pointer;text-align:left;border-radius:8px;">
+          <div>
+            <div style="font-size:13px;font-weight:600;color:#9a3412;margin-bottom:2px;">⚠ Perbaikan Data — Reset Tag Salah</div>
+            <div style="font-size:12px;color:#9a3412;">Buat bersihin komisi yang salah nyangkut ke tag generik ("META"/"ADU"/"TERRA") akibat pergeseran kolom Tag_link di CSV Shopee.</div>
+          </div>
+          <svg id="repair-chevron" viewBox="0 0 24 24" fill="none" stroke="#9a3412" stroke-width="2.5" width="16" height="16" style="flex-shrink:0;transition:transform .2s;transform:rotate(-90deg);"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div id="repair-body" style="display:none;padding:16px 20px;">
+          <p style="font-size:12px;color:var(--text-muted);margin:0 0 12px;">
+            <strong>Urutan yang benar:</strong> (1) upload ulang CSV Komisi Shopee yang formatnya bergeser — sistem sekarang
+            otomatis deteksi kolom Tag_link yang benar. (2) baru setelah itu, pakai alat ini buat nolkan sisa komisi yang
+            kepalang nyangkut di tag generik untuk rentang tanggal yang sama, biar tidak dobel hitung.
+          </p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+            <div class="form-group">
+              <div class="form-label">AKUN SHOPEE</div>
+              <select class="form-select" id="repair-shopee">
+                <option value="">Pilih Akun Shopee</option>
+                ${shopeeOptions || '<option disabled>Belum ada akun Shopee terdaftar</option>'}
+              </select>
+            </div>
+            <div class="form-group">
+              <div class="form-label">TAG GENERIK</div>
+              <select class="form-select" id="repair-tag">
+                <option value="META">META</option>
+                <option value="ADU">ADU</option>
+                <option value="TERRA">TERRA</option>
+              </select>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end;">
+            <div class="form-group" style="margin:0;">
+              <div class="form-label">DARI TANGGAL</div>
+              <input type="date" id="repair-dari" class="form-input">
+            </div>
+            <div class="form-group" style="margin:0;">
+              <div class="form-label">SAMPAI TANGGAL</div>
+              <input type="date" id="repair-sampai" class="form-input">
+            </div>
+            <button class="btn btn-sm" id="btn-repair-cek">Cek Dulu</button>
+          </div>
+          <div id="repair-result" style="display:none;margin-top:14px;padding:12px 14px;border-radius:8px;background:var(--bg-muted);font-size:13px;"></div>
+        </div>
+      </div>
+
       <div class="card" style="margin-bottom:16px;">
         <div class="form-group">
           <div class="form-label">AKUN SHOPEE</div>
@@ -319,6 +365,68 @@ export class UploadPage {
       sec.style.display = open ? 'block' : 'none';
       ico.style.transform = open ? 'rotate(0deg)' : 'rotate(-90deg)';
     });
+
+    el.querySelector('#btn-toggle-repair').addEventListener('click', () => {
+      const body = el.querySelector('#repair-body');
+      const chevron = el.querySelector('#repair-chevron');
+      const open = body.style.display === 'none';
+      body.style.display = open ? 'block' : 'none';
+      chevron.style.transform = open ? 'rotate(0deg)' : 'rotate(-90deg)';
+    });
+    el.querySelector('#btn-repair-cek').addEventListener('click', () => this._repairCek());
+  }
+
+  async _repairCek() {
+    const el = this.container.querySelector('#content');
+    const resultEl = el.querySelector('#repair-result');
+    const shopeeId = el.querySelector('#repair-shopee').value;
+    const tag      = el.querySelector('#repair-tag').value;
+    const dari     = el.querySelector('#repair-dari').value;
+    const sampai   = el.querySelector('#repair-sampai').value;
+
+    resultEl.style.display = 'block';
+    if (!shopeeId || !dari || !sampai) {
+      resultEl.innerHTML = '<span style="color:#dc2626;">Pilih akun Shopee dan rentang tanggal dulu.</span>';
+      return;
+    }
+    resultEl.innerHTML = 'Memeriksa…';
+
+    try {
+      const found = await apiFetch(`/taglink/tags/find?shopee_account_id=${shopeeId}&tag=${encodeURIComponent(tag)}`);
+      const preview = await apiFetch(`/taglink/tags/${found.tag_link_id}/preview-reset?tanggal_dari=${dari}&tanggal_sampai=${sampai}`);
+
+      if (!preview.jumlah_baris) {
+        resultEl.innerHTML = `Tidak ada komisi tersisa di tag "${found.tag}" untuk rentang ini — tidak perlu direset.`;
+        return;
+      }
+
+      const rp = n => 'Rp ' + Math.round(Number(n || 0)).toLocaleString('id-ID');
+      resultEl.innerHTML = `
+        <div style="margin-bottom:10px;">
+          Ditemukan <strong>${preview.jumlah_baris} baris</strong> di tag "<strong>${found.tag}</strong>"
+          (${preview.dari} s/d ${preview.sampai}) dengan total komisi <strong>${rp(preview.total_komisi)}</strong>.
+        </div>
+        <button class="btn btn-sm" id="btn-repair-reset" style="color:#dc2626;border-color:#dc2626;">
+          Reset komisi tag ini jadi Rp 0 (${dari} s/d ${sampai})
+        </button>`;
+
+      el.querySelector('#btn-repair-reset').addEventListener('click', async () => {
+        const ok = confirm(
+          `Yakin nolkan komisi tag "${found.tag}" untuk ${dari} s/d ${sampai}?\n\n` +
+          `Total ${rp(preview.total_komisi)} akan jadi Rp 0. PASTIKAN data yang benar sudah ` +
+          `terupload dulu ke tag-tag campaign aslinya sebelum ini dijalankan.`
+        );
+        if (!ok) return;
+        try {
+          await apiFetch(`/taglink/tags/${found.tag_link_id}/reset-range?tanggal_dari=${dari}&tanggal_sampai=${sampai}`, { method: 'POST' });
+          resultEl.innerHTML = `<span style="color:#16a34a;">Berhasil — komisi tag "${found.tag}" untuk ${dari} s/d ${sampai} sudah dinolkan.</span>`;
+        } catch (e) {
+          resultEl.innerHTML = `<span style="color:#dc2626;">Gagal reset: ${e.message}</span>`;
+        }
+      });
+    } catch (e) {
+      resultEl.innerHTML = `<span style="color:#dc2626;">${e.message}</span>`;
+    }
   }
 
   _bindUploadZone(zoneId, fileId, nameId) {

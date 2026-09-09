@@ -205,6 +205,33 @@ def _find_col(row: dict, candidates: tuple) -> str | None:
     return None
 
 
+# Penanda generik platform iklan yang Shopee kadang taruh di Tag_link1,
+# dengan nama tag/campaign asli didorong ke slot berikutnya (Tag_link2, dst).
+# Kalau Tag_link1 isinya ini doang, jangan dipakai sebagai tag — cari slot
+# lain yang lebih spesifik dulu.
+_GENERIC_TAG_MARKERS = {"meta", "adu", "terra"}
+
+
+def _resolve_tag_auto(row: dict, candidates: list) -> str | None:
+    """Ambil tag dari kolom pertama (sesuai urutan candidates) yang nilainya
+    bukan kosong DAN bukan penanda generik platform ('meta'/'adu'/'terra').
+    Kalau semua kandidat cuma penanda generik atau kosong, tetap kembalikan
+    nilai non-kosong pertama yang ditemukan (fallback), biar tidak hilang
+    sama sekali."""
+    fallback = None
+    for c in candidates:
+        if c not in row:
+            continue
+        val = (row[c] or "").strip()
+        if not val:
+            continue
+        if fallback is None:
+            fallback = val
+        if val.lower() not in _GENERIC_TAG_MARKERS:
+            return val
+    return fallback
+
+
 @dataclass
 class ShopeeCommissionRow:
     order_id: str
@@ -277,7 +304,10 @@ def parse_shopee_commission_csv(file_bytes: bytes, tag_slot: int = 1) -> list[Sh
     if not rows:
         return []
 
-    # Bangun alias sub_id: utamakan kolom slot yang dipilih, lalu fallback ke yang lain
+    # Bangun alias sub_id: utamakan kolom slot yang dipilih, lalu fallback ke
+    # yang lain. Resolusi tag-nya sendiri otomatis (lihat _resolve_tag_auto)
+    # — kalau slot pertama isinya penanda generik ("META"/dll, bukan nama
+    # tag asli), otomatis lanjut ke slot berikutnya di daftar ini.
     slot_col = f"Tag_link{tag_slot}"
     other_slots = [f"Tag_link{i}" for i in range(1, 6) if i != tag_slot]
     sub_id_aliases = [slot_col, "Sub ID"] + other_slots
@@ -300,7 +330,7 @@ def parse_shopee_commission_csv(file_bytes: bytes, tag_slot: int = 1) -> list[Sh
                 continue
 
             qty_raw = _find_col(row, _QTY_COLS)
-            tag_raw = _resolve_col(row, alias["sub_id"]) or "non-meta"
+            tag_raw = _resolve_tag_auto(row, alias["sub_id"]) or "non-meta"
             # Shopee sering kirim tag dengan suffix "----", bersihkan
             tag = tag_raw.rstrip("-").strip() or "non-meta"
 

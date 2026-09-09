@@ -220,6 +220,93 @@ async def delete_map(map_id: UUID, current_user: CurrentUser, db: DB):
 # Tag stats — dipakai oleh preview modal
 # ---------------------------------------------------------------------------
 
+@router.get("/tags/find")
+async def find_tag_link_by_text(
+    current_user: CurrentUser,
+    db: DB,
+    shopee_account_id: UUID = Query(...),
+    tag: str = Query(...),
+):
+    """Cari tag_link persis (case-insensitive) — dipakai alat perbaikan data
+    buat nemuin tag_link_id dari teks kayak 'META'/'ADU'/'TERRA'."""
+    await _assert_shopee_account_owned(shopee_account_id, current_user.id, db)
+    tl = (await db.execute(
+        sa.select(TagLink).where(
+            TagLink.shopee_account_id == shopee_account_id,
+            sa.func.lower(TagLink.tag) == tag.strip().lower(),
+        )
+    )).scalar_one_or_none()
+    if not tl:
+        raise HTTPException(404, f"Tag '{tag}' tidak ditemukan di akun Shopee ini.")
+    return {"tag_link_id": str(tl.id), "tag": tl.tag}
+
+
+@router.get("/tags/{tag_link_id}/preview-reset")
+async def preview_reset_tag(
+    tag_link_id: UUID,
+    current_user: CurrentUser,
+    db: DB,
+    tanggal_dari: date = Query(...),
+    tanggal_sampai: date = Query(...),
+):
+    """Preview apa yang bakal kena kalau reset komisi tag ini di rentang
+    tanggal — dipakai alat perbaikan data SEBELUM eksekusi reset."""
+    await _assert_tag_link_owned(tag_link_id, current_user.id, db)
+    row = (await db.execute(
+        sa.select(
+            sa.func.count().label("n"),
+            sa.func.coalesce(sa.func.sum(DailyMetric.commission_idr), _ZERO).label("total_komisi"),
+            sa.func.min(DailyMetric.tanggal).label("dari"),
+            sa.func.max(DailyMetric.tanggal).label("sampai"),
+        )
+        .where(
+            DailyMetric.tag_link_id == tag_link_id,
+            DailyMetric.tanggal.between(tanggal_dari, tanggal_sampai),
+            DailyMetric.commission_idr != _ZERO,
+        )
+    )).one()
+    return {
+        "jumlah_baris": row.n,
+        "total_komisi": float(row.total_komisi or 0),
+        "dari": str(row.dari) if row.dari else None,
+        "sampai": str(row.sampai) if row.sampai else None,
+    }
+
+
+@router.post("/tags/{tag_link_id}/reset-range", status_code=status.HTTP_204_NO_CONTENT)
+async def reset_tag_range(
+    tag_link_id: UUID,
+    current_user: CurrentUser,
+    db: DB,
+    tanggal_dari: date = Query(...),
+    tanggal_sampai: date = Query(...),
+):
+    """Nolkan kolom komisi Shopee (bukan hapus baris, TIDAK sentuh
+    clicks_shopee) untuk satu tag_link di rentang tanggal — dipakai buat
+    bersihin data yang salah nyangkut ke tag generik ('META'/'ADU'/'TERRA')
+    akibat Shopee menggeser posisi Tag_link di CSV export (lihat
+    csv_parser._resolve_tag_auto). Data harus di-upload ulang dulu dengan
+    parser yang sudah diperbaiki SEBELUM tag generik ini di-reset, supaya
+    tidak ada rentang tanggal yang datanya hilang sama sekali."""
+    await _assert_tag_link_owned(tag_link_id, current_user.id, db)
+    await db.execute(
+        sa.update(DailyMetric)
+        .where(
+            DailyMetric.tag_link_id == tag_link_id,
+            DailyMetric.tanggal.between(tanggal_dari, tanggal_sampai),
+        )
+        .values(
+            commission_idr=_ZERO,
+            commission_live_idr=_ZERO,
+            sales_idr=_ZERO,
+            orders_selesai=0,
+            orders_tertunda=0,
+            orders_batal=0,
+        )
+    )
+    await db.commit()
+
+
 @router.get("/tag-stats/{tag_link_id}", response_model=TagStatsResponse)
 async def get_tag_stats(
     tag_link_id: UUID,
@@ -274,3 +361,11 @@ async def _assert_tag_link_owned(tag_link_id: UUID, user_id, db: DB) -> None:
     )
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Tag link tidak ditemukan.")
+
+
+async def _assert_shopee_account_owned(shopee_account_id: UUID, user_id, db: DB) -> None:
+    result = await db.execute(
+        sa.select(ShopeeAccount).where(ShopeeAccount.id == shopee_account_id, ShopeeAccount.user_id == user_id)
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Akun Shopee tidak ditemukan.")
