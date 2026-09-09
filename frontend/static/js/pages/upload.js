@@ -243,61 +243,81 @@ export class UploadPage {
         </div>
       </div>
 
-      <div class="card" style="margin-bottom:16px;">
-        <div style="font-size:13px;font-weight:700;margin-bottom:4px;">Adu Ads</div>
-        <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px;">
-          Upload <strong>Zone CSV dari Adu Ads</strong>. Kolom <code>Cost</code> (USD)
-          otomatis dikonversi ke <strong>Budget Rupiah</strong> (× Rp 19.000).
-        </div>
+      <div class="card" style="margin-bottom:16px;padding:0;">
+        <button id="btn-toggle-adu" type="button"
+          style="width:100%;display:flex;align-items:center;justify-content:space-between;padding:14px 20px;background:none;border:none;cursor:pointer;text-align:left;">
+          <div>
+            <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px;">Adu Ads</div>
+            <div style="font-size:12px;color:var(--text-muted);">
+              Upload <strong>Zone CSV dari Adu Ads</strong>. Kolom <code>Cost</code> (USD)
+              otomatis dikonversi ke <strong>Budget Rupiah</strong> (× Rp 19.000).
+            </div>
+          </div>
+          <svg id="ico-toggle-adu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            width="14" height="14" style="flex-shrink:0;color:var(--text-muted);transition:transform .2s;transform:rotate(-90deg);">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </button>
+        <div id="adu-section" style="display:none;padding:0 20px 20px;">
+          <div class="form-group" style="margin-bottom:12px;">
+            <div class="form-label">TANGGAL DATA</div>
+            <input type="date" id="inp-adu-tanggal" class="form-input" style="width:180px;"
+              value="${new Date().toISOString().split('T')[0]}">
+          </div>
 
-        <div class="form-group" style="margin-bottom:12px;">
-          <div class="form-label">TANGGAL DATA</div>
-          <input type="date" id="inp-adu-tanggal" class="form-input" style="width:180px;"
-            value="${new Date().toISOString().split('T')[0]}">
-        </div>
+          <div class="upload-zone" id="zone-adu" style="max-width:480px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <p><strong>Pilih file CSV</strong> atau drag & drop</p>
+            <p style="font-size:12px;margin-top:4px;">Zone CSV dari Adu Ads (kolom: Zone ID, Cost, dll.)</p>
+          </div>
+          <input type="file" id="file-adu" accept=".csv" style="display:none">
+          <div id="name-adu" style="font-size:12px;color:#6b7280;margin-top:4px;"></div>
 
-        <div class="upload-zone" id="zone-adu" style="max-width:480px;">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-          <p><strong>Pilih file CSV</strong> atau drag & drop</p>
-          <p style="font-size:12px;margin-top:4px;">Zone CSV dari Adu Ads (kolom: Zone ID, Cost, dll.)</p>
-        </div>
-        <input type="file" id="file-adu" accept=".csv" style="display:none">
-        <div id="name-adu" style="font-size:12px;color:#6b7280;margin-top:4px;"></div>
+          <div id="adu-error"   class="alert alert-error"   style="display:none;margin-top:10px;"></div>
+          <div id="adu-success" class="alert alert-success" style="display:none;margin-top:10px;"></div>
 
-        <div id="adu-error"   class="alert alert-error"   style="display:none;margin-top:10px;"></div>
-        <div id="adu-success" class="alert alert-success" style="display:none;margin-top:10px;"></div>
-
-        <div style="margin-top:12px;display:flex;justify-content:flex-end;">
-          <button class="btn btn-primary" id="btn-upload-adu" style="padding:9px 32px;">Upload Adu</button>
+          <div style="margin-top:12px;display:flex;justify-content:flex-end;">
+            <button class="btn btn-primary" id="btn-upload-adu" style="padding:9px 32px;">Upload Adu</button>
+          </div>
         </div>
       </div>
 
-      <div class="card" style="margin-bottom:16px;">
-        <div style="font-size:13px;font-weight:700;margin-bottom:4px;">Terra Ads</div>
-        <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px;">
-          Upload <strong>Placement CSV dari Terra Ads</strong>. Kolom <code>Spent</code> (USD)
-          otomatis dikonversi ke <strong>Budget Rupiah</strong> (× Rp 19.000).
-        </div>
+      <div class="card" style="margin-bottom:16px;padding:0;">
+        <button id="btn-toggle-terra" type="button"
+          style="width:100%;display:flex;align-items:center;justify-content:space-between;padding:14px 20px;background:none;border:none;cursor:pointer;text-align:left;">
+          <div>
+            <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px;">Terra Ads</div>
+            <div style="font-size:12px;color:var(--text-muted);">
+              Upload <strong>Placement CSV dari Terra Ads</strong>. Kolom <code>Spent</code> (USD)
+              otomatis dikonversi ke <strong>Budget Rupiah</strong> (× Rp 19.000).
+            </div>
+          </div>
+          <svg id="ico-toggle-terra" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            width="14" height="14" style="flex-shrink:0;color:var(--text-muted);transition:transform .2s;transform:rotate(-90deg);">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </button>
+        <div id="terra-section" style="display:none;padding:0 20px 20px;">
+          <div class="form-group" style="margin-bottom:12px;">
+            <div class="form-label">TANGGAL DATA</div>
+            <input type="date" id="inp-terra-tanggal" class="form-input" style="width:180px;"
+              value="${new Date().toISOString().split('T')[0]}">
+          </div>
 
-        <div class="form-group" style="margin-bottom:12px;">
-          <div class="form-label">TANGGAL DATA</div>
-          <input type="date" id="inp-terra-tanggal" class="form-input" style="width:180px;"
-            value="${new Date().toISOString().split('T')[0]}">
-        </div>
+          <div class="upload-zone" id="zone-terra" style="max-width:480px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <p><strong>Pilih file CSV</strong> atau drag & drop</p>
+            <p style="font-size:12px;margin-top:4px;">Placement CSV dari Terra Ads (kolom: Placement, Spent, dll.)</p>
+          </div>
+          <input type="file" id="file-terra" accept=".csv" style="display:none">
+          <div id="name-terra" style="font-size:12px;color:#6b7280;margin-top:4px;"></div>
 
-        <div class="upload-zone" id="zone-terra" style="max-width:480px;">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-          <p><strong>Pilih file CSV</strong> atau drag & drop</p>
-          <p style="font-size:12px;margin-top:4px;">Placement CSV dari Terra Ads (kolom: Placement, Spent, dll.)</p>
-        </div>
-        <input type="file" id="file-terra" accept=".csv" style="display:none">
-        <div id="name-terra" style="font-size:12px;color:#6b7280;margin-top:4px;"></div>
+          <div id="terra-error"   class="alert alert-error"   style="display:none;margin-top:10px;"></div>
+          <div id="terra-success" class="alert alert-success" style="display:none;margin-top:10px;"></div>
 
-        <div id="terra-error"   class="alert alert-error"   style="display:none;margin-top:10px;"></div>
-        <div id="terra-success" class="alert alert-success" style="display:none;margin-top:10px;"></div>
-
-        <div style="margin-top:12px;display:flex;justify-content:flex-end;">
-          <button class="btn btn-primary" id="btn-upload-terra" style="padding:9px 32px;">Upload Terra</button>
+          <div style="margin-top:12px;display:flex;justify-content:flex-end;">
+            <button class="btn btn-primary" id="btn-upload-terra" style="padding:9px 32px;">Upload Terra</button>
+          </div>
         </div>
       </div>
 
@@ -361,6 +381,22 @@ export class UploadPage {
     el.querySelector('#btn-toggle-meta').addEventListener('click', () => {
       const sec = el.querySelector('#meta-section');
       const ico = el.querySelector('#ico-toggle-meta');
+      const open = sec.style.display === 'none';
+      sec.style.display = open ? 'block' : 'none';
+      ico.style.transform = open ? 'rotate(0deg)' : 'rotate(-90deg)';
+    });
+
+    el.querySelector('#btn-toggle-adu').addEventListener('click', () => {
+      const sec = el.querySelector('#adu-section');
+      const ico = el.querySelector('#ico-toggle-adu');
+      const open = sec.style.display === 'none';
+      sec.style.display = open ? 'block' : 'none';
+      ico.style.transform = open ? 'rotate(0deg)' : 'rotate(-90deg)';
+    });
+
+    el.querySelector('#btn-toggle-terra').addEventListener('click', () => {
+      const sec = el.querySelector('#terra-section');
+      const ico = el.querySelector('#ico-toggle-terra');
       const open = sec.style.display === 'none';
       sec.style.display = open ? 'block' : 'none';
       ico.style.transform = open ? 'rotate(0deg)' : 'rotate(-90deg)';
