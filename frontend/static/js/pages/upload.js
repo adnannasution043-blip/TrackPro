@@ -68,7 +68,7 @@ export class UploadPage {
         </div>
       </div>
 
-      <div class="card" style="margin-bottom:16px;padding:0;border-color:#fed7aa;">
+      <div class="card" style="margin-bottom:16px;padding:0;border-color:#fed7aa;display:none;">
         <button id="btn-toggle-repair" style="width:100%;display:flex;align-items:center;justify-content:space-between;padding:14px 20px;background:#fff7ed;border:none;cursor:pointer;text-align:left;border-radius:8px;">
           <div>
             <div style="font-size:13px;font-weight:600;color:#9a3412;margin-bottom:2px;">⚠ Perbaikan Data — Reset Tag Salah</div>
