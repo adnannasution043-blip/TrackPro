@@ -528,7 +528,7 @@ export class UploadPage {
       errEl.style.display = 'block';
       return;
     }
-    if (!commFiles.length && !metaFiles.length && !anyBreakdown) {
+    if (!commFiles.length && !clickFiles.length && !metaFiles.length && !anyBreakdown) {
       errEl.textContent = 'Upload minimal satu file CSV.';
       errEl.style.display = 'block';
       return;
