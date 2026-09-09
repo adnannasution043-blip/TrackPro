@@ -633,15 +633,34 @@ async def get_laporan_harian2(
     # Meta Pribadi: tag berformat "meta+namaOrang" tanpa spasi, contoh METAPRAS, METASANT
     _PRIBADI_PATTERN = r'^meta[a-zA-Z]+$'
 
+    # Tag_link_id yang ke-link ke campaign Meta manapun milik user (lewat
+    # CampaignTagMap) — dipakai supaya campaign yang nama tag-nya TIDAK
+    # mengandung kata "meta" (mis. nama produk/konten sebagai Sub ID, kayak
+    # "BABYMAHASISWA1") tetap kehitung sebagai komisi Meta di sini, bukannya
+    # tidak masuk kategori manapun. Sebelumnya kategorisasi murni tebak dari
+    # teks tag, jadi campaign kayak gitu "hilang" dari breakdown ini padahal
+    # beneran jalan lewat iklan Meta.
+    _meta_linked_tag_ids = (
+        sa.select(CampaignTagMap.tag_link_id)
+        .join(Campaign, CampaignTagMap.campaign_id == Campaign.id)
+        .join(MetaAccount, Campaign.meta_account_id == MetaAccount.id)
+        .where(MetaAccount.user_id == current_user.id)
+        .distinct()
+        .scalar_subquery()
+    )
+
     def _sum_meta_generic():
-        """Tag mengandung 'meta' tapi BUKAN pola meta+nama (e.g. bukan METAPRAS)
-        dan BUKAN tag kosong ("non-meta")."""
+        """Tag mengandung 'meta' ATAU ke-link ke campaign Meta — tapi BUKAN
+        pola meta+nama (e.g. bukan METAPRAS) dan BUKAN tag kosong ("non-meta")."""
         return sa.func.coalesce(
             sa.func.sum(
                 sa.case(
                     (
                         sa.and_(
-                            TagLink.tag.ilike("%meta%"),
+                            sa.or_(
+                                TagLink.tag.ilike("%meta%"),
+                                TagLink.id.in_(_meta_linked_tag_ids),
+                            ),
                             ~TagLink.tag.ilike(_TAG_BLANK),
                             TagLink.tag.op("!~*")(_PRIBADI_PATTERN),
                         ),
