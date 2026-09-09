@@ -364,6 +364,26 @@ def parse_shopee_commission_csv(file_bytes: bytes, tag_slot: int = 1) -> list[Sh
 REQUIRED_SHOPEE_CLICK_COLUMNS = {"Sub ID", "Date", "Clicks", "Source"}
 _SHOPEE_CLICK_RAW_COLS = {"Tag_link", "Waktu Klik", "Perujuk"}
 
+# Laporan Klik nyimpen tag sebagai SATU string gabungan "KATEGORI-NAMA"
+# (mis. "META-KANGRAMBUTVELOVE---"), beda dari CSV Komisi yang kolom
+# kategori & namanya kepisah (Tag_link1/Tag_link2 — lihat _resolve_tag_auto).
+# Biar dua-duanya nyambung ke tag_link yang SAMA, prefix generik platform
+# ("meta-"/"adu-"/"terra-") dibuang di sini juga. Tag organik ("story-",
+# "feed-") atau Meta Pribadi ("METAPRAS-...") SENGAJA tidak diutak-atik,
+# karena kategori itu justru butuh kata kuncinya tetap ada buat
+# pengelompokan di Laporan Harian.
+_GENERIC_TAG_PREFIXES = ("meta-", "adu-", "terra-")
+
+
+def _strip_generic_prefix(tag: str) -> str:
+    low = tag.lower()
+    for prefix in _GENERIC_TAG_PREFIXES:
+        if low.startswith(prefix):
+            rest = tag[len(prefix):].strip()
+            if rest:
+                return rest
+    return tag
+
 
 @dataclass
 class ShopeeClickRow:
@@ -388,6 +408,7 @@ def parse_shopee_click_csv(file_bytes: bytes) -> list[ShopeeClickRow]:
                 tag_raw = row.get("Tag_link", "") or "non-meta"
                 # Hapus suffix "----" yang ditambah Shopee pada tag
                 tag = tag_raw.rstrip("-").strip() or "non-meta"
+                tag = _strip_generic_prefix(tag)
 
                 waktu_raw = row.get("Waktu Klik", "")
                 if not waktu_raw:
@@ -419,6 +440,7 @@ def parse_shopee_click_csv(file_bytes: bytes) -> list[ShopeeClickRow]:
         try:
             tag_raw = row.get("Sub ID", "") or "non-meta"
             tag = tag_raw.rstrip("-").strip() or "non-meta"
+            tag = _strip_generic_prefix(tag)
             parsed.append(
                 ShopeeClickRow(
                     tag=tag,
