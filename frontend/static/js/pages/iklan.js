@@ -615,6 +615,23 @@ export class IklanPage {
     popup.querySelector('#popup-catatan').focus();
   }
 
+  _showDebugModal(info) {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:100000;';
+    overlay.innerHTML = `
+      <div style="background:#fff;border-radius:10px;width:640px;max-width:92vw;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 10px 40px rgba(0,0,0,0.3);">
+        <div style="padding:14px 18px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
+          <h3 style="margin:0;font-size:14px;">Debug Tag</h3>
+          <button id="dbg-close" style="background:none;border:none;font-size:20px;cursor:pointer;color:#6b7280;">×</button>
+        </div>
+        <pre style="margin:0;padding:14px 18px;overflow:auto;font-size:11.5px;font-family:monospace;white-space:pre-wrap;word-break:break-all;color:#111827;">${JSON.stringify(info, null, 2).replace(/</g,'&lt;')}</pre>
+      </div>`;
+    document.body.appendChild(overlay);
+    const close = () => overlay.remove();
+    overlay.querySelector('#dbg-close').addEventListener('click', close);
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  }
+
   async _showModal(r) {
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
@@ -641,9 +658,9 @@ export class IklanPage {
     overlay.querySelector('#btn-tag-debug').addEventListener('click', async () => {
       try {
         const info = await apiFetch(`/dashboard/campaigns/${r.id}/tag-debug`);
-        alert(JSON.stringify(info, null, 2));
+        this._showDebugModal(info);
       } catch(e) {
-        alert('Gagal: ' + e.message);
+        this._showDebugModal({ error: e.message });
       }
     });
 
