@@ -412,6 +412,74 @@ async def get_campaign_harian(
     )
 
 
+@router.get("/campaigns/{campaign_id}/tag-debug")
+async def debug_campaign_tags(campaign_id: UUID, current_user: CurrentUser, db: DB):
+    """Diagnostik sementara: cek apakah campaign ke-link ke tag_link_id yang
+    beda dari tag_link lain yang teksnya sama tapi beda kapitalisasi (CSV
+    Shopee tidak selalu konsisten, dan _get_or_create_tag_link cocokin tag
+    persis case-sensitive — bisa bikin komisi "menunggu" walau agregat
+    Laporan Harian ada datanya, karena nyangkut di tag_link_id lain)."""
+    from fastapi import HTTPException
+    camp = (await db.execute(
+        sa.select(Campaign)
+        .join(MetaAccount, Campaign.meta_account_id == MetaAccount.id)
+        .where(Campaign.id == campaign_id, MetaAccount.user_id == current_user.id)
+    )).scalar_one_or_none()
+    if not camp:
+        raise HTTPException(404, "Campaign tidak ditemukan.")
+
+    linked = (await db.execute(
+        sa.select(CampaignTagMap.tag_link_id, TagLink.tag, TagLink.shopee_account_id)
+        .join(TagLink, CampaignTagMap.tag_link_id == TagLink.id)
+        .where(CampaignTagMap.campaign_id == campaign_id)
+    )).all()
+
+    candidates = (await db.execute(
+        sa.select(TagLink.id, TagLink.tag, TagLink.shopee_account_id)
+        .join(ShopeeAccount, TagLink.shopee_account_id == ShopeeAccount.id)
+        .where(
+            ShopeeAccount.user_id == current_user.id,
+            sa.func.lower(TagLink.tag) == camp.nama_campaign.lower(),
+        )
+    )).all()
+
+    # Baris DailyMetric (tanggal + komisi) per kandidat tag_link, biar
+    # kelihatan tag_link mana yang beneran punya data September.
+    cand_ids = [c.id for c in candidates]
+    metric_summary = {}
+    if cand_ids:
+        rows = (await db.execute(
+            sa.select(
+                DailyMetric.tag_link_id,
+                sa.func.min(DailyMetric.tanggal).label("dari"),
+                sa.func.max(DailyMetric.tanggal).label("sampai"),
+                sa.func.sum(DailyMetric.commission_idr).label("total_komisi"),
+            )
+            .where(DailyMetric.tag_link_id.in_(cand_ids))
+            .group_by(DailyMetric.tag_link_id)
+        )).all()
+        metric_summary = {
+            str(r.tag_link_id): {
+                "dari": str(r.dari), "sampai": str(r.sampai), "total_komisi": float(r.total_komisi or 0),
+            } for r in rows
+        }
+
+    return {
+        "nama_campaign": camp.nama_campaign,
+        "linked_ke": [
+            {"tag_link_id": str(r.tag_link_id), "tag": r.tag, "shopee_account_id": str(r.shopee_account_id)}
+            for r in linked
+        ],
+        "semua_tag_link_cocok_case_insensitive": [
+            {
+                "tag_link_id": str(r.id), "tag": r.tag, "shopee_account_id": str(r.shopee_account_id),
+                "data_daily_metric": metric_summary.get(str(r.id)),
+            }
+            for r in candidates
+        ],
+    }
+
+
 @router.get("/campaigns/{campaign_id}/breakdown")
 async def get_campaign_breakdown(
     campaign_id: UUID,

@@ -628,6 +628,7 @@ export class IklanPage {
               ${TAHAP_LABELS[r.tahap]||'Pra Filter'}
             </p>
           </div>
+          <button class="btn btn-sm" id="btn-tag-debug" style="margin-right:8px;font-size:11px;">Debug Tag</button>
           <button class="modal-close" id="modal-close">×</button>
         </div>
         <div class="modal-body" style="flex:1;overflow-y:auto;padding:16px 20px;">
@@ -637,6 +638,14 @@ export class IklanPage {
     document.body.appendChild(overlay);
     overlay.querySelector('#modal-close').addEventListener('click', () => overlay.remove());
     overlay.addEventListener('click', e => { if(e.target===overlay) overlay.remove(); });
+    overlay.querySelector('#btn-tag-debug').addEventListener('click', async () => {
+      try {
+        const info = await apiFetch(`/dashboard/campaigns/${r.id}/tag-debug`);
+        alert(JSON.stringify(info, null, 2));
+      } catch(e) {
+        alert('Gagal: ' + e.message);
+      }
+    });
 
     const content = overlay.querySelector('#modal-content');
     try {
