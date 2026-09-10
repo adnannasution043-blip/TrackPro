@@ -35,8 +35,9 @@ export class BalancePage {
   constructor(container) {
     this.container = container;
     this._data = null;
-    this._page = 1;
-    this._perPage = 10;
+    this._shopeeGroups = [];
+    this._linkedMetaIdSet = new Set();
+    this._expandedGroups = new Set();
     this._showEditModal = this._showEditModal.bind(this);
   }
 
@@ -88,11 +89,42 @@ export class BalancePage {
     const el = this.container.querySelector('#content');
     el.innerHTML = '<div class="loading">Memuat data…</div>';
     try {
-      this._data = await apiFetch('/balance/');
+      const [balanceData, tree] = await Promise.all([
+        apiFetch('/balance/'),
+        apiFetch('/accounts/tree').catch(() => null),
+      ]);
+      this._data = balanceData;
+      this._buildGroups(tree);
       this._render(el);
     } catch (e) {
       el.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
     }
+  }
+
+  // Kelompokkan akun Meta per Akun Shopee (sama konsep kayak dropdown Meta
+  // di halaman Iklan) — satu akun Meta bisa muncul di lebih dari satu grup
+  // kalau ke-link ke beberapa Shopee sekaligus.
+  _buildGroups(tree) {
+    const metaAccounts = tree?.meta_accounts || [];
+    const shopeeMetaCount = {};
+    const shopeeToMetaIds = {};
+    for (const m of metaAccounts)
+      for (const s of (m.shopee_accounts || [])) {
+        shopeeMetaCount[s.id] = (shopeeMetaCount[s.id] || 0) + 1;
+        (shopeeToMetaIds[s.id] || (shopeeToMetaIds[s.id] = [])).push(m.id);
+      }
+    const linkedShopees = [];
+    const seen = new Set();
+    for (const m of metaAccounts)
+      for (const s of (m.shopee_accounts || []))
+        if (!seen.has(s.id)) { seen.add(s.id); linkedShopees.push({ ...s, metaCount: shopeeMetaCount[s.id] || 0 }); }
+    const unlinkedShopees = (tree?.shopee_unlinked || []).map(s => ({ ...s, metaCount: 0, unlinked: true }));
+
+    this._shopeeGroups = [...linkedShopees, ...unlinkedShopees].map(s => ({
+      shopee: s,
+      metaIds: new Set(shopeeToMetaIds[s.id] || []),
+    }));
+    this._linkedMetaIdSet = new Set(Object.values(shopeeToMetaIds).flat());
   }
 
   _render(el) {
@@ -164,86 +196,103 @@ export class BalancePage {
         </div>
       </div>
 
-      <!-- Table -->
+      <!-- Grouped per Akun Shopee -->
       <div style="font-size:11px;font-weight:700;color:var(--text-muted,#6b7280);letter-spacing:.06em;margin-bottom:8px;">
-        AKUN AGENSI · ${accounts.length}
+        AKUN AGENSI · ${accounts.length} · dikelompokkan per Akun Shopee
       </div>
-      <div class="card" style="padding:0;">
-        <div class="table-wrap" style="overflow-x:auto;">
-          <table class="data-table" style="font-size:12.5px;">
-            <thead>
-              <tr>
-                <th style="min-width:180px;">AKUN</th>
-                <th style="min-width:200px;">SISA SALDO</th>
-                <th style="text-align:right;min-width:110px;">KEMARIN</th>
-                <th style="min-width:140px;">CUKUP</th>
-                <th style="text-align:center;min-width:80px;">STATUS</th>
-                <th style="width:44px;"></th>
-              </tr>
-            </thead>
-            <tbody id="balance-tbody">
-            </tbody>
-          </table>
-        </div>
-      </div>
-      <div id="pagination-wrap"></div>
+      <div id="balance-groups"></div>
     `;
 
-    this._renderTable(el, accounts);
+    this._renderGroups(el, accounts);
   }
 
-  _renderTable(el, accounts) {
-    const totalPages = Math.ceil(accounts.length / this._perPage);
-    if (this._page > totalPages) this._page = Math.max(1, totalPages);
-    const startIdx = (this._page - 1) * this._perPage;
-    const pageRows = accounts.length === 0 ? [] : accounts.slice(startIdx, startIdx + this._perPage);
+  _renderGroups(el, accounts) {
+    const wrap = el.querySelector('#balance-groups');
+    if (accounts.length === 0) {
+      wrap.innerHTML = `<div class="card" style="padding:32px;text-align:center;color:var(--text-muted,#9ca3af);">
+        Belum ada data saldo.<br><span style="font-size:12px;">Klik tombol ✎ untuk input saldo manual.</span>
+      </div>`;
+      return;
+    }
 
-    const tbody = el.querySelector('#balance-tbody');
-    tbody.innerHTML = accounts.length === 0
-      ? `<tr><td colspan="6" class="empty" style="padding:32px;text-align:center;">Belum ada data saldo.<br><span style="font-size:12px;color:var(--text-muted,#9ca3af);">Klik tombol ✎ untuk input saldo manual.</span></td></tr>`
-      : pageRows.map(a => this._rowHtml(a)).join('');
+    const byMetaId = {};
+    for (const a of accounts) byMetaId[a.meta_account_id] = a;
 
-    tbody.querySelectorAll('[data-edit-id]').forEach(btn => {
+    const groupCard = (label, sub, rows, groupKey, isUnlinked = false) => {
+      const subtotal = rows.reduce((n, a) => n + Number(a.sisa_saldo || 0), 0);
+      const open = this._expandedGroups.has(groupKey);
+      return `
+        <div class="card" style="padding:0;margin-bottom:10px;">
+          <button class="grp-toggle" data-group="${groupKey}" style="width:100%;display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:none;border:none;cursor:pointer;text-align:left;">
+            <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+              <svg class="grp-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"
+                style="flex-shrink:0;color:var(--text-muted,#9ca3af);transition:transform .15s;transform:rotate(${open?'180deg':'0deg'});"><polyline points="6 9 12 15 18 9"/></svg>
+              <div style="min-width:0;">
+                <div style="font-weight:700;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${label}${isUnlinked?` <span style="font-size:10.5px;font-weight:600;color:#9ca3af;">· Belum Terhubung</span>`:''}</div>
+                <div style="font-size:11px;color:var(--text-muted,#6b7280);">${sub}</div>
+              </div>
+            </div>
+            <div style="text-align:right;flex-shrink:0;">
+              <div style="font-size:10px;color:var(--text-muted,#9ca3af);">SISA SALDO</div>
+              <div style="font-weight:700;font-size:14px;">${rp(subtotal)}</div>
+            </div>
+          </button>
+          <div class="grp-body" data-group-body="${groupKey}" style="display:${open?'block':'none'};border-top:1px solid var(--border,#e5e7eb);">
+            <div class="table-wrap" style="overflow-x:auto;">
+              <table class="data-table" style="font-size:12.5px;">
+                <thead>
+                  <tr>
+                    <th style="min-width:180px;">AKUN</th>
+                    <th style="min-width:200px;">SISA SALDO</th>
+                    <th style="text-align:right;min-width:110px;">KEMARIN</th>
+                    <th style="min-width:140px;">CUKUP</th>
+                    <th style="text-align:center;min-width:80px;">STATUS</th>
+                    <th style="width:44px;"></th>
+                  </tr>
+                </thead>
+                <tbody>${rows.map(a => this._rowHtml(a)).join('')}</tbody>
+              </table>
+            </div>
+          </div>
+        </div>`;
+    };
+
+    let html = '';
+    for (const g of this._shopeeGroups) {
+      const rows = accounts.filter(a => g.metaIds.has(a.meta_account_id));
+      if (rows.length === 0 && !g.shopee.unlinked) continue; // shopee tanpa meta sama sekali, skip
+      html += groupCard(
+        g.shopee.nama,
+        g.shopee.unlinked ? 'Belum terhubung ke akun Meta' : `${rows.length} akun Meta`,
+        rows,
+        `shopee:${g.shopee.id}`,
+      );
+    }
+    const unlinkedRows = accounts.filter(a => !this._linkedMetaIdSet.has(a.meta_account_id));
+    if (unlinkedRows.length > 0) {
+      html += groupCard('Akun Meta', `${unlinkedRows.length} akun`, unlinkedRows, 'unlinked', true);
+    }
+    wrap.innerHTML = html || `<div class="card" style="padding:32px;text-align:center;color:var(--text-muted,#9ca3af);">Tidak ada akun.</div>`;
+
+    wrap.querySelectorAll('.grp-toggle').forEach(btn => {
       btn.addEventListener('click', () => {
-        const id = btn.dataset.editId;
-        const row = accounts.find(a => a.meta_account_id === id);
-        if (row) this._showEditModal(row);
+        const key = btn.dataset.group;
+        const body = wrap.querySelector(`[data-group-body="${key}"]`);
+        const chevron = btn.querySelector('.grp-chevron');
+        const open = body.style.display === 'none';
+        body.style.display = open ? 'block' : 'none';
+        chevron.style.transform = open ? 'rotate(180deg)' : 'rotate(0deg)';
+        if (open) this._expandedGroups.add(key); else this._expandedGroups.delete(key);
       });
     });
 
-    const pgWrap = el.querySelector('#pagination-wrap');
-    if (!pgWrap) return;
-    const pp = this._perPage;
-    const pageNums = totalPages > 1
-      ? Array.from({length:totalPages},(_,i)=>i+1)
-          .filter(p=>p===1||p===totalPages||Math.abs(p-this._page)<=2)
-          .reduce((acc,p,i,arr)=>{if(i>0&&p-arr[i-1]>1)acc.push('…');acc.push(p);return acc;},[])
-      : [];
-    pgWrap.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 4px;margin-top:8px;flex-wrap:wrap;gap:8px;">
-        <div style="display:flex;align-items:center;gap:8px;">
-          <select id="pg-size" style="padding:4px 8px;border:1px solid var(--border,#e5e7eb);border-radius:6px;font-size:12px;background:var(--bg-card,#fff);color:var(--text,#374151);cursor:pointer;">
-            ${[10,20,30,50].map(n=>`<option value="${n}"${pp===n?' selected':''}>${n}</option>`).join('')}
-          </select>
-          <span style="font-size:12px;color:var(--text-muted,#9ca3af);">per halaman &nbsp;·&nbsp; ${accounts.length===0?'0':startIdx+1}–${Math.min(startIdx+pp, accounts.length)} dari ${accounts.length}</span>
-        </div>
-        ${totalPages > 1 ? `<div style="display:flex;align-items:center;gap:4px;">
-          <button id="pg-first" class="btn btn-sm" style="font-size:12px;padding:5px 10px;" ${this._page===1?'disabled':''}>«</button>
-          <button id="pg-prev"  class="btn btn-sm" style="font-size:12px;padding:5px 10px;" ${this._page===1?'disabled':''}>‹</button>
-          ${pageNums.map(p=>p==='…'
-            ?`<span style="padding:5px 8px;font-size:12px;color:var(--text-muted,#9ca3af);">…</span>`
-            :`<button class="btn btn-sm pg-num" data-pg="${p}" style="font-size:12px;padding:5px 10px;${p===this._page?'background:#dc2626;color:#fff;border-color:#dc2626;':''}">${p}</button>`
-          ).join('')}
-          <button id="pg-next" class="btn btn-sm" style="font-size:12px;padding:5px 10px;" ${this._page===totalPages?'disabled':''}>›</button>
-          <button id="pg-last" class="btn btn-sm" style="font-size:12px;padding:5px 10px;" ${this._page===totalPages?'disabled':''}>»</button>
-        </div>` : ''}
-      </div>`;
-    pgWrap.querySelector('#pg-size')?.addEventListener('change', e=>{ this._perPage=Number(e.target.value); this._page=1; this._renderTable(el, accounts); });
-    pgWrap.querySelector('#pg-first')?.addEventListener('click', ()=>{ this._page=1; this._renderTable(el, accounts); });
-    pgWrap.querySelector('#pg-prev') ?.addEventListener('click', ()=>{ this._page--; this._renderTable(el, accounts); });
-    pgWrap.querySelector('#pg-next') ?.addEventListener('click', ()=>{ this._page++; this._renderTable(el, accounts); });
-    pgWrap.querySelector('#pg-last') ?.addEventListener('click', ()=>{ this._page=totalPages; this._renderTable(el, accounts); });
-    pgWrap.querySelectorAll('.pg-num').forEach(btn=>{ btn.addEventListener('click',()=>{ this._page=Number(btn.dataset.pg); this._renderTable(el, accounts); }); });
+    wrap.querySelectorAll('[data-edit-id]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.editId;
+        const row = byMetaId[id];
+        if (row) this._showEditModal(row);
+      });
+    });
   }
 
   _rowHtml(a) {
