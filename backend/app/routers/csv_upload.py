@@ -540,6 +540,15 @@ async def get_wd_payments(
                 WdPayment.komisi_meta + WdPayment.komisi_adu
                 + WdPayment.komisi_terra + WdPayment.komisi_meta_pribadi
             ).label("komisi_iklan"),
+            # Breakdown granular per kategori — dipakai halaman "Pembayaran WD
+            # (Baru)" buat filter pills kayak Laporan Harian. komisi_organik/
+            # komisi_iklan di atas dipertahankan apa adanya buat halaman lama.
+            sa.func.sum(WdPayment.komisi_story).label("komisi_story"),
+            sa.func.sum(WdPayment.komisi_feed).label("komisi_feed"),
+            sa.func.sum(WdPayment.komisi_meta).label("komisi_meta"),
+            sa.func.sum(WdPayment.komisi_adu).label("komisi_adu"),
+            sa.func.sum(WdPayment.komisi_terra).label("komisi_terra"),
+            sa.func.sum(WdPayment.komisi_meta_pribadi).label("komisi_meta_pribadi"),
             sa.func.sum(WdPayment.jumlah_orders).label("jumlah_orders"),
         )
         .join(ShopeeAccount, WdPayment.shopee_account_id == ShopeeAccount.id)
@@ -558,6 +567,12 @@ async def get_wd_payments(
              "komisi_live": float(r.komisi_live or 0),
              "komisi_organik": float(r.komisi_organik or 0),
              "komisi_iklan": float(r.komisi_iklan or 0),
+             "komisi_story": float(r.komisi_story or 0),
+             "komisi_feed": float(r.komisi_feed or 0),
+             "komisi_meta": float(r.komisi_meta or 0),
+             "komisi_adu": float(r.komisi_adu or 0),
+             "komisi_terra": float(r.komisi_terra or 0),
+             "komisi_meta_pribadi": float(r.komisi_meta_pribadi or 0),
              "jumlah_orders": r.jumlah_orders} for r in rows]
 
 
