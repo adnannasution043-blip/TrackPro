@@ -65,11 +65,28 @@ export class IklanPage {
     }
     if (!this._shopeeMetas.some(m => m.id === this._localMetaId)) this._localMetaId = null;
 
+    const curMetaLabel = this._localMetaId
+      ? (this._shopeeMetas.find(m => m.id === this._localMetaId)?.nama || `Semua Meta (${this._shopeeMetas.length})`)
+      : `Semua Meta (${this._shopeeMetas.length})`;
     const metaFilterHtml = this._shopeeMetas.length > 0 ? `
-      <select id="sel-meta-filter" class="form-select" style="font-size:12px;max-width:200px;">
-        <option value="">Semua Meta (${this._shopeeMetas.length})</option>
-        ${this._shopeeMetas.map(m => `<option value="${m.id}"${this._localMetaId===m.id?' selected':''}>${m.nama}</option>`).join('')}
-      </select>` : '';
+      <div style="position:relative;">
+        <input type="text" id="meta-filter-input" class="form-input" autocomplete="off"
+          style="font-size:12px;width:200px;" value="${curMetaLabel}">
+        <div id="meta-filter-list" style="display:none;position:absolute;top:100%;left:0;right:0;margin-top:4px;
+          background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:8px;
+          box-shadow:0 8px 24px rgba(0,0,0,.14);max-height:260px;overflow-y:auto;z-index:500;">
+          <div class="meta-filter-opt" data-val="" data-label="Semua Meta (${this._shopeeMetas.length})"
+            style="padding:8px 12px;cursor:pointer;font-size:12.5px;${!this._localMetaId?'background:var(--bg-muted);font-weight:600;':''}">
+            Semua Meta (${this._shopeeMetas.length})
+          </div>
+          ${this._shopeeMetas.map(m => `
+            <div class="meta-filter-opt" data-val="${m.id}" data-label="${m.nama}"
+              style="padding:8px 12px;cursor:pointer;font-size:12.5px;${this._localMetaId===m.id?'background:var(--bg-muted);font-weight:600;':''}">
+              ${m.nama}
+            </div>`).join('')}
+          <div class="meta-filter-empty" style="display:none;padding:10px 12px;font-size:12px;color:var(--text-muted);">Tidak ada akun yang cocok.</div>
+        </div>
+      </div>` : '';
 
     this.container.innerHTML = `
       <div class="page-header">
@@ -145,14 +162,55 @@ export class IklanPage {
 
     this.container.querySelector('#btn-auto-link').addEventListener('click', () => this._autoLink());
 
-    this.container.querySelector('#sel-meta-filter')?.addEventListener('change', e => {
-      this._localMetaId = e.target.value || null;
-      this._page = 1;
-      this._load();
-    });
+    this._bindMetaFilterCombo();
 
     document.addEventListener('click', this._boundClose);
     await this._load();
+  }
+
+  // Combobox "Pilih Meta" dengan search — filter lokal khusus halaman ini,
+  // cuma isi akun Meta yang terhubung ke Shopee yang lagi difilter di sidebar.
+  _bindMetaFilterCombo() {
+    const input = this.container.querySelector('#meta-filter-input');
+    const list  = this.container.querySelector('#meta-filter-list');
+    if (!input || !list) return;
+
+    const opts  = Array.from(list.querySelectorAll('.meta-filter-opt'));
+    const empty = list.querySelector('.meta-filter-empty');
+
+    const filterList = () => {
+      const q = input.value.trim().toLowerCase();
+      let anyVisible = false;
+      opts.forEach(o => {
+        const match = !q || o.dataset.label.toLowerCase().includes(q);
+        o.style.display = match ? 'block' : 'none';
+        if (match) anyVisible = true;
+      });
+      if (empty) empty.style.display = anyVisible ? 'none' : 'block';
+    };
+
+    input.addEventListener('focus', () => { input.select(); filterList(); list.style.display = 'block'; });
+    input.addEventListener('input', () => { filterList(); list.style.display = 'block'; });
+    input.addEventListener('blur', () => {
+      setTimeout(() => {
+        list.style.display = 'none';
+        // Batal ngetik tanpa milih opsi → balikin ke label yang lagi aktif
+        const active = opts.find(o => o.dataset.val === (this._localMetaId || ''));
+        if (active) input.value = active.dataset.label;
+      }, 150);
+    });
+    input.addEventListener('keydown', e => { if (e.key === 'Escape') input.blur(); });
+
+    opts.forEach(o => {
+      o.addEventListener('mousedown', e => {
+        e.preventDefault();
+        this._localMetaId = o.dataset.val || null;
+        input.value = o.dataset.label;
+        list.style.display = 'none';
+        this._page = 1;
+        this._load();
+      });
+    });
   }
 
   async _autoLink() {
@@ -548,20 +606,43 @@ export class IklanPage {
         }
         timelineEl.innerHTML = notes.map(n => {
           const isPindah = n.tipe === 'pindah_tahap';
+          const done = !!n.selesai;
           const d = new Date(n.created_at);
           const tgl = `${d.getDate()}/${d.getMonth()+1}/${d.getFullYear().toString().slice(2)} ${String(d.getHours()).padStart(2,'0')}.${String(d.getMinutes()).padStart(2,'0')}`;
+          const marker = isPindah
+            ? `<div style="margin-top:3px;flex-shrink:0;"><div style="width:7px;height:7px;border-radius:50%;background:#f59e0b;margin-top:1px;"></div></div>`
+            : `<button class="btn-toggle-selesai" data-id="${n.id}" data-selesai="${done}" title="${done ? 'Tandai belum selesai' : 'Tandai selesai'}"
+                style="background:none;border:none;cursor:pointer;padding:0;margin-top:1px;flex-shrink:0;display:flex;align-items:center;">
+                ${done
+                  ? `<svg viewBox="0 0 24 24" width="15" height="15"><rect x="1" y="1" width="22" height="22" rx="5" fill="#16a34a"/><path d="M7 12.5l3.2 3.2L17 9" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+                  : `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#d1d5db" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5"/></svg>`}
+              </button>`;
           return `
             <div style="display:flex;gap:8px;padding:7px 0;border-bottom:1px solid #f9fafb;" data-note-id="${n.id}">
-              <div style="margin-top:3px;flex-shrink:0;">
-                <div style="width:7px;height:7px;border-radius:50%;background:${isPindah?'#f59e0b':'#3b82f6'};margin-top:1px;"></div>
-              </div>
+              ${marker}
               <div style="flex:1;min-width:0;">
-                <div style="font-size:12.5px;color:#111827;line-height:1.4;">${n.teks}</div>
+                <div style="font-size:12.5px;line-height:1.4;color:${done?'#9ca3af':'#111827'};text-decoration:${done?'line-through':'none'};">${n.teks}</div>
                 <div style="font-size:10.5px;color:#9ca3af;margin-top:2px;">${tgl}</div>
               </div>
               ${!isPindah ? `<button class="btn-del-note" data-id="${n.id}" style="background:none;border:none;cursor:pointer;padding:2px 4px;color:#d1d5db;font-size:14px;flex-shrink:0;line-height:1;" title="Hapus">×</button>` : ''}
             </div>`;
         }).join('');
+
+        timelineEl.querySelectorAll('.btn-toggle-selesai').forEach(chkBtn => {
+          chkBtn.addEventListener('click', async () => {
+            const noteId = chkBtn.dataset.id;
+            const nowSelesai = chkBtn.dataset.selesai !== 'true';
+            chkBtn.disabled = true;
+            try {
+              await apiFetch(`/dashboard/campaigns/${r.id}/notes/${noteId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ selesai: nowSelesai }),
+              });
+              await loadNotes();
+            } catch(e) { alert(e.message || 'Gagal update.'); chkBtn.disabled = false; }
+          });
+        });
 
         timelineEl.querySelectorAll('.btn-del-note').forEach(delBtn => {
           delBtn.addEventListener('click', async () => {
@@ -636,7 +717,7 @@ export class IklanPage {
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
     overlay.innerHTML = `
-      <div class="modal" style="max-width:860px;width:96vw;max-height:90vh;display:flex;flex-direction:column;">
+      <div class="modal" style="max-width:1180px;width:96vw;max-height:90vh;display:flex;flex-direction:column;">
         <div class="modal-header" style="flex-shrink:0;">
           <div>
             <h2 style="font-size:15px;">${r.nama_campaign}</h2>
@@ -789,15 +870,17 @@ export class IklanPage {
       } else {
         tl.innerHTML = notes.map(n => {
           const isPindah = n.tipe === 'pindah_tahap';
+          const done = !!n.selesai;
           const d = new Date(n.created_at);
           const tgl = `${d.getDate()}/${d.getMonth()+1}/${d.getFullYear().toString().slice(2)} ${String(d.getHours()).padStart(2,'0')}.${String(d.getMinutes()).padStart(2,'0')}`;
+          const marker = !isPindah && done
+            ? `<svg viewBox="0 0 24 24" width="14" height="14"><rect x="1" y="1" width="22" height="22" rx="5" fill="#16a34a"/><path d="M7 12.5l3.2 3.2L17 9" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+            : `<div style="width:7px;height:7px;border-radius:50%;background:${isPindah?'#f59e0b':'#d1d5db'};"></div>`;
           return `
             <div style="display:flex;gap:8px;padding:7px 0;border-bottom:1px solid #f9fafb;">
-              <div style="margin-top:4px;flex-shrink:0;">
-                <div style="width:7px;height:7px;border-radius:50%;background:${isPindah?'#f59e0b':'#3b82f6'};"></div>
-              </div>
+              <div style="margin-top:4px;flex-shrink:0;">${marker}</div>
               <div>
-                <div style="font-size:12.5px;color:#111827;line-height:1.4;">${n.teks}</div>
+                <div style="font-size:12.5px;line-height:1.4;color:${done?'#9ca3af':'#111827'};text-decoration:${done?'line-through':'none'};">${n.teks}</div>
                 <div style="font-size:10.5px;color:#9ca3af;margin-top:2px;">${tgl}</div>
               </div>
             </div>`;

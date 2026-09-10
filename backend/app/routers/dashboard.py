@@ -873,7 +873,7 @@ async def get_campaign_notes(campaign_id: UUID, current_user: CurrentUser, db: D
     )).scalars().all()
 
     return [
-        {"id": str(n.id), "teks": n.teks, "tipe": n.tipe,
+        {"id": str(n.id), "teks": n.teks, "tipe": n.tipe, "selesai": n.selesai,
          "created_at": n.created_at.isoformat()}
         for n in notes
     ]
@@ -907,8 +907,33 @@ async def add_campaign_note(campaign_id: UUID, body: NoteCreate, current_user: C
     db.add(note)
     await db.commit()
     await db.refresh(note)
-    return {"id": str(note.id), "teks": note.teks, "tipe": note.tipe,
+    return {"id": str(note.id), "teks": note.teks, "tipe": note.tipe, "selesai": note.selesai,
             "created_at": note.created_at.isoformat()}
+
+
+class NoteSelesaiUpdate(BaseModel):
+    selesai: bool
+
+
+@router.patch("/campaigns/{campaign_id}/notes/{note_id}", status_code=204)
+async def update_campaign_note_selesai(
+    campaign_id: UUID, note_id: UUID, body: NoteSelesaiUpdate, current_user: CurrentUser, db: DB,
+):
+    from fastapi import HTTPException
+    note = (await db.execute(
+        sa.select(CampaignNote)
+        .join(Campaign, CampaignNote.campaign_id == Campaign.id)
+        .join(MetaAccount, Campaign.meta_account_id == MetaAccount.id)
+        .where(
+            CampaignNote.id == note_id,
+            CampaignNote.campaign_id == campaign_id,
+            MetaAccount.user_id == current_user.id,
+        )
+    )).scalar_one_or_none()
+    if not note:
+        raise HTTPException(404, "Catatan tidak ditemukan.")
+    note.selesai = body.selesai
+    await db.commit()
 
 
 @router.delete("/campaigns/{campaign_id}/notes/{note_id}", status_code=204)
