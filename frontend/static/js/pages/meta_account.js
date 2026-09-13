@@ -150,9 +150,10 @@ export class MetaAccountPage {
         </div>
       </div>
 
-      <div id="content"><div class="loading">Memuat data…</div></div>
+      <div id="content-shopee"><div class="loading">Memuat data…</div></div>
       <div id="content-adu"></div>
       <div id="content-terra"></div>
+      <div id="content-meta"></div>
     `;
 
     this._bindFormEvents();
@@ -283,9 +284,10 @@ export class MetaAccountPage {
   }
 
   async _load() {
-    const el = this.container.querySelector('#content');
+    const elShopee = this.container.querySelector('#content-shopee');
     const elAdu = this.container.querySelector('#content-adu');
     const elTerra = this.container.querySelector('#content-terra');
+    const elMeta = this.container.querySelector('#content-meta');
     try {
       const [tree, metaList, aduList, terraList] = await Promise.all([
         apiFetch('/accounts/tree'),
@@ -300,35 +302,24 @@ export class MetaAccountPage {
       }
       this._aduAccounts = aduList || [];
       this._terraAccounts = terraList || [];
-      this._render(el);
+      // Urutan tampilan: Shopee, Adu, Terra, Meta.
+      this._renderShopee(elShopee);
       this._renderAdu(elAdu);
       this._renderTerra(elTerra);
+      this._renderMeta(elMeta);
     } catch (e) {
-      el.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+      elShopee.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
     }
   }
 
-  _render(el) {
+  _renderShopee(el) {
     const { meta_accounts, shopee_all } = this._tree;
     const allShopee = shopee_all || [];
 
-    const metaCards = meta_accounts.length === 0
-      ? `<div style="text-align:center;padding:32px;color:var(--text-muted);font-size:13px;">Belum ada akun Meta. Klik "+ Tambah Akun Meta" di atas.</div>`
-      : meta_accounts.map(m => this._renderMetaCard(m)).join('');
-
-    // Tiap kartu akun Meta collapse sendiri-sendiri (lihat _renderMetaCard),
-    // default tertutup — header di sini cuma label ringkasan jumlah akun.
-    const metaSection = `
-      <div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.5px;">
-        Akun Meta Ads (${meta_accounts.length})
-      </div>
-      ${metaCards}
-    `;
-
     // Kartu per akun Shopee — dari sini satu akun Shopee bisa dihubungkan
-    // ke banyak akun Meta sekaligus (kebalikan dari kartu Meta di atas
+    // ke banyak akun Meta sekaligus (kebalikan dari kartu Meta di bawah
     // yang cuma nampilin ringkasan read-only).
-    const shopeeHeader = `<div style="font-size:11px;font-weight:700;color:var(--text-muted);margin:24px 0 10px;text-transform:uppercase;letter-spacing:0.5px;">
+    const shopeeHeader = `<div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.5px;">
       Akun Shopee Affiliate (${allShopee.length}) — hubungkan tiap akun ke satu atau banyak akun Meta
     </div>`;
 
@@ -341,10 +332,29 @@ export class MetaAccountPage {
           return this._renderShopeeCard(s, connected, availableMeta);
         }).join('');
 
-    el.innerHTML = `${metaSection}${shopeeHeader}<div id="shopee-tree-content">${shopeeCards}</div>`;
+    el.innerHTML = `${shopeeHeader}<div id="shopee-tree-content">${shopeeCards}</div>`;
 
     this._bindShopeeTreeEvents(el);
     this._bindComboboxes(el);
+    this._bindCardToggle(el);
+  }
+
+  _renderMeta(el) {
+    const { meta_accounts } = this._tree;
+
+    const metaCards = meta_accounts.length === 0
+      ? `<div style="text-align:center;padding:32px;color:var(--text-muted);font-size:13px;">Belum ada akun Meta. Klik "+ Tambah Akun Meta" di atas.</div>`
+      : meta_accounts.map(m => this._renderMetaCard(m)).join('');
+
+    // Tiap kartu akun Meta collapse sendiri-sendiri (lihat _renderMetaCard),
+    // default tertutup — header di sini cuma label ringkasan jumlah akun.
+    el.innerHTML = `
+      <div style="font-size:11px;font-weight:700;color:var(--text-muted);margin:20px 0 10px;text-transform:uppercase;letter-spacing:0.5px;">
+        Akun Meta Ads (${meta_accounts.length})
+      </div>
+      ${metaCards}
+    `;
+
     this._bindTokenEvents(el);
     this._bindSyncEvents(el);
     this._bindCardToggle(el);
