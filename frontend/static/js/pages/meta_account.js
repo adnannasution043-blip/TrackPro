@@ -7,7 +7,6 @@ export class MetaAccountPage {
     this._metaInfo = {}; // id → { has_token, token_expires_at, status_koneksi }
     this._aduAccounts = [];
     this._terraAccounts = [];
-    this._metaSectionOpen = false; // kartu akun Meta di-collapse default, dibuka manual kalau perlu
   }
 
   async render() {
@@ -317,20 +316,13 @@ export class MetaAccountPage {
       ? `<div style="text-align:center;padding:32px;color:var(--text-muted);font-size:13px;">Belum ada akun Meta. Klik "+ Tambah Akun Meta" di atas.</div>`
       : meta_accounts.map(m => this._renderMetaCard(m)).join('');
 
-    // Kartu akun Meta di-collapse jadi satu grup (token & sync jarang
-    // dipakai harian sejak pengelolaan koneksi pindah ke kartu Shopee di
-    // bawah) — dibuka manual kalau memang lagi butuh.
-    const metaOpen = this._metaSectionOpen;
+    // Tiap kartu akun Meta collapse sendiri-sendiri (lihat _renderMetaCard),
+    // default tertutup — header di sini cuma label ringkasan jumlah akun.
     const metaSection = `
-      <button id="toggle-meta-section"
-        style="width:100%;display:flex;align-items:center;justify-content:space-between;padding:10px 14px;
-               background:var(--bg);border:1px solid var(--border);border-radius:8px;cursor:pointer;
-               font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">
-        <span>Akun Meta Ads (${meta_accounts.length})</span>
-        <svg id="meta-section-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"
-          style="transition:transform 0.2s;transform:${metaOpen ? 'rotate(180deg)' : ''};"><polyline points="6 9 12 15 18 9"/></svg>
-      </button>
-      <div id="tree-content" style="display:${metaOpen ? 'block' : 'none'};margin-top:12px;">${metaCards}</div>
+      <div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.5px;">
+        Akun Meta Ads (${meta_accounts.length})
+      </div>
+      ${metaCards}
     `;
 
     // Kartu per akun Shopee — dari sini satu akun Shopee bisa dihubungkan
@@ -351,18 +343,11 @@ export class MetaAccountPage {
 
     el.innerHTML = `${metaSection}${shopeeHeader}<div id="shopee-tree-content">${shopeeCards}</div>`;
 
-    el.querySelector('#toggle-meta-section')?.addEventListener('click', () => {
-      this._metaSectionOpen = !this._metaSectionOpen;
-      const panel = el.querySelector('#tree-content');
-      const chevron = el.querySelector('#meta-section-chevron');
-      panel.style.display = this._metaSectionOpen ? 'block' : 'none';
-      if (chevron) chevron.style.transform = this._metaSectionOpen ? 'rotate(180deg)' : '';
-    });
-
     this._bindShopeeTreeEvents(el);
     this._bindComboboxes(el);
     this._bindTokenEvents(el);
     this._bindSyncEvents(el);
+    this._bindCardToggle(el);
   }
 
   _renderShopeeCard(s, connected, availableMeta) {
@@ -403,20 +388,26 @@ export class MetaAccountPage {
          </div>`
       : `<div style="font-size:11.5px;color:var(--text-muted);margin-top:8px;">Semua akun Meta sudah terhubung.</div>`;
 
+    const key = `shopee-${s.id}`;
     return `
       <div class="card" style="margin-bottom:12px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-          <div style="display:flex;align-items:center;gap:10px;">
-            <div style="width:36px;height:36px;background:#f0fdf4;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;">🛒</div>
-            <div>
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <button data-toggle-card="${key}" style="flex:1;min-width:0;display:flex;align-items:center;gap:10px;background:none;border:none;padding:0;cursor:pointer;text-align:left;">
+            <div style="width:36px;height:36px;background:#f0fdf4;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">🛒</div>
+            <div style="min-width:0;">
               <div style="font-size:14px;font-weight:700;">${s.nama}</div>
-              <div style="font-size:11.5px;color:var(--text-muted);">Akun Shopee Affiliate</div>
+              <div style="font-size:11.5px;color:var(--text-muted);">Akun Shopee Affiliate · ${connected.length} Meta terhubung</div>
             </div>
+          </button>
+          <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+            <button class="btn btn-sm" style="color:#dc2626;border-color:#dc2626;" data-delete-shopee="${s.id}">Hapus</button>
+            <button data-toggle-card="${key}" style="background:none;border:none;padding:4px;cursor:pointer;display:flex;">
+              <svg id="card-chevron-${key}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" style="transition:transform 0.2s;color:var(--text-muted);"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
           </div>
-          <button class="btn btn-sm" style="color:#dc2626;border-color:#dc2626;" data-delete-shopee="${s.id}">Hapus</button>
         </div>
 
-        <div style="border-top:1px solid var(--border);padding-top:12px;">
+        <div id="card-body-${key}" style="display:none;border-top:1px solid var(--border);margin-top:12px;padding-top:12px;">
           <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">
             Meta terhubung (${connected.length})
           </div>
@@ -530,6 +521,24 @@ export class MetaAccountPage {
     });
   }
 
+  // Toggle collapse/expand kartu — dipakai semua jenis kartu (Meta, Shopee,
+  // Adu, Terra). Body kartu punya id `card-body-${key}` dan default
+  // tertutup (display:none) di HTML-nya, chevron `card-chevron-${key}`
+  // ikut berputar.
+  _bindCardToggle(el) {
+    el.querySelectorAll('[data-toggle-card]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const key = btn.dataset.toggleCard;
+        const body = el.querySelector(`#card-body-${key}`);
+        const chevron = el.querySelector(`#card-chevron-${key}`);
+        if (!body) return;
+        const open = body.style.display === 'none';
+        body.style.display = open ? 'block' : 'none';
+        if (chevron) chevron.style.transform = open ? 'rotate(180deg)' : '';
+      });
+    });
+  }
+
   _renderMetaCard(m) {
     const info = this._metaInfo[m.id] || {};
     const hasToken = info.has_token || false;
@@ -561,23 +570,37 @@ export class MetaAccountPage {
     const shopeeSummary = m.shopee_accounts.length === 0
       ? `Belum ada akun Shopee terhubung.`
       : m.shopee_accounts.map(s => s.nama).join(', ');
+    const aduSummary = (m.adu_accounts || []).length === 0
+      ? `Belum ada akun Adu terhubung.`
+      : m.adu_accounts.map(a => a.nama).join(', ');
+    const terraSummary = (m.terra_accounts || []).length === 0
+      ? `Belum ada akun Terra terhubung.`
+      : m.terra_accounts.map(t => t.nama).join(', ');
 
     const today = new Date().toISOString().slice(0, 10);
     const firstDay = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
+    const key = `meta-${m.id}`;
 
     return `
       <div class="card" style="margin-bottom:12px;">
         <!-- Header -->
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-          <div style="display:flex;align-items:center;gap:10px;">
-            <div style="width:36px;height:36px;background:#fef3c7;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;">📊</div>
-            <div>
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <button data-toggle-card="${key}" style="flex:1;min-width:0;display:flex;align-items:center;gap:10px;background:none;border:none;padding:0;cursor:pointer;text-align:left;">
+            <div style="width:36px;height:36px;background:#fef3c7;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">📊</div>
+            <div style="min-width:0;">
               <div style="font-size:14px;font-weight:700;">${m.nama}</div>
               <div style="font-size:11.5px;color:var(--text-muted);">ID: ${m.account_id}</div>
             </div>
+          </button>
+          <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+            <span class="badge badge-green">Aktif</span>
+            <button data-toggle-card="${key}" style="background:none;border:none;padding:4px;cursor:pointer;display:flex;">
+              <svg id="card-chevron-${key}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" style="transition:transform 0.2s;color:var(--text-muted);"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
           </div>
-          <span class="badge badge-green">Aktif</span>
         </div>
+
+        <div id="card-body-${key}" style="display:none;margin-top:12px;">
 
         <!-- Token status row -->
         <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;margin-bottom:12px;">
@@ -641,12 +664,26 @@ export class MetaAccountPage {
           </div>
         </div>
 
-        <!-- Shopee links (read-only, kelola di kartu Akun Shopee Affiliate) -->
+        <!-- Shopee/Adu/Terra links (read-only, kelola di kartu masing-masing) -->
         <div style="border-top:1px solid var(--border);padding-top:12px;">
           <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">
             Shopee terhubung (${m.shopee_accounts.length})
           </div>
           <div style="font-size:12.5px;color:var(--text);">${shopeeSummary}</div>
+        </div>
+        <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:12px;">
+          <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">
+            Adu terhubung (${m.adu_accounts.length})
+          </div>
+          <div style="font-size:12.5px;color:var(--text);">${aduSummary}</div>
+        </div>
+        <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:12px;">
+          <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">
+            Terra terhubung (${m.terra_accounts.length})
+          </div>
+          <div style="font-size:12.5px;color:var(--text);">${terraSummary}</div>
+        </div>
+
         </div>
       </div>
     `;
@@ -890,17 +927,25 @@ export class MetaAccountPage {
 
   _renderAdu(el) {
     if (!el) return;
+    const metaAccounts = this._tree.meta_accounts || [];
     const header = `<div style="font-size:11px;font-weight:700;color:var(--text-muted);margin:20px 0 10px;text-transform:uppercase;letter-spacing:0.5px;">
       Akun Adu Ads / Clickadu (${this._aduAccounts.length})
     </div>`;
     const cards = this._aduAccounts.length === 0
       ? `<div style="text-align:center;padding:24px;color:var(--text-muted);font-size:13px;border:1px solid var(--border);border-radius:8px;">Belum ada akun Adu. Klik "+ Tambah Akun Adu" di atas.</div>`
-      : this._aduAccounts.map(a => this._renderAduCard(a)).join('');
+      : this._aduAccounts.map(a => {
+          const connectedMeta = metaAccounts.filter(m => (m.adu_accounts || []).some(x => x.id === a.id));
+          const connectedIds = new Set(connectedMeta.map(m => m.id));
+          const availableMeta = metaAccounts.filter(m => !connectedIds.has(m.id));
+          return this._renderAduCard(a, connectedMeta, availableMeta);
+        }).join('');
     el.innerHTML = header + cards;
     this._bindAduEvents(el);
+    this._bindComboboxes(el);
+    this._bindCardToggle(el);
   }
 
-  _renderAduCard(a) {
+  _renderAduCard(a, connectedMeta, availableMeta) {
     const hasKey = a.has_api_key;
     let keyBadge = hasKey
       ? (a.status_koneksi === 'token_expired'
@@ -910,19 +955,64 @@ export class MetaAccountPage {
 
     const today = new Date().toISOString().slice(0, 10);
     const firstDay = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
+    const key = `adu-${a.id}`;
+
+    const metaRows = connectedMeta.length === 0
+      ? `<div style="font-size:12px;color:var(--text-muted);padding:8px 0;">Belum ada akun Meta terhubung.</div>`
+      : connectedMeta.map(m => `
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:6px;margin-bottom:6px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div style="width:26px;height:26px;background:#fef3c7;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:13px;">📊</div>
+              <span style="font-size:13px;font-weight:500;">${m.nama}</span>
+              <span style="font-size:11px;color:var(--text-muted);">ID: ${m.account_id}</span>
+            </div>
+            <button class="btn btn-sm" style="font-size:11px;color:#dc2626;border-color:#dc2626;"
+              data-adu-unlink-meta="${m.id}" data-adu-unlink-adu="${a.id}">Lepas</button>
+          </div>
+        `).join('');
+
+    const linkRow = availableMeta.length > 0
+      ? `<div style="display:flex;gap:8px;align-items:flex-start;margin-top:10px;">
+           <div style="flex:1;position:relative;">
+             <input type="text" class="form-input" id="combo-input-adu-${a.id}" placeholder="Pilih akun Meta…"
+               autocomplete="off" style="font-size:12px;width:100%;">
+             <input type="hidden" id="combo-value-adu-${a.id}">
+             <div id="combo-list-adu-${a.id}" data-combo-list="adu-${a.id}"
+               style="display:none;position:absolute;top:100%;left:0;right:0;margin-top:4px;background:var(--surface,#fff);
+                      border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.14);
+                      max-height:240px;overflow-y:auto;z-index:50;">
+               ${availableMeta.map(m => `
+                 <div class="combo-opt" data-val="${m.id}" data-label="${m.nama}"
+                   style="padding:8px 12px;cursor:pointer;font-size:12.5px;">
+                   ${m.nama} <span style="color:var(--text-muted);font-size:11px;">ID: ${m.account_id}</span>
+                 </div>
+               `).join('')}
+               <div class="combo-empty" style="display:none;padding:10px 12px;font-size:12px;color:var(--text-muted);">Tidak ada akun yang cocok.</div>
+             </div>
+           </div>
+           <button class="btn btn-primary btn-sm" data-adu-link="${a.id}" style="white-space:nowrap;">Hubungkan</button>
+         </div>`
+      : `<div style="font-size:11.5px;color:var(--text-muted);margin-top:8px;">Semua akun Meta sudah terhubung.</div>`;
 
     return `
       <div class="card" style="margin-bottom:12px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-          <div style="display:flex;align-items:center;gap:10px;">
-            <div style="width:36px;height:36px;background:#fef3c7;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;">🎯</div>
-            <div>
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <button data-toggle-card="${key}" style="flex:1;min-width:0;display:flex;align-items:center;gap:10px;background:none;border:none;padding:0;cursor:pointer;text-align:left;">
+            <div style="width:36px;height:36px;background:#fef3c7;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">🎯</div>
+            <div style="min-width:0;">
               <div style="font-size:14px;font-weight:700;">${a.nama_tampilan}</div>
-              <div style="font-size:11.5px;color:var(--text-muted);">Clickadu SSP Advertiser</div>
+              <div style="font-size:11.5px;color:var(--text-muted);">Clickadu SSP Advertiser · ${connectedMeta.length} Meta terhubung</div>
             </div>
+          </button>
+          <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+            <button class="btn btn-sm" style="color:#dc2626;border-color:#dc2626;" data-delete-adu="${a.id}">Hapus</button>
+            <button data-toggle-card="${key}" style="background:none;border:none;padding:4px;cursor:pointer;display:flex;">
+              <svg id="card-chevron-${key}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" style="transition:transform 0.2s;color:var(--text-muted);"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
           </div>
-          <button class="btn btn-sm" style="color:#dc2626;border-color:#dc2626;" data-delete-adu="${a.id}">Hapus</button>
         </div>
+
+        <div id="card-body-${key}" style="display:none;margin-top:12px;">
 
         <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;margin-bottom:12px;">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15" style="flex-shrink:0;color:var(--text-muted);"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
@@ -949,7 +1039,7 @@ export class MetaAccountPage {
           </div>
         </div>
 
-        <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+        <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:12px;">
           <button data-toggle-adu-sync="${a.id}"
             style="width:100%;display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--bg);border:none;cursor:pointer;font-size:13px;font-weight:600;color:var(--text);">
             <span style="display:flex;align-items:center;gap:7px;">
@@ -982,6 +1072,16 @@ export class MetaAccountPage {
             <div id="adu-sync-logs-${a.id}" style="display:none;margin-top:8px;"></div>
             `}
           </div>
+        </div>
+
+        <div style="border-top:1px solid var(--border);padding-top:12px;">
+          <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">
+            Meta terhubung (${connectedMeta.length})
+          </div>
+          ${metaRows}
+          ${linkRow}
+        </div>
+
         </div>
       </div>
     `;
@@ -1105,6 +1205,44 @@ export class MetaAccountPage {
         }
       });
     });
+
+    el.querySelectorAll('[data-adu-unlink-meta]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const metaId = btn.dataset.aduUnlinkMeta;
+        const aduId = btn.dataset.aduUnlinkAdu;
+        btn.disabled = true;
+        try {
+          await apiFetch(`/accounts/meta/${metaId}/adu-links/${aduId}`, { method: 'DELETE' });
+          await this._load();
+        } catch (e) {
+          alert(e.message);
+          btn.disabled = false;
+        }
+      });
+    });
+
+    el.querySelectorAll('[data-adu-link]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const aduId = btn.dataset.aduLink;
+        const hidden = el.querySelector(`#combo-value-adu-${aduId}`);
+        const metaId = hidden?.value;
+        if (!metaId) {
+          el.querySelector(`#combo-input-adu-${aduId}`)?.focus();
+          return;
+        }
+        btn.disabled = true;
+        try {
+          await apiFetch(`/accounts/meta/${metaId}/adu-links`, {
+            method: 'POST',
+            body: JSON.stringify({ adu_account_id: aduId }),
+          });
+          await this._load();
+        } catch (e) {
+          alert(e.message);
+          btn.disabled = false;
+        }
+      });
+    });
   }
 
   async _loadAduSyncLogs(accountId, el) {
@@ -1168,17 +1306,25 @@ export class MetaAccountPage {
 
   _renderTerra(el) {
     if (!el) return;
+    const metaAccounts = this._tree.meta_accounts || [];
     const header = `<div style="font-size:11px;font-weight:700;color:var(--text-muted);margin:20px 0 10px;text-transform:uppercase;letter-spacing:0.5px;">
       Akun Terra Ads / Adsterra (${this._terraAccounts.length})
     </div>`;
     const cards = this._terraAccounts.length === 0
       ? `<div style="text-align:center;padding:24px;color:var(--text-muted);font-size:13px;border:1px solid var(--border);border-radius:8px;">Belum ada akun Terra. Klik "+ Tambah Akun Terra" di atas.</div>`
-      : this._terraAccounts.map(a => this._renderTerraCard(a)).join('');
+      : this._terraAccounts.map(a => {
+          const connectedMeta = metaAccounts.filter(m => (m.terra_accounts || []).some(x => x.id === a.id));
+          const connectedIds = new Set(connectedMeta.map(m => m.id));
+          const availableMeta = metaAccounts.filter(m => !connectedIds.has(m.id));
+          return this._renderTerraCard(a, connectedMeta, availableMeta);
+        }).join('');
     el.innerHTML = header + cards;
     this._bindTerraEvents(el);
+    this._bindComboboxes(el);
+    this._bindCardToggle(el);
   }
 
-  _renderTerraCard(a) {
+  _renderTerraCard(a, connectedMeta, availableMeta) {
     const hasKey = a.has_api_key;
     let keyBadge = hasKey
       ? (a.status_koneksi === 'token_expired'
@@ -1188,19 +1334,64 @@ export class MetaAccountPage {
 
     const today = new Date().toISOString().slice(0, 10);
     const firstDay = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
+    const key = `terra-${a.id}`;
+
+    const metaRows = connectedMeta.length === 0
+      ? `<div style="font-size:12px;color:var(--text-muted);padding:8px 0;">Belum ada akun Meta terhubung.</div>`
+      : connectedMeta.map(m => `
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:6px;margin-bottom:6px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div style="width:26px;height:26px;background:#fef3c7;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:13px;">📊</div>
+              <span style="font-size:13px;font-weight:500;">${m.nama}</span>
+              <span style="font-size:11px;color:var(--text-muted);">ID: ${m.account_id}</span>
+            </div>
+            <button class="btn btn-sm" style="font-size:11px;color:#dc2626;border-color:#dc2626;"
+              data-terra-unlink-meta="${m.id}" data-terra-unlink-terra="${a.id}">Lepas</button>
+          </div>
+        `).join('');
+
+    const linkRow = availableMeta.length > 0
+      ? `<div style="display:flex;gap:8px;align-items:flex-start;margin-top:10px;">
+           <div style="flex:1;position:relative;">
+             <input type="text" class="form-input" id="combo-input-terra-${a.id}" placeholder="Pilih akun Meta…"
+               autocomplete="off" style="font-size:12px;width:100%;">
+             <input type="hidden" id="combo-value-terra-${a.id}">
+             <div id="combo-list-terra-${a.id}" data-combo-list="terra-${a.id}"
+               style="display:none;position:absolute;top:100%;left:0;right:0;margin-top:4px;background:var(--surface,#fff);
+                      border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.14);
+                      max-height:240px;overflow-y:auto;z-index:50;">
+               ${availableMeta.map(m => `
+                 <div class="combo-opt" data-val="${m.id}" data-label="${m.nama}"
+                   style="padding:8px 12px;cursor:pointer;font-size:12.5px;">
+                   ${m.nama} <span style="color:var(--text-muted);font-size:11px;">ID: ${m.account_id}</span>
+                 </div>
+               `).join('')}
+               <div class="combo-empty" style="display:none;padding:10px 12px;font-size:12px;color:var(--text-muted);">Tidak ada akun yang cocok.</div>
+             </div>
+           </div>
+           <button class="btn btn-primary btn-sm" data-terra-link="${a.id}" style="white-space:nowrap;">Hubungkan</button>
+         </div>`
+      : `<div style="font-size:11.5px;color:var(--text-muted);margin-top:8px;">Semua akun Meta sudah terhubung.</div>`;
 
     return `
       <div class="card" style="margin-bottom:12px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-          <div style="display:flex;align-items:center;gap:10px;">
-            <div style="width:36px;height:36px;background:#fef3c7;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;">🌍</div>
-            <div>
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <button data-toggle-card="${key}" style="flex:1;min-width:0;display:flex;align-items:center;gap:10px;background:none;border:none;padding:0;cursor:pointer;text-align:left;">
+            <div style="width:36px;height:36px;background:#fef3c7;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">🌍</div>
+            <div style="min-width:0;">
               <div style="font-size:14px;font-weight:700;">${a.nama_tampilan}</div>
-              <div style="font-size:11.5px;color:var(--text-muted);">Adsterra Advertiser</div>
+              <div style="font-size:11.5px;color:var(--text-muted);">Adsterra Advertiser · ${connectedMeta.length} Meta terhubung</div>
             </div>
+          </button>
+          <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+            <button class="btn btn-sm" style="color:#dc2626;border-color:#dc2626;" data-delete-terra="${a.id}">Hapus</button>
+            <button data-toggle-card="${key}" style="background:none;border:none;padding:4px;cursor:pointer;display:flex;">
+              <svg id="card-chevron-${key}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" style="transition:transform 0.2s;color:var(--text-muted);"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
           </div>
-          <button class="btn btn-sm" style="color:#dc2626;border-color:#dc2626;" data-delete-terra="${a.id}">Hapus</button>
         </div>
+
+        <div id="card-body-${key}" style="display:none;margin-top:12px;">
 
         <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;margin-bottom:12px;">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15" style="flex-shrink:0;color:var(--text-muted);"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
@@ -1227,7 +1418,7 @@ export class MetaAccountPage {
           </div>
         </div>
 
-        <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+        <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:12px;">
           <button data-toggle-terra-sync="${a.id}"
             style="width:100%;display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--bg);border:none;cursor:pointer;font-size:13px;font-weight:600;color:var(--text);">
             <span style="display:flex;align-items:center;gap:7px;">
@@ -1260,6 +1451,16 @@ export class MetaAccountPage {
             <div id="terra-sync-logs-${a.id}" style="display:none;margin-top:8px;"></div>
             `}
           </div>
+        </div>
+
+        <div style="border-top:1px solid var(--border);padding-top:12px;">
+          <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">
+            Meta terhubung (${connectedMeta.length})
+          </div>
+          ${metaRows}
+          ${linkRow}
+        </div>
+
         </div>
       </div>
     `;
@@ -1380,6 +1581,44 @@ export class MetaAccountPage {
           if (el.querySelector(`#terra-sync-logs-${id}`)?.style.display !== 'none') this._loadTerraSyncLogs(id, el);
         } finally {
           btn.disabled = false; btn.textContent = orig;
+        }
+      });
+    });
+
+    el.querySelectorAll('[data-terra-unlink-meta]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const metaId = btn.dataset.terraUnlinkMeta;
+        const terraId = btn.dataset.terraUnlinkTerra;
+        btn.disabled = true;
+        try {
+          await apiFetch(`/accounts/meta/${metaId}/terra-links/${terraId}`, { method: 'DELETE' });
+          await this._load();
+        } catch (e) {
+          alert(e.message);
+          btn.disabled = false;
+        }
+      });
+    });
+
+    el.querySelectorAll('[data-terra-link]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const terraId = btn.dataset.terraLink;
+        const hidden = el.querySelector(`#combo-value-terra-${terraId}`);
+        const metaId = hidden?.value;
+        if (!metaId) {
+          el.querySelector(`#combo-input-terra-${terraId}`)?.focus();
+          return;
+        }
+        btn.disabled = true;
+        try {
+          await apiFetch(`/accounts/meta/${metaId}/terra-links`, {
+            method: 'POST',
+            body: JSON.stringify({ terra_account_id: terraId }),
+          });
+          await this._load();
+        } catch (e) {
+          alert(e.message);
+          btn.disabled = false;
         }
       });
     });

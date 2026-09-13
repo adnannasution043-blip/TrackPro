@@ -39,3 +39,17 @@ class AccountLink(Base):
 
     meta_account_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("meta_accounts.id", ondelete="CASCADE"), primary_key=True)
     shopee_account_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("shopee_accounts.id", ondelete="CASCADE"), primary_key=True)
+
+
+class AduAccountLink(Base):
+    __tablename__ = "adu_account_links"
+
+    meta_account_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("meta_accounts.id", ondelete="CASCADE"), primary_key=True)
+    adu_account_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("adu_accounts.id", ondelete="CASCADE"), primary_key=True)
+
+
+class TerraAccountLink(Base):
+    __tablename__ = "terra_account_links"
+
+    meta_account_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("meta_accounts.id", ondelete="CASCADE"), primary_key=True)
+    terra_account_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("terra_accounts.id", ondelete="CASCADE"), primary_key=True)

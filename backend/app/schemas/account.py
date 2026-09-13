@@ -115,11 +115,19 @@ class TerraAccountResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Account Link (relasi meta <-> shopee)
+# Account Link (relasi meta <-> shopee / adu / terra)
 # ---------------------------------------------------------------------------
 
 class AccountLinkRequest(BaseModel):
     shopee_account_id: UUID
+
+
+class AduAccountLinkRequest(BaseModel):
+    adu_account_id: UUID
+
+
+class TerraAccountLinkRequest(BaseModel):
+    terra_account_id: UUID
 
 
 # ---------------------------------------------------------------------------
@@ -143,11 +151,23 @@ class ShopeeLinked(BaseModel):
     nama: str
 
 
+class AduLinked(BaseModel):
+    id: UUID
+    nama: str
+
+
+class TerraLinked(BaseModel):
+    id: UUID
+    nama: str
+
+
 class MetaWithShopee(BaseModel):
     id: UUID
     nama: str
     account_id: str
     shopee_accounts: list[ShopeeLinked]
+    adu_accounts: list[AduLinked] = []
+    terra_accounts: list[TerraLinked] = []
 
 
 class AccountsTree(BaseModel):
@@ -157,3 +177,5 @@ class AccountsTree(BaseModel):
     # untuk nawarin opsi "hubungkan" per kartu Meta (satu akun Shopee boleh
     # terhubung ke banyak akun Meta sekaligus, jadi TIDAK boleh difilter
     # cuma yang belum ke-link ke akun manapun)
+    adu_all: list[AduLinked] = []
+    terra_all: list[TerraLinked] = []
