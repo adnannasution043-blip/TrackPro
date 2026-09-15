@@ -33,9 +33,16 @@ export class LaporanHarian2Page {
     this.sampai    = todayStr();
     this._rows     = [];   // dari /dashboard (metrics harian)
     this._bdMap    = {};   // dari /laporan-harian2 (breakdown kategori)
+    this._customCats = []; // dari /custom-kategori — kategori tambahan manual
     this._filters  = new Set(); // kosong = semua
     this._page     = 1;
     this._perPage  = 10;
+  }
+
+  // Filter pill = kategori bawaan (hardcode) + kategori custom (dari DB).
+  // Key kategori custom diprefix "custom:" biar gak ketuker sama key bawaan.
+  _allFilters() {
+    return [...FILTERS, ...this._customCats.map(c => ({ key: `custom:${c.id}`, label: c.nama }))];
   }
 
   async render() {
@@ -53,19 +60,7 @@ export class LaporanHarian2Page {
         </div>
       </div>
 
-      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;" id="filter-pills">
-        ${FILTERS.map(f => {
-          const isAll = f.key === 'semua';
-          const on    = isAll ? this._filters.size === 0 : this._filters.has(f.key);
-          return `<button data-filter="${f.key}"
-            style="padding:6px 16px;border-radius:20px;border:1.5px solid ${on ? '#dc2626' : 'var(--border)'};
-                   background:${on ? '#dc2626' : 'var(--bg-card)'};
-                   color:${on ? '#fff' : 'var(--text)'};
-                   font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;">
-            ${f.label}
-          </button>`;
-        }).join('')}
-      </div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;" id="filter-pills"></div>
 
       <div class="card" style="padding:0;overflow:hidden;">
         <div id="tbl-wrap" style="overflow-x:auto;">
@@ -81,28 +76,58 @@ export class LaporanHarian2Page {
       this._load();
     });
 
-    this.container.querySelector('#filter-pills').addEventListener('click', e => {
-      const btn = e.target.closest('[data-filter]');
-      if (!btn) return;
-      const key = btn.dataset.filter;
-      if (key === 'semua') {
-        this._filters.clear();
-      } else {
-        if (this._filters.has(key)) this._filters.delete(key);
-        else this._filters.add(key);
-      }
-      this.container.querySelectorAll('[data-filter]').forEach(b => {
-        const k  = b.dataset.filter;
-        const on = k === 'semua' ? this._filters.size === 0 : this._filters.has(k);
-        b.style.background  = on ? '#dc2626' : 'var(--bg-card)';
-        b.style.color       = on ? '#fff' : 'var(--text)';
-        b.style.borderColor = on ? '#dc2626' : 'var(--border)';
+    this._renderFilterPills();
+    this._load();
+  }
+
+  // Filter pills + tombol "+ Kategori" — dirender ulang tiap kali daftar
+  // kategori custom berubah (setelah load awal, atau setelah tambah/hapus
+  // kategori dari modal kelola).
+  _renderFilterPills() {
+    const el = this.container.querySelector('#filter-pills');
+    if (!el) return;
+    const filters = this._allFilters();
+    el.innerHTML = `
+      ${filters.map(f => {
+        const isAll = f.key === 'semua';
+        const on    = isAll ? this._filters.size === 0 : this._filters.has(f.key);
+        return `<button data-filter="${f.key}"
+          style="padding:6px 16px;border-radius:20px;border:1.5px solid ${on ? '#dc2626' : 'var(--border)'};
+                 background:${on ? '#dc2626' : 'var(--bg-card)'};
+                 color:${on ? '#fff' : 'var(--text)'};
+                 font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;">
+          ${f.label}
+        </button>`;
+      }).join('')}
+      <button id="btn-kelola-kategori" title="Tambah / kelola kategori custom"
+        style="padding:6px 14px;border-radius:20px;border:1.5px dashed var(--border);background:none;
+               color:var(--text-muted);font-size:13px;font-weight:500;cursor:pointer;">
+        + Kategori
+      </button>
+    `;
+
+    el.querySelectorAll('[data-filter]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const key = btn.dataset.filter;
+        if (key === 'semua') {
+          this._filters.clear();
+        } else {
+          if (this._filters.has(key)) this._filters.delete(key);
+          else this._filters.add(key);
+        }
+        el.querySelectorAll('[data-filter]').forEach(b => {
+          const k  = b.dataset.filter;
+          const on = k === 'semua' ? this._filters.size === 0 : this._filters.has(k);
+          b.style.background  = on ? '#dc2626' : 'var(--bg-card)';
+          b.style.color       = on ? '#fff' : 'var(--text)';
+          b.style.borderColor = on ? '#dc2626' : 'var(--border)';
+        });
+        this._page = 1;
+        this._render();
       });
-      this._page = 1;
-      this._render();
     });
 
-    this._load();
+    el.querySelector('#btn-kelola-kategori')?.addEventListener('click', () => this._showKategoriModal());
   }
 
   async _load() {
@@ -110,14 +135,17 @@ export class LaporanHarian2Page {
     wrap.innerHTML = '<div class="loading" style="padding:32px;text-align:center;">Memuat…</div>';
     try {
       const qs = filterQS ? filterQS() : '';
-      const [dash, bd] = await Promise.all([
+      const [dash, bd, cats] = await Promise.all([
         apiFetch(`/dashboard?tanggal_dari=${this.dari}&tanggal_sampai=${this.sampai}${qs}`),
         apiFetch(`/dashboard/laporan-harian2?tanggal_dari=${this.dari}&tanggal_sampai=${this.sampai}${qs}`),
+        apiFetch('/custom-kategori'),
       ]);
       // Tanggal terbaru di paling atas
       this._rows  = (dash?.harian || []).slice().sort((a, b) => b.tanggal.localeCompare(a.tanggal));
       this._bdMap = {};
       for (const row of (bd || [])) this._bdMap[row.tanggal] = row;
+      this._customCats = cats || [];
+      this._renderFilterPills();
       this._page = 1;
       this._render();
     } catch (e) {
@@ -136,6 +164,10 @@ export class LaporanHarian2Page {
         if (f === 'terra')        return Number(bd.komisi_terra || 0) > 0 || Number(bd.budget_terra || 0) > 0;
         if (f === 'meta_pribadi') return Number(bd.komisi_meta_pribadi || 0) > 0;
         if (f === 'live')         return Number(bd.komisi_live || 0) > 0;
+        if (f.startsWith('custom:')) {
+          const id = f.slice(7);
+          return Number((bd.komisi_custom || {})[id] || 0) > 0;
+        }
         return false;
       });
     });
@@ -144,24 +176,34 @@ export class LaporanHarian2Page {
   // "Live" dihitung dari kolom Platform (bukan tag link seperti kategori
   // lain). Kolom KOMISI LIVE TIDAK ditampilkan di tab "Semua" dan TIDAK ikut
   // dijumlah ke Total Kotor di sana — cuma nongol & dihitung kalau tab Live
-  // dipilih eksplisit, persis kayak kategori lain.
+  // dipilih eksplisit, persis kayak kategori lain. Kategori custom defaultnya
+  // TAMPIL di tab Semua (beda dari Live), sesuai perlakuan yang sama seperti
+  // kategori bawaan lain (Meta/Adu/Terra/Meta Pribadi).
   _getVisibleCols() {
     if (this._filters.size === 0) {
-      return { fp: true, ig: true, meta: true, adu: true, terra: true, metaPribadi: true, live: false };
+      return {
+        fp: true, ig: true, meta: true, adu: true, terra: true, metaPribadi: true, live: false,
+        customIds: new Set(this._customCats.map(c => c.id)),
+      };
     }
-    const c = { fp: false, ig: false, meta: false, adu: false, terra: false, metaPribadi: false, live: false };
+    const c = { fp: false, ig: false, meta: false, adu: false, terra: false, metaPribadi: false, live: false, customIds: new Set() };
     if (this._filters.has('organic'))      { c.fp = true; c.ig = true; }
     if (this._filters.has('meta'))           c.meta = true;
     if (this._filters.has('adu'))            c.adu = true;
     if (this._filters.has('terra'))          c.terra = true;
     if (this._filters.has('meta_pribadi'))   c.metaPribadi = true;
     if (this._filters.has('live'))           c.live = true;
+    for (const f of this._filters) {
+      if (f.startsWith('custom:')) c.customIds.add(f.slice(7));
+    }
     return c;
   }
 
   // Total Kotor mengikuti tab yang aktif — cuma jumlahin kategori yang
   // lagi ditampilkan (kolom komisi, bukan budget). Kalau "Semua" dipilih
-  // (semua kolom visible) hasilnya sama dengan total_kotor dari backend.
+  // (semua kolom visible) hasilnya sama dengan total_kotor dari backend
+  // (asalkan semua kategori custom ikut_total_kotor=true — kalau ada yang
+  // di-uncheck, backend & sini konsisten sama-sama mengecualikannya).
   _kotorVisible(bd, c) {
     let k = 0;
     if (c.fp)          k += Number(bd.total_fp            || 0);
@@ -171,6 +213,11 @@ export class LaporanHarian2Page {
     if (c.terra)       k += Number(bd.komisi_terra        || 0);
     if (c.metaPribadi) k += Number(bd.komisi_meta_pribadi || 0);
     if (c.live)        k += Number(bd.komisi_live         || 0);
+    for (const cat of this._customCats) {
+      if (c.customIds.has(cat.id) && cat.ikut_total_kotor) {
+        k += Number((bd.komisi_custom || {})[cat.id] || 0);
+      }
+    }
     return k;
   }
 
@@ -192,8 +239,11 @@ export class LaporanHarian2Page {
     const endIdx   = startIdx + this._perPage;
     const pageRows = rows.slice(startIdx, endIdx);
 
+    const visibleCustomCats = this._customCats.filter(cat => c.customIds.has(cat.id));
+
     // Aggregat totals (semua rows, bukan hanya halaman ini)
-    const tot = { story:0, feed:0, fp:0, storyIg:0, feedIg:0, ig:0, meta:0, budgetMeta:0, adu:0, budgetAdu:0, terra:0, budgetTerra:0, metaPribadi:0, iklan:0, live:0, kotor:0 };
+    const tot = { story:0, feed:0, fp:0, storyIg:0, feedIg:0, ig:0, meta:0, budgetMeta:0, adu:0, budgetAdu:0, terra:0, budgetTerra:0, metaPribadi:0, iklan:0, live:0, kotor:0, custom:{} };
+    for (const cat of visibleCustomCats) tot.custom[cat.id] = 0;
     rows.forEach(r => {
       const bd = this._bdMap[r.tanggal] || {};
       tot.story       += Number(bd.komisi_story        || 0);
@@ -212,6 +262,9 @@ export class LaporanHarian2Page {
       tot.iklan       += Number(bd.total_iklan         || 0);
       tot.live        += Number(bd.komisi_live         || 0);
       tot.kotor       += this._kotorVisible(bd, c);
+      for (const cat of visibleCustomCats) {
+        tot.custom[cat.id] += Number((bd.komisi_custom || {})[cat.id] || 0);
+      }
     });
 
     const thBase   = 'padding:8px 10px;font-size:11px;font-weight:700;white-space:nowrap;text-transform:uppercase;letter-spacing:.4px;background:#f1f5f9;border-bottom:2px solid var(--border);';
@@ -221,6 +274,7 @@ export class LaporanHarian2Page {
     const thMeta   = thBase + 'background:#fff7ed;color:#c2410c;';
     const thBudget = thBase + 'background:#f8fafc;color:#64748b;font-style:italic;';
     const thLive   = thBase + 'background:#fdf2f8;color:#db2777;';
+    const thCustom = thBase + 'background:#f0fdfa;color:#0d9488;';
 
     // colspan IKLAN: meta/adu/terra masing-masing 2 kolom (komisi + budget), meta_pribadi 1 kolom
     const iklanIndiv    = (c.meta ? 2 : 0) + (c.adu ? 2 : 0) + (c.terra ? 2 : 0) + (c.metaPribadi ? 1 : 0);
@@ -233,6 +287,9 @@ export class LaporanHarian2Page {
     const h1Fp    = c.fp      ? `<th colspan="3" style="${thFP}text-align:center;">KOMISI FP</th>` : '';
     const h1Ig    = c.ig      ? `<th colspan="3" style="${thIG}text-align:center;border-left:2px solid #bfdbfe;">KOMISI IG</th>` : '';
     const h1Iklan = hasIklan  ? `<th colspan="${iklanColspan}" style="${thIklan}text-align:center;border-left:2px solid #fecaca;">KOMISI IKLAN</th>` : '';
+    const h1Custom = visibleCustomCats.map((cat, i) =>
+      `<th rowspan="2" style="${thCustom}${i === 0 ? 'border-left:2px solid #99f6e4;' : ''}">${cat.nama.toUpperCase()}</th>`
+    ).join('');
     const h1Live  = c.live    ? `<th rowspan="2" style="${thLive}border-left:2px solid #fbcfe8;">KOMISI LIVE</th>` : '';
 
     // Header baris 2
@@ -288,6 +345,10 @@ export class LaporanHarian2Page {
       const rowTotalBudget = (c.meta ? budgetMeta : 0) + (c.adu ? budgetAdu : 0) + (c.terra ? budgetTerra : 0);
       const tdTotBudget = hasTotalBudget ? `<td style="font-weight:700;color:#64748b;font-style:italic;background:#f8fafc;">${rp(Math.round(rowTotalBudget))}</td>` : '';
       const tdLive = c.live ? `<td style="font-weight:700;color:#db2777;background:#fdf2f8;border-left:2px solid #fbcfe8;">${rp(Math.round(live))}</td>` : '';
+      const tdCustom = visibleCustomCats.map((cat, ci) => {
+        const val = Number((bd.komisi_custom || {})[cat.id] || 0);
+        return `<td style="color:#0d9488;${ci === 0 ? 'border-left:2px solid #99f6e4;' : ''}">${rp(Math.round(val))}</td>`;
+      }).join('');
 
       return `<tr style="${bgRow}font-size:12.5px;">
         <td style="white-space:nowrap;padding:7px 10px;">
@@ -296,7 +357,7 @@ export class LaporanHarian2Page {
             ${fmtDate(r.tanggal)}
           </button>
         </td>
-        ${tdFp}${tdIg}${tdMeta}${tdAdu}${tdTerra}${tdPrib}${tdIklan}${tdTotBudget}${tdLive}
+        ${tdFp}${tdIg}${tdMeta}${tdAdu}${tdTerra}${tdPrib}${tdIklan}${tdTotBudget}${tdCustom}${tdLive}
         <td style="font-weight:700;color:#10b981;border-left:2px solid #bbf7d0;">${rp(Math.round(kotor))}</td>
       </tr>`;
     }).join('');
@@ -312,13 +373,16 @@ export class LaporanHarian2Page {
     const totTotalBudget = (c.meta ? tot.budgetMeta : 0) + (c.adu ? tot.budgetAdu : 0) + (c.terra ? tot.budgetTerra : 0);
     const tfTotBudget = hasTotalBudget ? `<td style="color:#64748b;font-style:italic;font-weight:800;">${rp(Math.round(totTotalBudget))}</td>` : '';
     const tfLive = c.live ? `<td style="color:#db2777;font-weight:800;">${rp(Math.round(tot.live))}</td>` : '';
+    const tfCustom = visibleCustomCats.map((cat, ci) =>
+      `<td style="color:#0d9488;font-weight:800;${ci === 0 ? 'border-left:2px solid #99f6e4;' : ''}">${rp(Math.round(tot.custom[cat.id] || 0))}</td>`
+    ).join('');
 
     wrap.innerHTML = `
       <table class="data-table" style="font-size:12.5px;min-width:700px;border-collapse:collapse;">
         <thead>
           <tr style="background:#f8fafc;">
             <th rowspan="2" style="${thBase}min-width:80px;">TGL</th>
-            ${h1Fp}${h1Ig}${h1Iklan}${h1Live}
+            ${h1Fp}${h1Ig}${h1Iklan}${h1Custom}${h1Live}
             <th rowspan="2" style="${thBase}background:#f0fdf4;color:#15803d;white-space:nowrap;border-left:2px solid #bbf7d0;">TOTAL KOTOR</th>
           </tr>
           <tr>${h2Fp}${h2Ig}${h2IklanMeta}${h2IklanAdu}${h2IklanTerra}${h2IklanPrib}${h2IklanTot}${h2TotBudget}</tr>
@@ -327,7 +391,7 @@ export class LaporanHarian2Page {
         <tfoot>
           <tr style="font-weight:700;background:var(--bg-muted);border-top:2px solid var(--border);font-size:12px;">
             <td style="font-weight:800;white-space:nowrap;padding:8px 10px;">TOTAL (${rows.length} hari)</td>
-            ${tfFp}${tfIg}${tfMeta}${tfAdu}${tfTerra}${tfPrib}${tfIklan}${tfTotBudget}${tfLive}
+            ${tfFp}${tfIg}${tfMeta}${tfAdu}${tfTerra}${tfPrib}${tfIklan}${tfTotBudget}${tfCustom}${tfLive}
             <td style="color:#10b981;font-weight:800;">${rp(Math.round(tot.kotor))}</td>
           </tr>
         </tfoot>
@@ -344,6 +408,145 @@ export class LaporanHarian2Page {
       pgWrap.innerHTML = this._pgBarHtml(startIdx, Math.min(endIdx, rows.length), rows.length, totalPages);
       this._bindPgBar(pgWrap, totalPages, () => this._render());
     }
+  }
+
+  // Modal kelola kategori custom — tambah/hapus/toggle "ikut Total Kotor".
+  // Perubahan di sini langsung nge-trigger _load() ulang buat refresh
+  // filter pill, kolom tabel, dan Total Kotor di seluruh halaman.
+  _showKategoriModal() {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;';
+
+    const renderList = () => {
+      if (this._customCats.length === 0) {
+        return `<div style="font-size:12.5px;color:#6b7280;padding:12px 0;">Belum ada kategori custom.</div>`;
+      }
+      return this._customCats.map(cat => `
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;margin-bottom:6px;">
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;font-weight:600;">${cat.nama}</div>
+            <div style="font-size:11px;color:#6b7280;">keyword: "${cat.keyword}"</div>
+          </div>
+          <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:#6b7280;cursor:pointer;white-space:nowrap;">
+            <input type="checkbox" data-toggle-kotor="${cat.id}" ${cat.ikut_total_kotor ? 'checked' : ''}>
+            Ikut Total Kotor
+          </label>
+          <button class="btn btn-sm" style="color:#dc2626;border-color:#dc2626;font-size:11px;" data-hapus-kategori="${cat.id}">Hapus</button>
+        </div>
+      `).join('');
+    };
+
+    overlay.innerHTML = `
+      <div style="background:#fff;border-radius:10px;padding:24px;width:440px;max-width:92vw;max-height:85vh;overflow-y:auto;box-shadow:0 10px 40px rgba(0,0,0,0.3);">
+        <h3 style="margin:0 0 4px;font-size:16px;">Kategori Custom</h3>
+        <p style="font-size:12.5px;color:#6b7280;margin:0 0 16px;">
+          Tambah kategori baru buat tag_link yang belum masuk Organic/Meta/Adu/Terra/Meta Pribadi/Live —
+          dicocokkan dari kata kunci yang mengandung teks di tag_link.
+        </p>
+        <div id="kategori-list">${renderList()}</div>
+        <div style="border-top:1px solid #e5e7eb;margin-top:14px;padding-top:14px;">
+          <div style="font-size:12px;font-weight:600;margin-bottom:8px;">Tambah Kategori Baru</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+            <input type="text" id="kat-nama" class="form-input" placeholder="Nama (mis. Tiktok)" style="font-size:12.5px;">
+            <input type="text" id="kat-keyword" class="form-input" placeholder="Keyword (mis. tiktok)" style="font-size:12.5px;">
+          </div>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#6b7280;margin-bottom:10px;cursor:pointer;">
+            <input type="checkbox" id="kat-ikut-kotor" checked>
+            Ikut hitungan Total Kotor
+          </label>
+          <div id="kat-error" style="display:none;color:#dc2626;font-size:12px;margin-bottom:10px;"></div>
+          <div style="display:flex;gap:8px;justify-content:flex-end;">
+            <button class="btn" id="kat-tutup">Tutup</button>
+            <button class="btn btn-primary" id="kat-tambah">+ Tambah</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    const close = () => overlay.remove();
+    overlay.querySelector('#kat-tutup').addEventListener('click', close);
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+
+    const refreshList = () => {
+      overlay.querySelector('#kategori-list').innerHTML = renderList();
+      bindListEvents();
+    };
+
+    const bindListEvents = () => {
+      overlay.querySelectorAll('[data-toggle-kotor]').forEach(chk => {
+        chk.addEventListener('change', async () => {
+          const id = chk.dataset.toggleKotor;
+          chk.disabled = true;
+          try {
+            await apiFetch(`/custom-kategori/${id}`, {
+              method: 'PATCH',
+              body: JSON.stringify({ ikut_total_kotor: chk.checked }),
+            });
+            const cat = this._customCats.find(c => c.id === id);
+            if (cat) cat.ikut_total_kotor = chk.checked;
+            this._render();
+          } catch (e) {
+            alert(e.message);
+            chk.checked = !chk.checked;
+          } finally {
+            chk.disabled = false;
+          }
+        });
+      });
+      overlay.querySelectorAll('[data-hapus-kategori]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          if (!confirm('Hapus kategori ini? Filter dan kolomnya akan hilang dari tabel.')) return;
+          const id = btn.dataset.hapusKategori;
+          btn.disabled = true;
+          try {
+            await apiFetch(`/custom-kategori/${id}`, { method: 'DELETE' });
+            this._customCats = this._customCats.filter(c => c.id !== id);
+            this._filters.delete(`custom:${id}`);
+            refreshList();
+            this._renderFilterPills();
+            await this._load();
+          } catch (e) {
+            alert(e.message);
+            btn.disabled = false;
+          }
+        });
+      });
+    };
+    bindListEvents();
+
+    overlay.querySelector('#kat-tambah').addEventListener('click', async () => {
+      const errEl = overlay.querySelector('#kat-error');
+      const nama = overlay.querySelector('#kat-nama').value.trim();
+      const keyword = overlay.querySelector('#kat-keyword').value.trim();
+      const ikutKotor = overlay.querySelector('#kat-ikut-kotor').checked;
+      errEl.style.display = 'none';
+      if (!nama || !keyword) {
+        errEl.textContent = 'Nama dan keyword wajib diisi.';
+        errEl.style.display = 'block';
+        return;
+      }
+      const btn = overlay.querySelector('#kat-tambah');
+      btn.disabled = true;
+      btn.textContent = 'Menyimpan…';
+      try {
+        const created = await apiFetch('/custom-kategori', {
+          method: 'POST',
+          body: JSON.stringify({ nama, keyword, ikut_total_kotor: ikutKotor }),
+        });
+        this._customCats.push(created);
+        overlay.querySelector('#kat-nama').value = '';
+        overlay.querySelector('#kat-keyword').value = '';
+        refreshList();
+        this._renderFilterPills();
+        await this._load();
+      } catch (e) {
+        errEl.textContent = e.message;
+        errEl.style.display = 'block';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '+ Tambah';
+      }
+    });
   }
 
   async _showModal(r) {

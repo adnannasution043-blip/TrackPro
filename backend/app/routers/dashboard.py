@@ -23,6 +23,7 @@ from app.core.deps import DB, CurrentUser
 from app.models.account import AccountLink, AduAccountLink, MetaAccount, ShopeeAccount, TerraAccountLink
 from app.models.campaign import Campaign, CampaignTagMap, TagLink
 from app.models.campaign_note import CampaignNote
+from app.models.custom_kategori import CustomKategori
 from app.models.metrics import DailyMetric, MetaBreakdown, OrderSnapshot
 from app.models.adu import AduPlacement
 from app.models.terra import TerraPlacement
@@ -691,6 +692,16 @@ async def get_laporan_harian2(
             Decimal("0"),
         )
 
+    # Kategori custom (dikelola manual di halaman Laporan Harian) — kolom
+    # dibangun dinamis di sini, satu _sum_if(keyword) per kategori, sambil
+    # kategori bawaan di atas tetap hardcode apa adanya.
+    custom_list = (await db.execute(
+        sa.select(CustomKategori)
+        .where(CustomKategori.user_id == current_user.id)
+        .order_by(CustomKategori.urutan, CustomKategori.created_at)
+    )).scalars().all()
+    custom_cols = [_sum_if(cat.keyword).label(f"custom_{i}") for i, cat in enumerate(custom_list)]
+
     q = (
         sa.select(
             DailyMetric.tanggal,
@@ -703,6 +714,7 @@ async def get_laporan_harian2(
             _sum_if("terra").label("komisi_terra"),
             _sum_meta_pribadi().label("komisi_meta_pribadi"),
             sa.func.coalesce(sa.func.sum(DailyMetric.commission_live_idr), Decimal("0")).label("komisi_live"),
+            *custom_cols,
         )
         .join(TagLink, DailyMetric.tag_link_id == TagLink.id)
         .join(ShopeeAccount, TagLink.shopee_account_id == ShopeeAccount.id)
@@ -798,6 +810,15 @@ async def get_laporan_harian2(
         total_fp    = story + feed
         total_ig    = story_ig + feed_ig
         total_iklan = meta + adu + terra + meta_pribadi
+
+        komisi_custom = {}
+        custom_kotor_add = _ZERO
+        for i, cat in enumerate(custom_list):
+            val = (getattr(r, f"custom_{i}", None) or _ZERO) if r else _ZERO
+            komisi_custom[str(cat.id)] = float(val)
+            if cat.ikut_total_kotor:
+                custom_kotor_add += val
+
         result.append({
             "tanggal":              str(tgl),
             "komisi_story":         float(story),
@@ -815,7 +836,8 @@ async def get_laporan_harian2(
             "komisi_meta_pribadi":  float(meta_pribadi),
             "total_iklan":          float(total_iklan),
             "komisi_live":          float(live),
-            "total_kotor":          float(total_fp + total_ig + total_iklan + live),
+            "komisi_custom":        komisi_custom,
+            "total_kotor":          float(total_fp + total_ig + total_iklan + live + custom_kotor_add),
         })
     return result
 
