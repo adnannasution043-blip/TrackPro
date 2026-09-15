@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import BigInteger, Date, DateTime, Integer, Numeric, String, UniqueConstraint, func
+from sqlalchemy import BigInteger, Date, DateTime, ForeignKey, Integer, Numeric, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -14,6 +14,10 @@ class TerraPlacement(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    # Akun Terra sumber data ini — nullable karena data lama (sebelum kolom
+    # ini ada) tidak selalu bisa ditandai retroaktif. Dipakai buat nge-scope
+    # Budget Terra di Laporan Harian saat Filter Akun di-set ke satu Shopee.
+    terra_account_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("terra_accounts.id", ondelete="CASCADE"))
     tanggal: Mapped[date] = mapped_column(Date, nullable=False)
     placement_id: Mapped[str] = mapped_column(String(60), nullable=False)
     state: Mapped[str | None] = mapped_column(String(10))

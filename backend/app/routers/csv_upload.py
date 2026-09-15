@@ -39,11 +39,13 @@ from app.core.csv_parser import (
 )
 from app.core.deps import DB, CurrentUser
 from app.models.account import MetaAccount, ShopeeAccount
+from app.models.adu_account import AduAccount
 from app.models.balance import AccountBalance
 from app.models.campaign import Campaign, TagLink
 from app.models.import_log import CsvImport
 from app.models.metrics import ClickBySource, DailyMetric, MetaBreakdown, OrderSnapshot
 from app.models.terra import TerraPlacement
+from app.models.terra_account import TerraAccount
 from app.models.adu import AduPlacement
 from app.schemas.upload import UploadResponse
 
@@ -596,12 +598,34 @@ async def reset_wd_payments(current_user: CurrentUser, db: DB):
 _TERRA_KURS = 19_000  # 1 USD = Rp 19.000
 
 
+async def _resolve_account_id(model, user_id, given_id, db: DB, nama_jenis: str) -> tuple:
+    """Resolusi akun tujuan upload (Adu/Terra): pakai given_id kalau dikirim
+    (dan diverifikasi kepemilikannya), atau infer otomatis kalau user cuma
+    punya 1 akun jenis itu (masih pengalaman lama, tanpa perlu pilih akun).
+    Begitu user punya 2+ akun, wajib pilih eksplisit. Return (id, error_msg)."""
+    if given_id is not None:
+        owned = (await db.execute(
+            sa.select(model.id).where(model.id == given_id, model.user_id == user_id)
+        )).scalar_one_or_none()
+        if not owned:
+            return None, f"Akun {nama_jenis} tidak ditemukan."
+        return given_id, None
+
+    rows = (await db.execute(sa.select(model.id).where(model.user_id == user_id))).all()
+    if len(rows) == 1:
+        return rows[0][0], None
+    if len(rows) == 0:
+        return None, f"Belum ada akun {nama_jenis}. Tambah dulu di Pengaturan Akun."
+    return None, f"Ada lebih dari satu akun {nama_jenis} — pilih akun tujuan upload dulu."
+
+
 @router.post("/terra", response_model=UploadResponse, status_code=status.HTTP_201_CREATED)
 async def upload_terra(
     file: UploadFile,
     current_user: CurrentUser,
     db: DB,
     tanggal: date = Query(..., description="Tanggal data dalam format YYYY-MM-DD"),
+    terra_account_id: UUID | None = Query(None, description="Akun Terra tujuan — wajib kalau user punya lebih dari 1 akun Terra"),
 ):
     """Upload Terra Ads placement CSV. Kolom Spent (USD) dikonversi ke budget_rupiah × 19.000."""
     import csv as csv_mod
@@ -610,6 +634,10 @@ async def upload_terra(
 
     raw = await file.read()
     import_log = await _start_import(current_user.id, "terra", file.filename, db)
+
+    resolved_terra_id, err = await _resolve_account_id(TerraAccount, current_user.id, terra_account_id, db, "Terra")
+    if err:
+        return await _fail_import(import_log, db, err)
 
     try:
         text = raw.decode("utf-8-sig", errors="replace")
@@ -650,6 +678,7 @@ async def upload_terra(
         try:
             stmt = sa_pg.insert(TerraPlacement).values(
                 user_id=current_user.id,
+                terra_account_id=resolved_terra_id,
                 tanggal=tanggal,
                 placement_id=placement_id,
                 state=state,
@@ -660,6 +689,7 @@ async def upload_terra(
             ).on_conflict_do_update(
                 constraint="uq_terra_placement",
                 set_={
+                    "terra_account_id": resolved_terra_id,
                     "state": state,
                     "impressions": impressions,
                     "clicks": clicks,
@@ -689,6 +719,7 @@ async def upload_adu(
     current_user: CurrentUser,
     db: DB,
     tanggal: date = Query(..., description="Tanggal data dalam format YYYY-MM-DD"),
+    adu_account_id: UUID | None = Query(None, description="Akun Adu tujuan — wajib kalau user punya lebih dari 1 akun Adu"),
 ):
     """Upload Adu Ads zone CSV. Kolom Cost (USD) dikonversi ke budget_rupiah × 19.000."""
     import csv as csv_mod
@@ -697,6 +728,10 @@ async def upload_adu(
 
     raw = await file.read()
     import_log = await _start_import(current_user.id, "adu", file.filename, db)
+
+    resolved_adu_id, err = await _resolve_account_id(AduAccount, current_user.id, adu_account_id, db, "Adu")
+    if err:
+        return await _fail_import(import_log, db, err)
 
     try:
         text = raw.decode("utf-8-sig", errors="replace")
@@ -743,6 +778,7 @@ async def upload_adu(
         try:
             stmt = sa_pg.insert(AduPlacement).values(
                 user_id=current_user.id,
+                adu_account_id=resolved_adu_id,
                 tanggal=tanggal,
                 zone_id=zone_id,
                 impressions=_int(_col(row, "Impressions")),
@@ -753,6 +789,7 @@ async def upload_adu(
             ).on_conflict_do_update(
                 constraint="uq_adu_placement",
                 set_={
+                    "adu_account_id": sa.text("excluded.adu_account_id"),
                     "impressions": sa.text("excluded.impressions"),
                     "clicks": sa.text("excluded.clicks"),
                     "conversions": sa.text("excluded.conversions"),

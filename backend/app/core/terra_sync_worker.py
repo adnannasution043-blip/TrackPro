@@ -55,7 +55,7 @@ async def sync_account(account_id: UUID, dari: date, sampai: date) -> dict:
             fetched = len(rows)
             for row in rows:
                 try:
-                    await _upsert_terra_row(account.user_id, row, db)
+                    await _upsert_terra_row(account.user_id, account.id, row, db)
                     upserted += 1
                 except Exception as e:
                     log.exception("terra upsert gagal: %s", e)
@@ -143,7 +143,7 @@ def _to_int(v) -> int:
         return 0
 
 
-async def _upsert_terra_row(user_id: UUID, row: dict, db) -> None:
+async def _upsert_terra_row(user_id: UUID, account_id: UUID, row: dict, db) -> None:
     tanggal_raw = _pick(row, _DATE_KEYS)
     if not tanggal_raw:
         raise ValueError(f"Field date tidak ditemukan di response: {list(row.keys())}")
@@ -163,6 +163,7 @@ async def _upsert_terra_row(user_id: UUID, row: dict, db) -> None:
 
     stmt = pg_insert(TerraPlacement).values(
         user_id=user_id,
+        terra_account_id=account_id,
         tanggal=tanggal,
         placement_id=str(placement_id),
         impressions=_to_int(_pick(row, _IMP_KEYS)),
@@ -173,6 +174,7 @@ async def _upsert_terra_row(user_id: UUID, row: dict, db) -> None:
     stmt = stmt.on_conflict_do_update(
         constraint="uq_terra_placement",
         set_={
+            "terra_account_id": stmt.excluded.terra_account_id,
             "impressions": stmt.excluded.impressions,
             "clicks": stmt.excluded.clicks,
             "spent_usd": stmt.excluded.spent_usd,

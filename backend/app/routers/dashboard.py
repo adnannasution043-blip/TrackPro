@@ -20,7 +20,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import DB, CurrentUser
-from app.models.account import AccountLink, MetaAccount, ShopeeAccount
+from app.models.account import AccountLink, AduAccountLink, MetaAccount, ShopeeAccount, TerraAccountLink
 from app.models.campaign import Campaign, CampaignTagMap, TagLink
 from app.models.campaign_note import CampaignNote
 from app.models.metrics import DailyMetric, MetaBreakdown, OrderSnapshot
@@ -740,7 +740,9 @@ async def get_laporan_harian2(
         q_bm = q_bm.where(Campaign.meta_account_id.in_(_linked_meta_ids_subquery(shopee_account_id)))
     budget_meta_map = {r.tanggal: r.budget for r in (await db.execute(q_bm)).all()}
 
-    # Budget Adu: sum budget_rupiah dari adu_placements
+    # Budget Adu: sum budget_rupiah dari adu_placements — kalau filter di-set
+    # ke satu akun Shopee, scope ke akun Adu yang terhubung (adu_account_links)
+    # ke Shopee itu saja, sama seperti Budget Meta di atas.
     q_ba = (
         sa.select(
             AduPlacement.tanggal,
@@ -752,9 +754,12 @@ async def get_laporan_harian2(
         )
         .group_by(AduPlacement.tanggal)
     )
+    if shopee_account_id:
+        q_ba = q_ba.where(AduPlacement.adu_account_id.in_(_linked_adu_ids_subquery(shopee_account_id)))
     budget_adu_map = {r.tanggal: r.budget for r in (await db.execute(q_ba)).all()}
 
-    # Budget Terra: sum budget_rupiah dari terra_placements
+    # Budget Terra: sum budget_rupiah dari terra_placements — scope serupa
+    # lewat terra_account_links kalau filter Shopee di-set.
     q_bt = (
         sa.select(
             TerraPlacement.tanggal,
@@ -766,6 +771,8 @@ async def get_laporan_harian2(
         )
         .group_by(TerraPlacement.tanggal)
     )
+    if shopee_account_id:
+        q_bt = q_bt.where(TerraPlacement.terra_account_id.in_(_linked_terra_ids_subquery(shopee_account_id)))
     budget_terra_map = {r.tanggal: r.budget for r in (await db.execute(q_bt)).all()}
 
     # Gabung semua tanggal dari semua sumber agar budget tetap muncul
@@ -1039,6 +1046,20 @@ def _linked_meta_ids_subquery(shopee_account_id: UUID):
     akun Shopee tertentu, bukan cuma nge-scope komisinya doang."""
     return sa.select(AccountLink.meta_account_id).where(
         AccountLink.shopee_account_id == shopee_account_id
+    ).scalar_subquery()
+
+
+def _linked_adu_ids_subquery(shopee_account_id: UUID):
+    """Sama seperti _linked_meta_ids_subquery tapi buat akun Adu."""
+    return sa.select(AduAccountLink.adu_account_id).where(
+        AduAccountLink.shopee_account_id == shopee_account_id
+    ).scalar_subquery()
+
+
+def _linked_terra_ids_subquery(shopee_account_id: UUID):
+    """Sama seperti _linked_meta_ids_subquery tapi buat akun Terra."""
+    return sa.select(TerraAccountLink.terra_account_id).where(
+        TerraAccountLink.shopee_account_id == shopee_account_id
     ).scalar_subquery()
 
 
