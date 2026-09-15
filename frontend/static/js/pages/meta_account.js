@@ -398,6 +398,15 @@ export class MetaAccountPage {
          </div>`
       : `<div style="font-size:11.5px;color:var(--text-muted);margin-top:8px;">Semua akun Meta sudah terhubung.</div>`;
 
+    const aduLinked = s.adu_accounts || [];
+    const terraLinked = s.terra_accounts || [];
+    const aduSummary = aduLinked.length === 0
+      ? `Belum ada akun Adu terhubung.`
+      : aduLinked.map(a => a.nama).join(', ');
+    const terraSummary = terraLinked.length === 0
+      ? `Belum ada akun Terra terhubung.`
+      : terraLinked.map(t => t.nama).join(', ');
+
     const key = `shopee-${s.id}`;
     return `
       <div class="card" style="margin-bottom:12px;">
@@ -406,7 +415,7 @@ export class MetaAccountPage {
             <div style="width:36px;height:36px;background:#f0fdf4;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">🛒</div>
             <div style="min-width:0;">
               <div style="font-size:14px;font-weight:700;">${s.nama}</div>
-              <div style="font-size:11.5px;color:var(--text-muted);">Akun Shopee Affiliate · ${connected.length} Meta terhubung</div>
+              <div style="font-size:11.5px;color:var(--text-muted);">Akun Shopee Affiliate · ${connected.length} Meta · ${aduLinked.length} Adu · ${terraLinked.length} Terra</div>
             </div>
           </button>
           <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
@@ -423,6 +432,19 @@ export class MetaAccountPage {
           </div>
           ${metaRows}
           ${linkRow}
+
+          <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:16px;">
+            <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">
+              Adu terhubung (${aduLinked.length})
+            </div>
+            <div style="font-size:12.5px;color:var(--text);">${aduSummary}</div>
+          </div>
+          <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:12px;">
+            <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">
+              Terra terhubung (${terraLinked.length})
+            </div>
+            <div style="font-size:12.5px;color:var(--text);">${terraSummary}</div>
+          </div>
         </div>
       </div>
     `;
@@ -580,12 +602,6 @@ export class MetaAccountPage {
     const shopeeSummary = m.shopee_accounts.length === 0
       ? `Belum ada akun Shopee terhubung.`
       : m.shopee_accounts.map(s => s.nama).join(', ');
-    const aduSummary = (m.adu_accounts || []).length === 0
-      ? `Belum ada akun Adu terhubung.`
-      : m.adu_accounts.map(a => a.nama).join(', ');
-    const terraSummary = (m.terra_accounts || []).length === 0
-      ? `Belum ada akun Terra terhubung.`
-      : m.terra_accounts.map(t => t.nama).join(', ');
 
     const today = new Date().toISOString().slice(0, 10);
     const firstDay = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
@@ -674,24 +690,12 @@ export class MetaAccountPage {
           </div>
         </div>
 
-        <!-- Shopee/Adu/Terra links (read-only, kelola di kartu masing-masing) -->
+        <!-- Shopee links (read-only, kelola di kartu Akun Shopee Affiliate) -->
         <div style="border-top:1px solid var(--border);padding-top:12px;">
           <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">
             Shopee terhubung (${m.shopee_accounts.length})
           </div>
           <div style="font-size:12.5px;color:var(--text);">${shopeeSummary}</div>
-        </div>
-        <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:12px;">
-          <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">
-            Adu terhubung (${m.adu_accounts.length})
-          </div>
-          <div style="font-size:12.5px;color:var(--text);">${aduSummary}</div>
-        </div>
-        <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:12px;">
-          <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">
-            Terra terhubung (${m.terra_accounts.length})
-          </div>
-          <div style="font-size:12.5px;color:var(--text);">${terraSummary}</div>
         </div>
 
         </div>
@@ -937,17 +941,17 @@ export class MetaAccountPage {
 
   _renderAdu(el) {
     if (!el) return;
-    const metaAccounts = this._tree.meta_accounts || [];
+    const allShopee = this._tree.shopee_all || [];
     const header = `<div style="font-size:11px;font-weight:700;color:var(--text-muted);margin:20px 0 10px;text-transform:uppercase;letter-spacing:0.5px;">
       Akun Adu Ads / Clickadu (${this._aduAccounts.length})
     </div>`;
     const cards = this._aduAccounts.length === 0
       ? `<div style="text-align:center;padding:24px;color:var(--text-muted);font-size:13px;border:1px solid var(--border);border-radius:8px;">Belum ada akun Adu. Klik "+ Tambah Akun Adu" di atas.</div>`
       : this._aduAccounts.map(a => {
-          const connectedMeta = metaAccounts.filter(m => (m.adu_accounts || []).some(x => x.id === a.id));
-          const connectedIds = new Set(connectedMeta.map(m => m.id));
-          const availableMeta = metaAccounts.filter(m => !connectedIds.has(m.id));
-          return this._renderAduCard(a, connectedMeta, availableMeta);
+          const connectedShopee = allShopee.filter(s => (s.adu_accounts || []).some(x => x.id === a.id));
+          const connectedIds = new Set(connectedShopee.map(s => s.id));
+          const availableShopee = allShopee.filter(s => !connectedIds.has(s.id));
+          return this._renderAduCard(a, connectedShopee, availableShopee);
         }).join('');
     el.innerHTML = header + cards;
     this._bindAduEvents(el);
@@ -955,7 +959,7 @@ export class MetaAccountPage {
     this._bindCardToggle(el);
   }
 
-  _renderAduCard(a, connectedMeta, availableMeta) {
+  _renderAduCard(a, connectedShopee, availableShopee) {
     const hasKey = a.has_api_key;
     let keyBadge = hasKey
       ? (a.status_koneksi === 'token_expired'
@@ -967,34 +971,33 @@ export class MetaAccountPage {
     const firstDay = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
     const key = `adu-${a.id}`;
 
-    const metaRows = connectedMeta.length === 0
-      ? `<div style="font-size:12px;color:var(--text-muted);padding:8px 0;">Belum ada akun Meta terhubung.</div>`
-      : connectedMeta.map(m => `
+    const shopeeRows = connectedShopee.length === 0
+      ? `<div style="font-size:12px;color:var(--text-muted);padding:8px 0;">Belum ada akun Shopee terhubung.</div>`
+      : connectedShopee.map(s => `
           <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:6px;margin-bottom:6px;">
             <div style="display:flex;align-items:center;gap:8px;">
-              <div style="width:26px;height:26px;background:#fef3c7;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:13px;">📊</div>
-              <span style="font-size:13px;font-weight:500;">${m.nama}</span>
-              <span style="font-size:11px;color:var(--text-muted);">ID: ${m.account_id}</span>
+              <div style="width:26px;height:26px;background:#f0fdf4;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:13px;">🛒</div>
+              <span style="font-size:13px;font-weight:500;">${s.nama}</span>
             </div>
             <button class="btn btn-sm" style="font-size:11px;color:#dc2626;border-color:#dc2626;"
-              data-adu-unlink-meta="${m.id}" data-adu-unlink-adu="${a.id}">Lepas</button>
+              data-adu-unlink-shopee="${s.id}" data-adu-unlink-adu="${a.id}">Lepas</button>
           </div>
         `).join('');
 
-    const linkRow = availableMeta.length > 0
+    const linkRow = availableShopee.length > 0
       ? `<div style="display:flex;gap:8px;align-items:flex-start;margin-top:10px;">
            <div style="flex:1;position:relative;">
-             <input type="text" class="form-input" id="combo-input-adu-${a.id}" placeholder="Pilih akun Meta…"
+             <input type="text" class="form-input" id="combo-input-adu-${a.id}" placeholder="Pilih akun Shopee…"
                autocomplete="off" style="font-size:12px;width:100%;">
              <input type="hidden" id="combo-value-adu-${a.id}">
              <div id="combo-list-adu-${a.id}" data-combo-list="adu-${a.id}"
                style="display:none;position:absolute;top:100%;left:0;right:0;margin-top:4px;background:var(--surface,#fff);
                       border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.14);
                       max-height:240px;overflow-y:auto;z-index:50;">
-               ${availableMeta.map(m => `
-                 <div class="combo-opt" data-val="${m.id}" data-label="${m.nama}"
+               ${availableShopee.map(s => `
+                 <div class="combo-opt" data-val="${s.id}" data-label="${s.nama}"
                    style="padding:8px 12px;cursor:pointer;font-size:12.5px;">
-                   ${m.nama} <span style="color:var(--text-muted);font-size:11px;">ID: ${m.account_id}</span>
+                   ${s.nama}
                  </div>
                `).join('')}
                <div class="combo-empty" style="display:none;padding:10px 12px;font-size:12px;color:var(--text-muted);">Tidak ada akun yang cocok.</div>
@@ -1002,7 +1005,7 @@ export class MetaAccountPage {
            </div>
            <button class="btn btn-primary btn-sm" data-adu-link="${a.id}" style="white-space:nowrap;">Hubungkan</button>
          </div>`
-      : `<div style="font-size:11.5px;color:var(--text-muted);margin-top:8px;">Semua akun Meta sudah terhubung.</div>`;
+      : `<div style="font-size:11.5px;color:var(--text-muted);margin-top:8px;">Semua akun Shopee sudah terhubung.</div>`;
 
     return `
       <div class="card" style="margin-bottom:12px;">
@@ -1011,7 +1014,7 @@ export class MetaAccountPage {
             <div style="width:36px;height:36px;background:#fef3c7;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">🎯</div>
             <div style="min-width:0;">
               <div style="font-size:14px;font-weight:700;">${a.nama_tampilan}</div>
-              <div style="font-size:11.5px;color:var(--text-muted);">Clickadu SSP Advertiser · ${connectedMeta.length} Meta terhubung</div>
+              <div style="font-size:11.5px;color:var(--text-muted);">Clickadu SSP Advertiser · ${connectedShopee.length} Shopee terhubung</div>
             </div>
           </button>
           <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
@@ -1086,9 +1089,9 @@ export class MetaAccountPage {
 
         <div style="border-top:1px solid var(--border);padding-top:12px;">
           <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">
-            Meta terhubung (${connectedMeta.length})
+            Shopee terhubung (${connectedShopee.length})
           </div>
-          ${metaRows}
+          ${shopeeRows}
           ${linkRow}
         </div>
 
@@ -1216,13 +1219,13 @@ export class MetaAccountPage {
       });
     });
 
-    el.querySelectorAll('[data-adu-unlink-meta]').forEach(btn => {
+    el.querySelectorAll('[data-adu-unlink-shopee]').forEach(btn => {
       btn.addEventListener('click', async () => {
-        const metaId = btn.dataset.aduUnlinkMeta;
+        const shopeeId = btn.dataset.aduUnlinkShopee;
         const aduId = btn.dataset.aduUnlinkAdu;
         btn.disabled = true;
         try {
-          await apiFetch(`/accounts/meta/${metaId}/adu-links/${aduId}`, { method: 'DELETE' });
+          await apiFetch(`/accounts/shopee/${shopeeId}/adu-links/${aduId}`, { method: 'DELETE' });
           await this._load();
         } catch (e) {
           alert(e.message);
@@ -1235,14 +1238,14 @@ export class MetaAccountPage {
       btn.addEventListener('click', async () => {
         const aduId = btn.dataset.aduLink;
         const hidden = el.querySelector(`#combo-value-adu-${aduId}`);
-        const metaId = hidden?.value;
-        if (!metaId) {
+        const shopeeId = hidden?.value;
+        if (!shopeeId) {
           el.querySelector(`#combo-input-adu-${aduId}`)?.focus();
           return;
         }
         btn.disabled = true;
         try {
-          await apiFetch(`/accounts/meta/${metaId}/adu-links`, {
+          await apiFetch(`/accounts/shopee/${shopeeId}/adu-links`, {
             method: 'POST',
             body: JSON.stringify({ adu_account_id: aduId }),
           });
@@ -1316,17 +1319,17 @@ export class MetaAccountPage {
 
   _renderTerra(el) {
     if (!el) return;
-    const metaAccounts = this._tree.meta_accounts || [];
+    const allShopee = this._tree.shopee_all || [];
     const header = `<div style="font-size:11px;font-weight:700;color:var(--text-muted);margin:20px 0 10px;text-transform:uppercase;letter-spacing:0.5px;">
       Akun Terra Ads / Adsterra (${this._terraAccounts.length})
     </div>`;
     const cards = this._terraAccounts.length === 0
       ? `<div style="text-align:center;padding:24px;color:var(--text-muted);font-size:13px;border:1px solid var(--border);border-radius:8px;">Belum ada akun Terra. Klik "+ Tambah Akun Terra" di atas.</div>`
       : this._terraAccounts.map(a => {
-          const connectedMeta = metaAccounts.filter(m => (m.terra_accounts || []).some(x => x.id === a.id));
-          const connectedIds = new Set(connectedMeta.map(m => m.id));
-          const availableMeta = metaAccounts.filter(m => !connectedIds.has(m.id));
-          return this._renderTerraCard(a, connectedMeta, availableMeta);
+          const connectedShopee = allShopee.filter(s => (s.terra_accounts || []).some(x => x.id === a.id));
+          const connectedIds = new Set(connectedShopee.map(s => s.id));
+          const availableShopee = allShopee.filter(s => !connectedIds.has(s.id));
+          return this._renderTerraCard(a, connectedShopee, availableShopee);
         }).join('');
     el.innerHTML = header + cards;
     this._bindTerraEvents(el);
@@ -1334,7 +1337,7 @@ export class MetaAccountPage {
     this._bindCardToggle(el);
   }
 
-  _renderTerraCard(a, connectedMeta, availableMeta) {
+  _renderTerraCard(a, connectedShopee, availableShopee) {
     const hasKey = a.has_api_key;
     let keyBadge = hasKey
       ? (a.status_koneksi === 'token_expired'
@@ -1346,34 +1349,33 @@ export class MetaAccountPage {
     const firstDay = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
     const key = `terra-${a.id}`;
 
-    const metaRows = connectedMeta.length === 0
-      ? `<div style="font-size:12px;color:var(--text-muted);padding:8px 0;">Belum ada akun Meta terhubung.</div>`
-      : connectedMeta.map(m => `
+    const shopeeRows = connectedShopee.length === 0
+      ? `<div style="font-size:12px;color:var(--text-muted);padding:8px 0;">Belum ada akun Shopee terhubung.</div>`
+      : connectedShopee.map(s => `
           <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:6px;margin-bottom:6px;">
             <div style="display:flex;align-items:center;gap:8px;">
-              <div style="width:26px;height:26px;background:#fef3c7;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:13px;">📊</div>
-              <span style="font-size:13px;font-weight:500;">${m.nama}</span>
-              <span style="font-size:11px;color:var(--text-muted);">ID: ${m.account_id}</span>
+              <div style="width:26px;height:26px;background:#f0fdf4;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:13px;">🛒</div>
+              <span style="font-size:13px;font-weight:500;">${s.nama}</span>
             </div>
             <button class="btn btn-sm" style="font-size:11px;color:#dc2626;border-color:#dc2626;"
-              data-terra-unlink-meta="${m.id}" data-terra-unlink-terra="${a.id}">Lepas</button>
+              data-terra-unlink-shopee="${s.id}" data-terra-unlink-terra="${a.id}">Lepas</button>
           </div>
         `).join('');
 
-    const linkRow = availableMeta.length > 0
+    const linkRow = availableShopee.length > 0
       ? `<div style="display:flex;gap:8px;align-items:flex-start;margin-top:10px;">
            <div style="flex:1;position:relative;">
-             <input type="text" class="form-input" id="combo-input-terra-${a.id}" placeholder="Pilih akun Meta…"
+             <input type="text" class="form-input" id="combo-input-terra-${a.id}" placeholder="Pilih akun Shopee…"
                autocomplete="off" style="font-size:12px;width:100%;">
              <input type="hidden" id="combo-value-terra-${a.id}">
              <div id="combo-list-terra-${a.id}" data-combo-list="terra-${a.id}"
                style="display:none;position:absolute;top:100%;left:0;right:0;margin-top:4px;background:var(--surface,#fff);
                       border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.14);
                       max-height:240px;overflow-y:auto;z-index:50;">
-               ${availableMeta.map(m => `
-                 <div class="combo-opt" data-val="${m.id}" data-label="${m.nama}"
+               ${availableShopee.map(s => `
+                 <div class="combo-opt" data-val="${s.id}" data-label="${s.nama}"
                    style="padding:8px 12px;cursor:pointer;font-size:12.5px;">
-                   ${m.nama} <span style="color:var(--text-muted);font-size:11px;">ID: ${m.account_id}</span>
+                   ${s.nama}
                  </div>
                `).join('')}
                <div class="combo-empty" style="display:none;padding:10px 12px;font-size:12px;color:var(--text-muted);">Tidak ada akun yang cocok.</div>
@@ -1381,7 +1383,7 @@ export class MetaAccountPage {
            </div>
            <button class="btn btn-primary btn-sm" data-terra-link="${a.id}" style="white-space:nowrap;">Hubungkan</button>
          </div>`
-      : `<div style="font-size:11.5px;color:var(--text-muted);margin-top:8px;">Semua akun Meta sudah terhubung.</div>`;
+      : `<div style="font-size:11.5px;color:var(--text-muted);margin-top:8px;">Semua akun Shopee sudah terhubung.</div>`;
 
     return `
       <div class="card" style="margin-bottom:12px;">
@@ -1390,7 +1392,7 @@ export class MetaAccountPage {
             <div style="width:36px;height:36px;background:#fef3c7;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">🌍</div>
             <div style="min-width:0;">
               <div style="font-size:14px;font-weight:700;">${a.nama_tampilan}</div>
-              <div style="font-size:11.5px;color:var(--text-muted);">Adsterra Advertiser · ${connectedMeta.length} Meta terhubung</div>
+              <div style="font-size:11.5px;color:var(--text-muted);">Adsterra Advertiser · ${connectedShopee.length} Shopee terhubung</div>
             </div>
           </button>
           <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
@@ -1465,9 +1467,9 @@ export class MetaAccountPage {
 
         <div style="border-top:1px solid var(--border);padding-top:12px;">
           <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">
-            Meta terhubung (${connectedMeta.length})
+            Shopee terhubung (${connectedShopee.length})
           </div>
-          ${metaRows}
+          ${shopeeRows}
           ${linkRow}
         </div>
 
@@ -1595,13 +1597,13 @@ export class MetaAccountPage {
       });
     });
 
-    el.querySelectorAll('[data-terra-unlink-meta]').forEach(btn => {
+    el.querySelectorAll('[data-terra-unlink-shopee]').forEach(btn => {
       btn.addEventListener('click', async () => {
-        const metaId = btn.dataset.terraUnlinkMeta;
+        const shopeeId = btn.dataset.terraUnlinkShopee;
         const terraId = btn.dataset.terraUnlinkTerra;
         btn.disabled = true;
         try {
-          await apiFetch(`/accounts/meta/${metaId}/terra-links/${terraId}`, { method: 'DELETE' });
+          await apiFetch(`/accounts/shopee/${shopeeId}/terra-links/${terraId}`, { method: 'DELETE' });
           await this._load();
         } catch (e) {
           alert(e.message);
@@ -1614,14 +1616,14 @@ export class MetaAccountPage {
       btn.addEventListener('click', async () => {
         const terraId = btn.dataset.terraLink;
         const hidden = el.querySelector(`#combo-value-terra-${terraId}`);
-        const metaId = hidden?.value;
-        if (!metaId) {
+        const shopeeId = hidden?.value;
+        if (!shopeeId) {
           el.querySelector(`#combo-input-terra-${terraId}`)?.focus();
           return;
         }
         btn.disabled = true;
         try {
-          await apiFetch(`/accounts/meta/${metaId}/terra-links`, {
+          await apiFetch(`/accounts/shopee/${shopeeId}/terra-links`, {
             method: 'POST',
             body: JSON.stringify({ terra_account_id: terraId }),
           });

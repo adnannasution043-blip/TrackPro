@@ -107,8 +107,8 @@ async def get_accounts_tree(current_user: CurrentUser, db: DB):
 
     linked_ids: set = set()
     links_by_meta: dict = defaultdict(list)
-    adu_links_by_meta: dict = defaultdict(list)
-    terra_links_by_meta: dict = defaultdict(list)
+    adu_links_by_shopee: dict = defaultdict(list)
+    terra_links_by_shopee: dict = defaultdict(list)
 
     if meta_list:
         meta_ids = [m.id for m in meta_list]
@@ -119,50 +119,53 @@ async def get_accounts_tree(current_user: CurrentUser, db: DB):
             links_by_meta[link.meta_account_id].append(link.shopee_account_id)
             linked_ids.add(link.shopee_account_id)
 
+    if all_shopee:
+        shopee_ids = [s.id for s in all_shopee]
         adu_links_res = await db.execute(
-            select(AduAccountLink).where(AduAccountLink.meta_account_id.in_(meta_ids))
+            select(AduAccountLink).where(AduAccountLink.shopee_account_id.in_(shopee_ids))
         )
         for link in adu_links_res.scalars().all():
-            adu_links_by_meta[link.meta_account_id].append(link.adu_account_id)
+            adu_links_by_shopee[link.shopee_account_id].append(link.adu_account_id)
 
         terra_links_res = await db.execute(
-            select(TerraAccountLink).where(TerraAccountLink.meta_account_id.in_(meta_ids))
+            select(TerraAccountLink).where(TerraAccountLink.shopee_account_id.in_(shopee_ids))
         )
         for link in terra_links_res.scalars().all():
-            terra_links_by_meta[link.meta_account_id].append(link.terra_account_id)
+            terra_links_by_shopee[link.shopee_account_id].append(link.terra_account_id)
+
+    def _shopee_dict(s: ShopeeAccount) -> dict:
+        adu_list = [
+            {"id": adu_by_id[aid].id, "nama": adu_by_id[aid].nama_tampilan}
+            for aid in adu_links_by_shopee.get(s.id, [])
+            if aid in adu_by_id
+        ]
+        terra_list = [
+            {"id": terra_by_id[tid].id, "nama": terra_by_id[tid].nama_tampilan}
+            for tid in terra_links_by_shopee.get(s.id, [])
+            if tid in terra_by_id
+        ]
+        return {"id": s.id, "nama": s.nama_akun, "adu_accounts": adu_list, "terra_accounts": terra_list}
 
     meta_with_shopee = []
     for m in meta_list:
-        shopee_list = []
-        for sid in links_by_meta.get(m.id, []):
-            if sid in shopee_by_id:
-                s = shopee_by_id[sid]
-                shopee_list.append({"id": s.id, "nama": s.nama_akun})
-        adu_list = []
-        for aid in adu_links_by_meta.get(m.id, []):
-            if aid in adu_by_id:
-                a = adu_by_id[aid]
-                adu_list.append({"id": a.id, "nama": a.nama_tampilan})
-        terra_list = []
-        for tid in terra_links_by_meta.get(m.id, []):
-            if tid in terra_by_id:
-                t = terra_by_id[tid]
-                terra_list.append({"id": t.id, "nama": t.nama_tampilan})
+        shopee_list = [
+            _shopee_dict(shopee_by_id[sid])
+            for sid in links_by_meta.get(m.id, [])
+            if sid in shopee_by_id
+        ]
         meta_with_shopee.append({
             "id": m.id,
             "nama": m.nama_tampilan,
             "account_id": m.ad_account_id,
             "shopee_accounts": shopee_list,
-            "adu_accounts": adu_list,
-            "terra_accounts": terra_list,
         })
 
     unlinked = [
-        {"id": s.id, "nama": s.nama_akun}
+        _shopee_dict(s)
         for s in all_shopee
         if s.id not in linked_ids
     ]
-    shopee_all = [{"id": s.id, "nama": s.nama_akun} for s in all_shopee]
+    shopee_all = [_shopee_dict(s) for s in all_shopee]
     adu_all = [{"id": a.id, "nama": a.nama_tampilan} for a in all_adu]
     terra_all = [{"id": t.id, "nama": t.nama_tampilan} for t in all_terra]
 
@@ -275,70 +278,6 @@ async def remove_account_link(account_id: UUID, shopee_id: UUID, current_user: C
     await db.commit()
 
 
-# Relasi: tambah / hapus link ke Adu account
-
-@router.post("/meta/{account_id}/adu-links", status_code=status.HTTP_204_NO_CONTENT)
-async def add_adu_account_link(account_id: UUID, body: AduAccountLinkRequest, current_user: CurrentUser, db: DB):
-    await _get_meta_account(account_id, current_user.id, db)
-    await _get_adu_account(body.adu_account_id, current_user.id, db)
-
-    existing = await db.execute(
-        select(AduAccountLink).where(
-            AduAccountLink.meta_account_id == account_id,
-            AduAccountLink.adu_account_id == body.adu_account_id,
-        )
-    )
-    if existing.scalar_one_or_none():
-        return  # sudah terhubung, idempoten
-
-    db.add(AduAccountLink(meta_account_id=account_id, adu_account_id=body.adu_account_id))
-    await db.commit()
-
-
-@router.delete("/meta/{account_id}/adu-links/{adu_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def remove_adu_account_link(account_id: UUID, adu_id: UUID, current_user: CurrentUser, db: DB):
-    await _get_meta_account(account_id, current_user.id, db)
-    await db.execute(
-        delete(AduAccountLink).where(
-            AduAccountLink.meta_account_id == account_id,
-            AduAccountLink.adu_account_id == adu_id,
-        )
-    )
-    await db.commit()
-
-
-# Relasi: tambah / hapus link ke Terra account
-
-@router.post("/meta/{account_id}/terra-links", status_code=status.HTTP_204_NO_CONTENT)
-async def add_terra_account_link(account_id: UUID, body: TerraAccountLinkRequest, current_user: CurrentUser, db: DB):
-    await _get_meta_account(account_id, current_user.id, db)
-    await _get_terra_account(body.terra_account_id, current_user.id, db)
-
-    existing = await db.execute(
-        select(TerraAccountLink).where(
-            TerraAccountLink.meta_account_id == account_id,
-            TerraAccountLink.terra_account_id == body.terra_account_id,
-        )
-    )
-    if existing.scalar_one_or_none():
-        return  # sudah terhubung, idempoten
-
-    db.add(TerraAccountLink(meta_account_id=account_id, terra_account_id=body.terra_account_id))
-    await db.commit()
-
-
-@router.delete("/meta/{account_id}/terra-links/{terra_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def remove_terra_account_link(account_id: UUID, terra_id: UUID, current_user: CurrentUser, db: DB):
-    await _get_meta_account(account_id, current_user.id, db)
-    await db.execute(
-        delete(TerraAccountLink).where(
-            TerraAccountLink.meta_account_id == account_id,
-            TerraAccountLink.terra_account_id == terra_id,
-        )
-    )
-    await db.commit()
-
-
 # ===========================================================================
 # Shopee Accounts
 # ===========================================================================
@@ -385,6 +324,70 @@ async def update_shopee_account(account_id: UUID, body: ShopeeAccountUpdate, cur
 async def delete_shopee_account(account_id: UUID, current_user: CurrentUser, db: DB):
     account = await _get_shopee_account(account_id, current_user.id, db)
     await db.delete(account)
+    await db.commit()
+
+
+# Relasi: tambah / hapus link ke Adu account (mis. "Shopee Nipon" <-> "Adu Nipon")
+
+@router.post("/shopee/{account_id}/adu-links", status_code=status.HTTP_204_NO_CONTENT)
+async def add_shopee_adu_link(account_id: UUID, body: AduAccountLinkRequest, current_user: CurrentUser, db: DB):
+    await _get_shopee_account(account_id, current_user.id, db)
+    await _get_adu_account(body.adu_account_id, current_user.id, db)
+
+    existing = await db.execute(
+        select(AduAccountLink).where(
+            AduAccountLink.shopee_account_id == account_id,
+            AduAccountLink.adu_account_id == body.adu_account_id,
+        )
+    )
+    if existing.scalar_one_or_none():
+        return  # sudah terhubung, idempoten
+
+    db.add(AduAccountLink(shopee_account_id=account_id, adu_account_id=body.adu_account_id))
+    await db.commit()
+
+
+@router.delete("/shopee/{account_id}/adu-links/{adu_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_shopee_adu_link(account_id: UUID, adu_id: UUID, current_user: CurrentUser, db: DB):
+    await _get_shopee_account(account_id, current_user.id, db)
+    await db.execute(
+        delete(AduAccountLink).where(
+            AduAccountLink.shopee_account_id == account_id,
+            AduAccountLink.adu_account_id == adu_id,
+        )
+    )
+    await db.commit()
+
+
+# Relasi: tambah / hapus link ke Terra account (mis. "Shopee Nipon" <-> "Terra Nipon")
+
+@router.post("/shopee/{account_id}/terra-links", status_code=status.HTTP_204_NO_CONTENT)
+async def add_shopee_terra_link(account_id: UUID, body: TerraAccountLinkRequest, current_user: CurrentUser, db: DB):
+    await _get_shopee_account(account_id, current_user.id, db)
+    await _get_terra_account(body.terra_account_id, current_user.id, db)
+
+    existing = await db.execute(
+        select(TerraAccountLink).where(
+            TerraAccountLink.shopee_account_id == account_id,
+            TerraAccountLink.terra_account_id == body.terra_account_id,
+        )
+    )
+    if existing.scalar_one_or_none():
+        return  # sudah terhubung, idempoten
+
+    db.add(TerraAccountLink(shopee_account_id=account_id, terra_account_id=body.terra_account_id))
+    await db.commit()
+
+
+@router.delete("/shopee/{account_id}/terra-links/{terra_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_shopee_terra_link(account_id: UUID, terra_id: UUID, current_user: CurrentUser, db: DB):
+    await _get_shopee_account(account_id, current_user.id, db)
+    await db.execute(
+        delete(TerraAccountLink).where(
+            TerraAccountLink.shopee_account_id == account_id,
+            TerraAccountLink.terra_account_id == terra_id,
+        )
+    )
     await db.commit()
 
 

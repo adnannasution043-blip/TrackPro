@@ -42,14 +42,16 @@ class AccountLink(Base):
 
 
 class AduAccountLink(Base):
+    """Relasi Shopee <-> Adu (mis. "Adu Nipon" terhubung ke "Shopee Nipon")."""
     __tablename__ = "adu_account_links"
 
-    meta_account_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("meta_accounts.id", ondelete="CASCADE"), primary_key=True)
+    shopee_account_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("shopee_accounts.id", ondelete="CASCADE"), primary_key=True)
     adu_account_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("adu_accounts.id", ondelete="CASCADE"), primary_key=True)
 
 
 class TerraAccountLink(Base):
+    """Relasi Shopee <-> Terra (mis. "Terra Nipon" terhubung ke "Shopee Nipon")."""
     __tablename__ = "terra_account_links"
 
-    meta_account_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("meta_accounts.id", ondelete="CASCADE"), primary_key=True)
+    shopee_account_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("shopee_accounts.id", ondelete="CASCADE"), primary_key=True)
     terra_account_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("terra_accounts.id", ondelete="CASCADE"), primary_key=True)

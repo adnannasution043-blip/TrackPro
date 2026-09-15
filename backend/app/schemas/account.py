@@ -146,11 +146,6 @@ class AccountItem(BaseModel):
 # Accounts tree (hierarki Meta → Shopee, dipakai sidebar filter)
 # ---------------------------------------------------------------------------
 
-class ShopeeLinked(BaseModel):
-    id: UUID
-    nama: str
-
-
 class AduLinked(BaseModel):
     id: UUID
     nama: str
@@ -161,13 +156,21 @@ class TerraLinked(BaseModel):
     nama: str
 
 
+class ShopeeLinked(BaseModel):
+    id: UUID
+    nama: str
+    # Adu/Terra terhubung ke Shopee ini (mis. "Adu Nipon" <-> "Shopee
+    # Nipon") — dikelola dari kartu Adu/Terra, cuma dipakai buat
+    # ringkasan read-only di kartu Shopee.
+    adu_accounts: list[AduLinked] = []
+    terra_accounts: list[TerraLinked] = []
+
+
 class MetaWithShopee(BaseModel):
     id: UUID
     nama: str
     account_id: str
     shopee_accounts: list[ShopeeLinked]
-    adu_accounts: list[AduLinked] = []
-    terra_accounts: list[TerraLinked] = []
 
 
 class AccountsTree(BaseModel):
