@@ -61,6 +61,7 @@ class CampaignRow(BaseModel):
     hari: int
     catatan: str | None = None
     has_notes: bool = False
+    markup_persen: Decimal = Decimal("0")
 
 
 class CampaignsResponse(BaseModel):
@@ -87,6 +88,7 @@ class CampaignHarianResponse(BaseModel):
     total_komisi: Decimal
     total_laba: Decimal
     roi_persen: Decimal | None
+    markup_persen: Decimal = Decimal("0")
     harian: list[CampaignHarianRow]
 
 

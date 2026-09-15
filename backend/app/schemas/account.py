@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -18,6 +19,7 @@ class MetaAccountUpdate(BaseModel):
     nama_tampilan: str | None = None
     mata_uang: str | None = None
     status_koneksi: str | None = None
+    markup_persen: Decimal | None = None
 
 
 class MetaTokenUpdate(BaseModel):
@@ -30,6 +32,7 @@ class MetaAccountResponse(BaseModel):
     nama_tampilan: str
     mata_uang: str
     status_koneksi: str
+    markup_persen: Decimal = Decimal("0")
     token_expires_at: datetime | None = None
     has_token: bool = False
     created_at: datetime

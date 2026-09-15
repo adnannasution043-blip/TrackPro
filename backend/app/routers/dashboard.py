@@ -216,6 +216,7 @@ async def get_campaigns(
             Campaign.tahap,
             Campaign.jenis_iklan,
             Campaign.catatan,
+            MetaAccount.markup_persen,
             sa.func.coalesce(sa.func.sum(DailyMetric.spend_idr), _ZERO).label("spend_idr"),
             sa.func.coalesce(sa.func.sum(DailyMetric.clicks_meta), 0).label("clicks_meta"),
             sa.func.count(sa.distinct(DailyMetric.tanggal)).label("hari"),
@@ -226,7 +227,7 @@ async def get_campaigns(
             sa.and_(DailyMetric.campaign_id == Campaign.id, DailyMetric.tanggal.between(dari, sampai)),
         )
         .where(MetaAccount.user_id == current_user.id)
-        .group_by(Campaign.id, Campaign.nama_campaign, Campaign.status, Campaign.tahap, Campaign.jenis_iklan, Campaign.catatan)
+        .group_by(Campaign.id, Campaign.nama_campaign, Campaign.status, Campaign.tahap, Campaign.jenis_iklan, Campaign.catatan, MetaAccount.markup_persen)
         .order_by(sa.func.coalesce(sa.func.sum(DailyMetric.spend_idr), _ZERO).desc())
     )
     if meta_account_id:
@@ -304,6 +305,7 @@ async def get_campaigns(
             hari=r.hari or 0,
             catatan=r.catatan,
             has_notes=r.id in has_notes_set,
+            markup_persen=r.markup_persen or _ZERO,
         ))
 
     return CampaignsResponse(campaigns=campaigns)
@@ -318,14 +320,15 @@ async def get_campaign_harian(
     tanggal_sampai: date | None = Query(None),
 ):
     # Verify ownership
-    camp = (await db.execute(
-        sa.select(Campaign)
+    camp_row = (await db.execute(
+        sa.select(Campaign, MetaAccount.markup_persen)
         .join(MetaAccount, Campaign.meta_account_id == MetaAccount.id)
         .where(Campaign.id == campaign_id, MetaAccount.user_id == current_user.id)
-    )).scalar_one_or_none()
-    if not camp:
+    )).first()
+    if not camp_row:
         from fastapi import HTTPException
         raise HTTPException(404, "Campaign tidak ditemukan.")
+    camp, markup_persen = camp_row
 
     # Meta daily data — kalau tanggal_dari/sampai dikirim (dari filter tanggal
     # di halaman Iklan), scope ke rentang itu supaya TOTAL BIAYA di modal
@@ -408,6 +411,7 @@ async def get_campaign_harian(
         total_komisi=total_komisi,
         total_laba=total_laba,
         roi_persen=roi_total,
+        markup_persen=markup_persen or _ZERO,
         harian=harian,
     )
 

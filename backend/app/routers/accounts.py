@@ -598,6 +598,7 @@ def _to_meta_response(m: MetaAccount) -> MetaAccountResponse:
         nama_tampilan=m.nama_tampilan,
         mata_uang=m.mata_uang,
         status_koneksi=m.status_koneksi,
+        markup_persen=m.markup_persen,
         token_expires_at=m.token_expires_at,
         has_token=bool(m.access_token_enc),
         created_at=m.created_at,

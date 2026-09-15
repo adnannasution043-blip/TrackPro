@@ -357,7 +357,37 @@ export class MetaAccountPage {
 
     this._bindTokenEvents(el);
     this._bindSyncEvents(el);
+    this._bindMarkupEvents(el);
     this._bindCardToggle(el);
+  }
+
+  _bindMarkupEvents(el) {
+    el.querySelectorAll('[data-save-markup]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.saveMarkup;
+        const input = el.querySelector(`#markup-input-${id}`);
+        const msgEl = el.querySelector(`#markup-msg-${id}`);
+        const val = Number(input?.value);
+        if (!(val >= 0)) {
+          _showMsg(msgEl, 'Persen tidak valid.', 'error');
+          return;
+        }
+        const orig = btn.textContent;
+        btn.disabled = true; btn.textContent = 'Menyimpan…';
+        try {
+          await apiFetch(`/accounts/meta/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ markup_persen: val }),
+          });
+          if (this._metaInfo[id]) this._metaInfo[id].markup_persen = val;
+          _showMsg(msgEl, 'Tersimpan.', 'success');
+        } catch (e) {
+          _showMsg(msgEl, e.message || 'Gagal menyimpan.', 'error');
+        } finally {
+          btn.disabled = false; btn.textContent = orig;
+        }
+      });
+    });
   }
 
   _renderShopeeCard(s, connected, availableMeta) {
@@ -637,6 +667,19 @@ export class MetaAccountPage {
           <button class="btn btn-sm" data-toggle-token="${m.id}" style="font-size:11px;">
             ${hasToken ? 'Ganti' : 'Pasang Token'}
           </button>
+        </div>
+
+        <!-- Markup topup iklan (%) — dipakai buat kolom "(+)%" di halaman
+             Iklan, beda-beda per akun karena tiap ADV bisa punya harga
+             topup sendiri (mis. +5%, +12%, +3%). -->
+        <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;margin-bottom:12px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15" style="flex-shrink:0;color:var(--text-muted);"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>
+          <span style="font-size:12px;color:var(--text-muted);flex:1;">Markup Topup Iklan</span>
+          <input type="number" id="markup-input-${m.id}" value="${Number(info.markup_persen ?? 0)}" min="0" step="0.01"
+            style="width:70px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;text-align:right;background:var(--bg-card);color:var(--text);">
+          <span style="font-size:12px;color:var(--text-muted);">%</span>
+          <button class="btn btn-sm" data-save-markup="${m.id}" style="font-size:11px;">Simpan</button>
+          <span id="markup-msg-${m.id}" style="display:none;font-size:11px;"></span>
         </div>
 
         <!-- Token form (collapsed by default) -->

@@ -295,7 +295,10 @@ export class IklanPage {
       { key:'off',          label:`Off (${counts.off})` },
     ];
 
-    const tPlus5   = tSpend * 1.05;
+    // Markup topup beda-beda per akun Meta (ADV) — dijumlah per-baris,
+    // bukan tSpend * satu persen tunggal, karena baris di tabel ini bisa
+    // berasal dari beberapa akun Meta sekaligus.
+    const tPlus5   = visible.reduce((s,r) => s + Number(r.spend_idr||0) * (1 + Number(r.markup_persen||0)/100), 0);
     const tPctKlik = tClM > 0 ? tClS / tClM * 100 : null;
 
     const totalPages = Math.ceil(visible.length / this._perPage);
@@ -306,7 +309,7 @@ export class IklanPage {
 
     const rowHtml = (r, i) => {
       const spend   = Number(r.spend_idr || 0);
-      const plus5   = spend * 1.05;
+      const plus5   = spend * (1 + Number(r.markup_persen||0)/100);
       const profit  = Number(r.laba || 0);
       const roi     = r.roi_persen != null ? Number(r.roi_persen) : null;
       const clM     = Number(r.clicks_meta || 0);
@@ -334,7 +337,7 @@ export class IklanPage {
         </td>
         <td style="text-align:center;">${r.hari||0}</td>
         <td style="white-space:nowrap;">${rp(spend)}</td>
-        <td style="white-space:nowrap;color:var(--text-muted);">${rp(Math.round(plus5))}</td>
+        <td style="white-space:nowrap;color:var(--text-muted);">${rp(Math.round(plus5))} <span style="font-size:10px;">(${Number(r.markup_persen||0)}%)</span></td>
         <td style="text-align:center;">${num(r.orders)}</td>
         <td style="color:#10b981;font-weight:500;white-space:nowrap;">${komisi0?'<span style="color:var(--text-muted);">Rp 0</span>':rp(Math.round(Number(r.komisi)))}</td>
         <td style="font-weight:600;color:${profit>=0?'#16a34a':'#dc2626'};white-space:nowrap;">${profit>=0?'+':'-'}${rp(Math.abs(Math.round(profit)))}</td>
@@ -400,7 +403,7 @@ export class IklanPage {
               <th style="min-width:110px;">TAG LINK 2</th>
               <th style="text-align:center;">HARI</th>
               <th>SPEND</th>
-              <th style="white-space:nowrap;">(+) 5%</th>
+              <th style="white-space:nowrap;">(+) %</th>
               <th style="text-align:center;">#</th>
               <th>KOMISI</th>
               <th>PROFIT</th>
@@ -757,6 +760,7 @@ export class IklanPage {
   _renderHarianTab(el, data, r) {
     const totalLaba = Number(data.total_laba||0);
     const totalRoi  = Number(data.roi_persen||0);
+    const markup    = Number(data.markup_persen||0);
     const thS = 'padding:7px 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;white-space:nowrap;';
     const tdS = 'padding:6px 10px;white-space:nowrap;';
 
@@ -778,7 +782,7 @@ export class IklanPage {
           <thead><tr>
             <th style="${thS}min-width:80px;">TGL</th>
             <th style="${thS}">SPEND</th>
-            <th style="${thS}color:#6b7280;">(+)5%</th>
+            <th style="${thS}color:#6b7280;">(+)${markup}%</th>
             <th style="${thS}color:#10b981;">KOMISI</th>
             <th style="${thS}">PROFIT</th>
             <th style="${thS}">(%)PROFIT</th>
@@ -796,7 +800,7 @@ export class IklanPage {
                   const spend  = Number(h.spend_idr||0);
                   const komisi = h.komisi!=null ? Number(h.komisi) : null;
                   const profit = komisi!=null ? komisi - spend : null;
-                  const plus5  = spend * 1.05;
+                  const plus5  = spend * (1 + markup/100);
                   const pctP   = profit!=null && spend>0 ? profit/spend*100 : null;
                   const klikFP = h.clicks_meta||0;
                   const klikSH = h.clicks_shopee!=null ? h.clicks_shopee : null;
