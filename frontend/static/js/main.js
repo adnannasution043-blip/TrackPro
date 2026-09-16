@@ -29,7 +29,7 @@ const NAV_ITEMS = [
   // { path: '/dashboard', label: 'Dasbor', icon: 'dashboard' },
   // { path: '/daily', label: 'Laporan Harian', icon: 'calendar' },
   { path: '/laporan-harian2', label: 'Laporan Harian', icon: 'calendar' },
-  { path: '/komisi-bersih', label: 'Pembayaran WD', icon: 'coin' },
+  // { path: '/komisi-bersih', label: 'Pembayaran WD', icon: 'coin' },
   { path: '/komisi-bersih2', label: 'Pembayaran WD (Baru)', icon: 'coin' },
   // { path: '/campaigns', label: 'Kampanye Meta', icon: 'megaphone' },
   // { path: '/analysis', label: 'Analisis Iklan', icon: 'chart' },
