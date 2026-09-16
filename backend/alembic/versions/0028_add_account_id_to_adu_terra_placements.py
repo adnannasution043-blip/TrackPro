@@ -31,11 +31,14 @@ def upgrade() -> None:
         sa.Column("terra_account_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("terra_accounts.id", ondelete="CASCADE"), nullable=True),
     )
 
+    # Postgres tidak punya MIN()/MAX() bawaan buat tipe uuid — cast ke text
+    # dulu buat agregasi, lalu cast balik. HAVING COUNT(*) = 1 menjamin cuma
+    # ada tepat satu baris per grup, jadi MAX/MIN mana pun hasilnya sama.
     op.execute("""
         UPDATE adu_placements ap
         SET adu_account_id = sub.only_id
         FROM (
-            SELECT user_id, MIN(id) AS only_id
+            SELECT user_id, MAX(id::text)::uuid AS only_id
             FROM adu_accounts
             GROUP BY user_id
             HAVING COUNT(*) = 1
@@ -46,7 +49,7 @@ def upgrade() -> None:
         UPDATE terra_placements tp
         SET terra_account_id = sub.only_id
         FROM (
-            SELECT user_id, MIN(id) AS only_id
+            SELECT user_id, MAX(id::text)::uuid AS only_id
             FROM terra_accounts
             GROUP BY user_id
             HAVING COUNT(*) = 1
